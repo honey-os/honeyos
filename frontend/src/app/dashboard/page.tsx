@@ -1,0 +1,335 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import {
+  Activity,
+  Radio,
+  Server,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import MetricsCard from '@/components/ui/MetricsCard';
+import SeverityBadge from '@/components/ui/SeverityBadge';
+import ProtocolBadge from '@/components/ui/ProtocolBadge';
+import EventFeed from '@/components/shared/EventFeed';
+import { useStore } from '@/stores/useStore';
+import { formatDate, formatNumber, formatRelativeTime } from '@/utils/formatters';
+
+const PIE_COLORS = [
+  '#f59e0b',
+  '#3b82f6',
+  '#10b981',
+  '#8b5cf6',
+  '#ef4444',
+  '#06b6d4',
+  '#f97316',
+  '#ec4899',
+];
+
+const threatLevelColors: Record<string, string> = {
+  critical: 'text-red-400',
+  high: 'text-orange-400',
+  medium: 'text-yellow-400',
+  low: 'text-green-400',
+  none: 'text-gray-400',
+};
+
+export default function DashboardPage() {
+  const {
+    dashboardSummary,
+    dashboardTimeline,
+    dashboardLoading,
+    dashboardError,
+    fetchDashboard,
+  } = useStore();
+
+  const [timelineHours, setTimelineHours] = useState(24);
+
+  useEffect(() => {
+    fetchDashboard(timelineHours);
+
+    const interval = setInterval(() => {
+      fetchDashboard(timelineHours);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [fetchDashboard, timelineHours]);
+
+  const summary = dashboardSummary;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-100">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Real-time overview of honeypot activity and threats
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-500">Timeline:</span>
+          {[6, 12, 24, 48].map((h) => (
+            <button
+              key={h}
+              onClick={() => setTimelineHours(h)}
+              className={
+                timelineHours === h
+                  ? 'px-3 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium'
+                  : 'px-3 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors'
+              }
+            >
+              {h}h
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {dashboardError && (
+        <div className="card p-4 border-red-500/30 bg-red-500/5 text-red-400 text-sm">
+          {dashboardError}
+        </div>
+      )}
+
+      {/* Metrics cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricsCard
+          icon={Activity}
+          label="Total Events"
+          value={formatNumber(summary?.total_events)}
+          iconColor="text-amber-500"
+        />
+        <MetricsCard
+          icon={Radio}
+          label="Active Sessions"
+          value={formatNumber(summary?.active_sessions)}
+          iconColor="text-blue-500"
+        />
+        <MetricsCard
+          icon={Server}
+          label="Active Honeypots"
+          value={formatNumber(summary?.active_honeypots)}
+          iconColor="text-green-500"
+        />
+        <MetricsCard
+          icon={AlertTriangle}
+          label="Threat Level"
+          value={
+            <span
+              className={
+                threatLevelColors[summary?.threat_level || 'none'] ||
+                'text-gray-400'
+              }
+            >
+              {(summary?.threat_level || 'none').toUpperCase()}
+            </span>
+          }
+          iconColor="text-red-500"
+        />
+      </div>
+
+      {/* Timeline chart & Protocol breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Timeline */}
+        <div className="lg:col-span-2 card p-5">
+          <h3 className="text-sm font-semibold text-gray-200 mb-4">
+            Event Timeline (last {timelineHours}h)
+          </h3>
+          {dashboardLoading && dashboardTimeline.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-gray-600 text-sm">
+              Loading timeline...
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={dashboardTimeline}>
+                <defs>
+                  <linearGradient id="eventGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#2a2a3a"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="timestamp"
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#2a2a3a' }}
+                  tickFormatter={(val: string) => formatDate(val, 'HH:mm')}
+                />
+                <YAxis
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#16161f',
+                    border: '1px solid #2a2a3a',
+                    borderRadius: '8px',
+                    color: '#e2e8f0',
+                    fontSize: '12px',
+                  }}
+                  labelFormatter={(val: string) => formatDate(val, 'MMM d, HH:mm')}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fill="url(#eventGradient)"
+                  name="Events"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Protocol breakdown */}
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-gray-200 mb-4">
+            Protocol Breakdown
+          </h3>
+          {summary?.protocol_breakdown && summary.protocol_breakdown.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={summary.protocol_breakdown}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={80}
+                    dataKey="count"
+                    nameKey="protocol"
+                    stroke="none"
+                  >
+                    {summary.protocol_breakdown.map((_, idx) => (
+                      <Cell
+                        key={idx}
+                        fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#16161f',
+                      border: '1px solid #2a2a3a',
+                      borderRadius: '8px',
+                      color: '#e2e8f0',
+                      fontSize: '12px',
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-3 space-y-2">
+                {summary.protocol_breakdown.map((item, idx) => (
+                  <div
+                    key={item.protocol}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-sm"
+                        style={{
+                          backgroundColor:
+                            PIE_COLORS[idx % PIE_COLORS.length],
+                        }}
+                      />
+                      <span className="text-gray-300 uppercase font-mono text-xs">
+                        {item.protocol}
+                      </span>
+                    </div>
+                    <span className="text-gray-400 font-mono text-xs">
+                      {formatNumber(item.count)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-gray-600 text-sm">
+              No protocol data
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Top attackers & Recent events */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top attackers */}
+        <div className="card">
+          <div className="px-5 py-4 border-b border-[#2a2a3a]">
+            <h3 className="text-sm font-semibold text-gray-200">
+              Top Attackers
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#2a2a3a]">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    IP Address
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Events
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Last Seen
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#2a2a3a]/50">
+                {summary?.top_attackers && summary.top_attackers.length > 0 ? (
+                  summary.top_attackers.map((attacker) => (
+                    <tr
+                      key={attacker.ip}
+                      className="hover:bg-[#1c1c28] transition-colors"
+                    >
+                      <td className="px-5 py-3 font-mono text-sm text-amber-400">
+                        {attacker.ip}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-300">
+                        {formatNumber(attacker.count)}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500">
+                        {formatRelativeTime(attacker.last_seen)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-5 py-8 text-center text-sm text-gray-600"
+                    >
+                      No attacker data available
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recent events */}
+        <EventFeed events={summary?.recent_events || []} maxItems={10} />
+      </div>
+    </div>
+  );
+}

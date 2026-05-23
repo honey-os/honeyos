@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: honeyos-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+      # Honeypot ports - exposed to network for deception
+      - "2222:2222"   # SSH honeypot
+      - "8080:8080"   # HTTP honeypot
+      - "2323:2323"   # Telnet honeypot
+      - "2121:2121"   # FTP honeypot
+      - "3307:3307"   # MySQL honeypot
+    volumes:
+      - honeyos-data:/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:////data/honeyos.db
+    networks:
+      - honeyos-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: honeyos-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:5000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - honeyos-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  honeyos-data:
+    driver: local
+
+networks:
+  honeyos-net:
+    driver: bridge

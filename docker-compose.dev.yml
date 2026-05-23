@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: honeyos-backend-dev
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+      - "2222:2222"
+      - "8080:8080"
+      - "2323:2323"
+      - "2121:2121"
+      - "3307:3307"
+    volumes:
+      - ./backend:/app
+      - honeyos-data-dev:/data
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=sqlite:////data/honeyos.db
+    command: ["python", "app.py"]
+    networks:
+      - honeyos-net-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: honeyos-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:5000
+    depends_on:
+      - backend
+    command: ["npm", "run", "dev"]
+    networks:
+      - honeyos-net-dev
+
+volumes:
+  honeyos-data-dev:
+    driver: local
+
+networks:
+  honeyos-net-dev:
+    driver: bridge

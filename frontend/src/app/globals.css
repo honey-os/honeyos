@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-card: #16161f;
+  --bg-card-hover: #1c1c28;
+  --border-color: #2a2a3a;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-muted: rgba(245, 158, 11, 0.15);
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f97316;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a3a transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #2a2a3a;
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #3a3a4a;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::selection {
+    background-color: rgba(245, 158, 11, 0.3);
+    color: #fef3c7;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#16161f] border border-[#2a2a3a] rounded-lg;
+  }
+
+  .card-hover {
+    @apply card hover:border-amber-500/30 hover:bg-[#1c1c28] transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-amber-500 hover:bg-amber-400 text-gray-950 font-medium px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/20;
+  }
+
+  .btn-secondary {
+    @apply bg-[#1c1c28] hover:bg-[#24243a] text-gray-200 border border-[#2a2a3a] hover:border-amber-500/30 px-4 py-2 rounded-lg transition-all duration-200;
+  }
+
+  .btn-danger {
+    @apply bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 px-4 py-2 rounded-lg transition-all duration-200;
+  }
+
+  .input-field {
+    @apply bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all duration-200;
+  }
+
+  .select-field {
+    @apply input-field appearance-none cursor-pointer;
+  }
+
+  .label-text {
+    @apply text-sm font-medium text-gray-400 mb-1 block;
+  }
+
+  .terminal {
+    @apply bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg font-mono text-sm p-4 overflow-auto;
+  }
+
+  .glow-amber {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.15), 0 0 30px rgba(245, 158, 11, 0.05);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-600;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(245, 158, 11, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
