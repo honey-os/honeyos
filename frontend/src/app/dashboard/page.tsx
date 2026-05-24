@@ -179,6 +179,7 @@ export default function DashboardPage() {
                   tickLine={false}
                   axisLine={{ stroke: '#2a2a3a' }}
                   tickFormatter={(val: string) => formatDate(val, 'HH:mm')}
+                  interval={Math.max(0, Math.floor((timelineHours * 6) / 12) - 1)}
                 />
                 <YAxis
                   tick={{ fill: '#64748b', fontSize: 11 }}

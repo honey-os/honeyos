@@ -106,11 +106,17 @@ def timeline():
     """
     hours = int(request.args.get("hours", 24))
     hours = max(1, min(hours, 720))  # 1 hour to 30 days
+    bucket_minutes = 10
 
     now = datetime.now(timezone.utc)
-    # Floor to the current hour so the latest bucket covers "this hour"
-    current_hour = now.replace(minute=0, second=0, microsecond=0)
-    start = current_hour - timedelta(hours=hours - 1)
+    # Floor to the current 10-minute boundary
+    current_bucket = now.replace(
+        minute=(now.minute // bucket_minutes) * bucket_minutes,
+        second=0,
+        microsecond=0,
+    )
+    total_buckets = (hours * 60) // bucket_minutes
+    start = current_bucket - timedelta(minutes=bucket_minutes * (total_buckets - 1))
 
     events = (
         Event.query
@@ -119,18 +125,23 @@ def timeline():
         .all()
     )
 
-    # Bucket events into hourly slots (start through current_hour inclusive)
+    # Bucket events into 10-minute slots
     buckets: dict[str, int] = {}
-    for h in range(hours):
-        bucket_time = start + timedelta(hours=h)
-        key = bucket_time.strftime("%Y-%m-%dT%H:00:00Z")
+    for i in range(total_buckets):
+        bucket_time = start + timedelta(minutes=bucket_minutes * i)
+        key = bucket_time.strftime("%Y-%m-%dT%H:%M:00Z")
         buckets[key] = 0
 
     for event in events:
         ts = event.timestamp
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        key = ts.strftime("%Y-%m-%dT%H:00:00Z")
+        floored = ts.replace(
+            minute=(ts.minute // bucket_minutes) * bucket_minutes,
+            second=0,
+            microsecond=0,
+        )
+        key = floored.strftime("%Y-%m-%dT%H:%M:00Z")
         if key in buckets:
             buckets[key] += 1
 
