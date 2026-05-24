@@ -22,6 +22,7 @@ class HoneypotManager:
     PROTOCOL_MAP: dict[str, str] = {
         "ssh": "services.protocols.ssh_honeypot.SSHHoneypot",
         "http": "services.protocols.http_honeypot.HTTPHoneypot",
+        "https": "services.protocols.https_honeypot.HTTPSHoneypot",
         "telnet": "services.protocols.telnet_honeypot.TelnetHoneypot",
         "ftp": "services.protocols.ftp_honeypot.FTPHoneypot",
         "mysql": "services.protocols.mysql_honeypot.MySQLHoneypot",
@@ -133,6 +134,7 @@ class HoneypotManager:
         mapping = {
             "ssh": ("services.protocols.ssh_honeypot", "SSHHoneypot"),
             "http": ("services.protocols.http_honeypot", "HTTPHoneypot"),
+            "https": ("services.protocols.https_honeypot", "HTTPSHoneypot"),
             "telnet": ("services.protocols.telnet_honeypot", "TelnetHoneypot"),
             "ftp": ("services.protocols.ftp_honeypot", "FTPHoneypot"),
             "mysql": ("services.protocols.mysql_honeypot", "MySQLHoneypot"),

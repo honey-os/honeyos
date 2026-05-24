@@ -10,6 +10,7 @@ services:
       # Dev uses high ports to avoid conflicts with host services
       - "2222:2222"   # SSH honeypot
       - "8080:8080"   # HTTP honeypot
+      - "8443:8443"   # HTTPS honeypot
       - "2323:2323"   # Telnet honeypot
       - "2121:2121"   # FTP honeypot
       - "3307:3307"   # MySQL honeypot

@@ -53,6 +53,7 @@ class Config:
     # --- Honeypot Defaults ---
     SSH_HONEYPOT_PORT = int(os.getenv("SSH_HONEYPOT_PORT", "2222"))
     HTTP_HONEYPOT_PORT = int(os.getenv("HTTP_HONEYPOT_PORT", "8080"))
+    HTTPS_HONEYPOT_PORT = int(os.getenv("HTTPS_HONEYPOT_PORT", "8443"))
     TELNET_HONEYPOT_PORT = int(os.getenv("TELNET_HONEYPOT_PORT", "2323"))
     FTP_HONEYPOT_PORT = int(os.getenv("FTP_HONEYPOT_PORT", "2121"))
     MYSQL_HONEYPOT_PORT = int(os.getenv("MYSQL_HONEYPOT_PORT", "3307"))

@@ -11,6 +11,7 @@ services:
       # Attackers scanning the network see real service ports
       - "22:2222"     # SSH honeypot
       - "80:8080"     # HTTP honeypot
+      - "443:8443"    # HTTPS honeypot
       - "23:2323"     # Telnet honeypot
       - "21:2121"     # FTP honeypot
       - "3306:3307"   # MySQL honeypot

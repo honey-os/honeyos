@@ -155,6 +155,13 @@ def _seed_defaults() -> None:
                 "config": {"server_header": "Apache/2.4.52 (Ubuntu)"},
             },
             {
+                "name": "HTTPS Honeypot",
+                "protocol": "https",
+                "port": Config.HTTPS_HONEYPOT_PORT,
+                "description": "Fake HTTPS server with TLS and login pages",
+                "config": {"server_header": "Apache/2.4.52 (Ubuntu)"},
+            },
+            {
                 "name": "Telnet Honeypot",
                 "protocol": "telnet",
                 "port": Config.TELNET_HONEYPOT_PORT,

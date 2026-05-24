@@ -56,6 +56,7 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 ## Honeypot Ports (defaults)
 - SSH: 2222
 - HTTP: 8080
+- HTTPS: 8443
 - Telnet: 2323
 - FTP: 2121
 - MySQL: 3307

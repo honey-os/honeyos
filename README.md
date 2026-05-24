@@ -12,7 +12,7 @@ An open-source, self-hosted alternative to commercial honeypot appliances. No cl
 
 When an attacker compromises a device on your network, they scan for other targets — file servers, databases, admin panels. HoneyOS creates convincing fake versions of these services that no legitimate user would ever touch. Any interaction is an immediate indicator of compromise.
 
-**Supported Protocols**: SSH, HTTP, Telnet, FTP, MySQL (with SMB and RDP planned)
+**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL (with SMB and RDP planned)
 
 **Key Capabilities**:
 - Catches ransomware, lateral movement, and insider threats
@@ -107,6 +107,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `NETWORK_INTERFACE` | `eth0` | Primary network interface for scanning |
 | `SSH_HONEYPOT_PORT` | `2222` | Internal SSH honeypot port |
 | `HTTP_HONEYPOT_PORT` | `8080` | Internal HTTP honeypot port |
+| `HTTPS_HONEYPOT_PORT` | `8443` | Internal HTTPS honeypot port |
 | `TELNET_HONEYPOT_PORT` | `2323` | Internal Telnet honeypot port |
 | `FTP_HONEYPOT_PORT` | `2121` | Internal FTP honeypot port |
 | `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
@@ -133,6 +134,7 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 |----------|--------------|---------------|--------|
 | SSH | 22 | 2222 | OpenSSH 8.9 file server |
 | HTTP | 80 | 8080 | Apache admin portal |
+| HTTPS | 443 | 8443 | Apache admin portal (TLS) |
 | Telnet | 23 | 2323 | Network router |
 | FTP | 21 | 2121 | ProFTPD NAS |
 | MySQL | 3306 | 3307 | MySQL 8.0 database |
