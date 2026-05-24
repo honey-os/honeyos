@@ -122,6 +122,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SMTP_FROM_ADDRESS` | `honeyos@localhost` | From address for alert emails |
 | `SLACK_WEBHOOK_URL` | *(empty)* | Slack incoming webhook URL for alerts |
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
+| `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
 
 ## Default Honeypot Ports

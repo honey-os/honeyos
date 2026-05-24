@@ -15,7 +15,7 @@ services:
       - "3307:3307"   # MySQL honeypot
     volumes:
       - ./backend:/app
-      - honeyos-data-dev:/data
+      - ./data:/data
     env_file:
       - .env
     environment:
@@ -44,10 +44,6 @@ services:
       - backend
     networks:
       - honeyos-net-dev
-
-volumes:
-  honeyos-data-dev:
-    driver: local
 
 networks:
   honeyos-net-dev:

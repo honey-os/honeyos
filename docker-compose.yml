@@ -15,7 +15,7 @@ services:
       - "21:2121"     # FTP honeypot
       - "3306:3307"   # MySQL honeypot
     volumes:
-      - honeyos-data:/data
+      - ./data:/data
     env_file:
       - .env
     environment:
@@ -50,10 +50,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-
-volumes:
-  honeyos-data:
-    driver: local
 
 networks:
   honeyos-net:
