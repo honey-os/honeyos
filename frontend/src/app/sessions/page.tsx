@@ -44,9 +44,10 @@ export default function SessionsPage() {
     sessionsLoading,
     sessionsError,
     fetchSessions,
+    selectedSession,
+    setSelectedSession,
   } = useStore();
 
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterProtocol, setFilterProtocol] = useState('');
   const [filterStatus, setFilterStatus] = useState('');

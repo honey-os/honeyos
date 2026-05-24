@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
-from models import Event, Honeypot, Session, db
+from models import Event, Honeypot, IPGeoCache, Session, db, _iso_utc
 from services.event_processor import EventProcessor
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -38,14 +38,26 @@ def summary():
         .limit(10)
         .all()
     )
-    top_attackers = [
-        {
+    # Batch-fetch geo data for all top attacker IPs
+    attacker_ips = [ip for ip, _, _ in top_attackers_q]
+    geo_cache: dict[str, IPGeoCache] = {}
+    if attacker_ips:
+        cached = IPGeoCache.query.filter(IPGeoCache.ip.in_(attacker_ips)).all()
+        geo_cache = {g.ip: g for g in cached}
+
+    top_attackers = []
+    for ip, count, last_seen in top_attackers_q:
+        entry: dict = {
             "ip": ip,
             "count": count,
-            "last_seen": last_seen.isoformat() if last_seen else None,
+            "last_seen": _iso_utc(last_seen),
         }
-        for ip, count, last_seen in top_attackers_q
-    ]
+        geo = geo_cache.get(ip)
+        if geo:
+            entry["country"] = geo.country
+            entry["country_code"] = geo.country_code
+            entry["org"] = geo.org
+        top_attackers.append(entry)
 
     # Protocol breakdown as array of { protocol, count }
     protocol_q = (

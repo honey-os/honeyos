@@ -401,13 +401,53 @@ function EventDetails({ event }: { event: Event }) {
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               Geolocation
             </span>
-            <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3">
-              {JSON.stringify(event.geolocation, null, 2)}
-            </pre>
+            <div className="mt-1 text-sm text-gray-400 bg-[#0a0a0f] rounded-lg p-3 space-y-1">
+              <GeoDisplay geo={event.geolocation} />
+            </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function countryFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  const offset = 0x1F1E6 - 65;
+  return String.fromCodePoint(
+    code.codePointAt(0)! + offset,
+    code.codePointAt(1)! + offset,
+  );
+}
+
+function GeoDisplay({ geo }: { geo: Record<string, unknown> }) {
+  const country = geo.country as string | undefined;
+  const countryCode = geo.country_code as string | undefined;
+  const city = geo.city as string | undefined;
+  const isp = geo.isp as string | undefined;
+  const org = geo.org as string | undefined;
+  const lat = geo.lat as number | undefined;
+  const lon = geo.lon as number | undefined;
+
+  return (
+    <>
+      {country && (
+        <p className="text-gray-300">
+          {countryFlag(countryCode)} {country}
+          {city ? `, ${city}` : ''}
+        </p>
+      )}
+      {(isp || org) && (
+        <p className="text-gray-500 text-xs">
+          {[isp, org].filter(Boolean).join(' / ')}
+        </p>
+      )}
+      {lat != null && lon != null && (
+        <p className="text-gray-600 text-xs font-mono">
+          {lat.toFixed(4)}, {lon.toFixed(4)}
+        </p>
+      )}
+    </>
   );
 }
 

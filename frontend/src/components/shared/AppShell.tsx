@@ -36,6 +36,7 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const setSelectedSession = useStore((s) => s.setSelectedSession);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
@@ -78,6 +79,9 @@ export default function AppShell({ children }: AppShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  if (item.href === '/sessions') setSelectedSession(null);
+                }}
                 className={clsx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                   isActive

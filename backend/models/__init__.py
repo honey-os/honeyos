@@ -225,3 +225,36 @@ class SystemConfig(db.Model):
             "description": self.description,
             "config_type": self.config_type,
         }
+
+
+# ---------------------------------------------------------------------------
+# IPGeoCache
+# ---------------------------------------------------------------------------
+
+class IPGeoCache(db.Model):
+    __tablename__ = "ip_geo_cache"
+
+    ip = db.Column(db.String(45), primary_key=True)
+    country = db.Column(db.String(128))
+    country_code = db.Column(db.String(8))
+    region = db.Column(db.String(128))
+    city = db.Column(db.String(128))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    isp = db.Column(db.String(256))
+    org = db.Column(db.String(256))
+    asn = db.Column(db.String(64))
+    looked_up_at = db.Column(db.DateTime, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "country": self.country,
+            "country_code": self.country_code,
+            "region": self.region,
+            "city": self.city,
+            "lat": self.lat,
+            "lon": self.lon,
+            "isp": self.isp,
+            "org": self.org,
+            "asn": self.asn,
+        }

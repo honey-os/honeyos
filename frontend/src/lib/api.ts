@@ -81,7 +81,7 @@ export interface DashboardSummary {
   active_sessions: number;
   active_honeypots: number;
   threat_level: string;
-  top_attackers: Array<{ ip: string; count: number; last_seen: string }>;
+  top_attackers: Array<{ ip: string; count: number; last_seen: string; country?: string; country_code?: string; org?: string }>;
   protocol_breakdown: Array<{ protocol: string; count: number }>;
   recent_events: Event[];
   events_today: number;

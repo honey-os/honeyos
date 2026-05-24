@@ -6,7 +6,9 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+from config import Config
 from models import Event, Session, db
+from services.geoip import GeoIPService
 from utils.helpers import generate_id, sanitize_input
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ class EventProcessor:
 
     def __init__(self, alert_service=None):
         self.alert_service = alert_service
+        self.geoip_service = GeoIPService()
 
     # -----------------------------------------------------------------
     # Public API
@@ -51,6 +54,15 @@ class EventProcessor:
             raw_payload=event_data.get("raw_payload"),
             geolocation=json.dumps(event_data.get("geolocation")) if event_data.get("geolocation") else None,
         )
+
+        # GeoIP enrichment
+        if Config.GEOIP_ENABLED and not event.geolocation:
+            try:
+                geo = self.geoip_service.lookup(event.source_ip)
+                if geo:
+                    event.geolocation = json.dumps(geo)
+            except Exception:
+                logger.exception("GeoIP lookup failed for %s", event.source_ip)
 
         # Try to correlate with an existing session
         if not event.session_id:

@@ -37,6 +37,15 @@ const PIE_COLORS = [
   '#ec4899',
 ];
 
+function countryFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  const offset = 0x1F1E6 - 65; // 'A' = 65
+  return String.fromCodePoint(
+    code.codePointAt(0)! + offset,
+    code.codePointAt(1)! + offset,
+  );
+}
+
 const threatLevelColors: Record<string, string> = {
   critical: 'text-red-400',
   high: 'text-orange-400',
@@ -287,6 +296,9 @@ export default function DashboardPage() {
                     IP Address
                   </th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Location
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Events
                   </th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -305,6 +317,20 @@ export default function DashboardPage() {
                         {attacker.ip}
                       </td>
                       <td className="px-5 py-3 text-sm text-gray-300">
+                        {attacker.country ? (
+                          <div>
+                            <span>{countryFlag(attacker.country_code)} {attacker.country}</span>
+                            {attacker.org && (
+                              <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]" title={attacker.org}>
+                                {attacker.org}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-300">
                         {formatNumber(attacker.count)}
                       </td>
                       <td className="px-5 py-3 text-sm text-gray-500">
@@ -315,7 +341,7 @@ export default function DashboardPage() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={3}
+                      colSpan={4}
                       className="px-5 py-8 text-center text-sm text-gray-600"
                     >
                       No attacker data available
