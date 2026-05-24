@@ -137,9 +137,9 @@ def _seed_defaults() -> None:
     """Populate default honeypot configs and system settings if the tables
     are empty (first run)."""
 
-    # Default honeypots
-    if Honeypot.query.count() == 0:
-        defaults = [
+    # Default honeypots -- seed missing protocols into existing installs
+    existing_protocols = {hp.protocol for hp in Honeypot.query.with_entities(Honeypot.protocol).all()}
+    defaults = [
             {
                 "name": "SSH Honeypot",
                 "protocol": "ssh",
@@ -183,20 +183,22 @@ def _seed_defaults() -> None:
                 "config": {"version_string": "5.7.38-log"},
             },
         ]
-        for hp_data in defaults:
-            hp = Honeypot(
-                id=generate_id(),
-                name=hp_data["name"],
-                protocol=hp_data["protocol"],
-                port=hp_data["port"],
-                enabled=True,
-                description=hp_data["description"],
-                config=json.dumps(hp_data["config"]),
-                total_interactions=0,
-            )
-            db.session.add(hp)
+    new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
+    for hp_data in new_honeypots:
+        hp = Honeypot(
+            id=generate_id(),
+            name=hp_data["name"],
+            protocol=hp_data["protocol"],
+            port=hp_data["port"],
+            enabled=True,
+            description=hp_data["description"],
+            config=json.dumps(hp_data["config"]),
+            total_interactions=0,
+        )
+        db.session.add(hp)
+    if new_honeypots:
         db.session.commit()
-        logger.info("Seeded %d default honeypots", len(defaults))
+        logger.info("Seeded %d default honeypots", len(new_honeypots))
 
     # Default system config entries
     if SystemConfig.query.count() == 0:

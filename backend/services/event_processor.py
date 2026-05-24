@@ -139,14 +139,22 @@ class EventProcessor:
             .count()
         )
 
-        # Weighted score
-        score = min(100, recent_count * 2 + high_sev * 15 + unique_ips * 5)
+        # Weighted score -- tuned so routine scanning doesn't spike to critical.
+        # Rough calibration:
+        #   low    : a handful of probes from one IP  (< 20)
+        #   medium : moderate scanning or a few credential attempts  (20-49)
+        #   high   : sustained attack from multiple IPs  (50-79)
+        #   critical: heavy, multi-source, high-severity assault  (>= 80)
+        score = min(
+            100,
+            int(recent_count * 0.5 + high_sev * 5 + unique_ips * 3),
+        )
 
-        if score >= 75:
+        if score >= 80:
             level = "critical"
         elif score >= 50:
             level = "high"
-        elif score >= 25:
+        elif score >= 20:
             level = "medium"
         else:
             level = "low"

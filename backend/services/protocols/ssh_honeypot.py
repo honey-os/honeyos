@@ -20,12 +20,13 @@ _HOST_KEY = paramiko.RSAKey.generate(2048)
 class _ServerInterface(paramiko.ServerInterface):
     """Paramiko ServerInterface that accepts any credentials."""
 
-    def __init__(self, event_processor, session_recorder, client_addr, app):
+    def __init__(self, event_processor, session_recorder, client_addr, app, port):
         super().__init__()
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.client_addr = client_addr
         self.app = app
+        self.port = port
         self.username = ""
         self.password = ""
 
@@ -43,7 +44,7 @@ class _ServerInterface(paramiko.ServerInterface):
                     "protocol": "ssh",
                     "source_ip": self.client_addr[0],
                     "source_port": self.client_addr[1],
-                    "destination_port": 22,
+                    "destination_port": self.port,
                     "severity": "high",
                     "details": {"username": username, "password": password},
                 })
@@ -169,7 +170,7 @@ class SSHHoneypot:
             transport = paramiko.Transport(client_sock)
             transport.add_server_key(_HOST_KEY)
             server = _ServerInterface(
-                self.event_processor, self.session_recorder, addr, self.app
+                self.event_processor, self.session_recorder, addr, self.app, self.port
             )
             transport.start_server(server=server)
 

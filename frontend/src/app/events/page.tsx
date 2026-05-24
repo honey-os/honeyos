@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   Filter,
@@ -48,7 +49,10 @@ export default function EventsPage() {
     per_page: 25,
   });
 
-  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(
+    searchParams.get('event')
+  );
   const [showFilters, setShowFilters] = useState(true);
 
   const loadEvents = useCallback(
