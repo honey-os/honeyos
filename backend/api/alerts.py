@@ -18,10 +18,7 @@ alerts_bp = Blueprint("alerts", __name__)
 def list_alerts():
     """List all alert rules."""
     alerts = Alert.query.order_by(Alert.name).all()
-    return jsonify({
-        "alerts": [a.to_dict() for a in alerts],
-        "total": len(alerts),
-    })
+    return jsonify([a.to_dict() for a in alerts])
 
 
 @alerts_bp.route("/api/alerts", methods=["POST"])

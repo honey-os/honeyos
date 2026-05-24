@@ -88,6 +88,23 @@ def create_app(config_class=Config) -> Flask:
         db.create_all()
         _seed_defaults()
 
+    # --- Start honeypot listeners -----------------------------------------
+    from services.event_processor import EventProcessor
+    from services.session_recorder import SessionRecorder
+    from services.honeypot_manager import HoneypotManager
+
+    event_processor = EventProcessor()
+    session_recorder = SessionRecorder()
+    manager = HoneypotManager(
+        app=application,
+        event_processor=event_processor,
+        session_recorder=session_recorder,
+    )
+    application.honeypot_manager = manager
+
+    with application.app_context():
+        manager.start_all_enabled()
+
     return application
 
 

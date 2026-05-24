@@ -16,10 +16,7 @@ honeypots_bp = Blueprint("honeypots", __name__)
 def list_honeypots():
     """List all honeypots."""
     honeypots = Honeypot.query.order_by(Honeypot.name).all()
-    return jsonify({
-        "honeypots": [h.to_dict() for h in honeypots],
-        "total": len(honeypots),
-    })
+    return jsonify([h.to_dict() for h in honeypots])
 
 
 @honeypots_bp.route("/api/honeypots", methods=["POST"])

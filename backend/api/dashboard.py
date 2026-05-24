@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
-from models import Event, Session, db
+from models import Event, Honeypot, Session, db
 from services.event_processor import EventProcessor
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -19,50 +19,66 @@ def summary():
     Return a high-level dashboard summary.
 
     Response:
-        total_events, active_sessions, top_attackers,
-        protocol_breakdown, recent_activity, threat_level
+        total_events, active_sessions, active_honeypots, threat_level,
+        top_attackers, protocol_breakdown, recent_events
     """
     total_events = Event.query.count()
     active_sessions = Session.query.filter_by(status="active").count()
+    active_honeypots = Honeypot.query.filter_by(enabled=True).count()
 
     # Top attackers (top 10 source IPs by event count)
     top_attackers_q = (
-        db.session.query(Event.source_ip, db.func.count(Event.id).label("count"))
+        db.session.query(
+            Event.source_ip,
+            db.func.count(Event.id).label("count"),
+            db.func.max(Event.timestamp).label("last_seen"),
+        )
         .group_by(Event.source_ip)
         .order_by(db.text("count DESC"))
         .limit(10)
         .all()
     )
-    top_attackers = [{"ip": ip, "count": count} for ip, count in top_attackers_q]
+    top_attackers = [
+        {
+            "ip": ip,
+            "count": count,
+            "last_seen": last_seen.isoformat() if last_seen else None,
+        }
+        for ip, count, last_seen in top_attackers_q
+    ]
 
-    # Protocol breakdown
+    # Protocol breakdown as array of { protocol, count }
     protocol_q = (
         db.session.query(Event.protocol, db.func.count(Event.id).label("count"))
         .group_by(Event.protocol)
         .all()
     )
-    protocol_breakdown = {proto: count for proto, count in protocol_q}
+    protocol_breakdown = [
+        {"protocol": proto, "count": count} for proto, count in protocol_q
+    ]
 
-    # Recent activity (last 10 events)
+    # Recent events (last 10)
     recent = (
         Event.query
         .order_by(Event.timestamp.desc())
         .limit(10)
         .all()
     )
-    recent_activity = [e.to_dict() for e in recent]
+    recent_events = [e.to_dict() for e in recent]
 
-    # Threat level
+    # Threat level as a string
     processor = EventProcessor()
-    threat_level = processor.get_threat_level()
+    threat_info = processor.get_threat_level()
+    threat_level = threat_info.get("level", "none") if isinstance(threat_info, dict) else str(threat_info)
 
     return jsonify({
         "total_events": total_events,
         "active_sessions": active_sessions,
+        "active_honeypots": active_honeypots,
+        "threat_level": threat_level,
         "top_attackers": top_attackers,
         "protocol_breakdown": protocol_breakdown,
-        "recent_activity": recent_activity,
-        "threat_level": threat_level,
+        "recent_events": recent_events,
     })
 
 
@@ -73,12 +89,16 @@ def timeline():
 
     Query params:
         hours  (int) default 24 -- how many hours of history
+
+    Returns a plain array of { timestamp, count } objects.
     """
     hours = int(request.args.get("hours", 24))
     hours = max(1, min(hours, 720))  # 1 hour to 30 days
 
     now = datetime.now(timezone.utc)
-    start = now - timedelta(hours=hours)
+    # Floor to the current hour so the latest bucket covers "this hour"
+    current_hour = now.replace(minute=0, second=0, microsecond=0)
+    start = current_hour - timedelta(hours=hours - 1)
 
     events = (
         Event.query
@@ -87,7 +107,7 @@ def timeline():
         .all()
     )
 
-    # Bucket events into hourly slots
+    # Bucket events into hourly slots (start through current_hour inclusive)
     buckets: dict[str, int] = {}
     for h in range(hours):
         bucket_time = start + timedelta(hours=h)
@@ -102,10 +122,6 @@ def timeline():
         if key in buckets:
             buckets[key] += 1
 
-    timeline_data = [{"time": k, "count": v} for k, v in buckets.items()]
+    timeline_data = [{"timestamp": k, "count": v} for k, v in buckets.items()]
 
-    return jsonify({
-        "timeline": timeline_data,
-        "hours": hours,
-        "total_events": len(events),
-    })
+    return jsonify(timeline_data)

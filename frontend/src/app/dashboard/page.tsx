@@ -128,11 +128,11 @@ export default function DashboardPage() {
           value={
             <span
               className={
-                threatLevelColors[summary?.threat_level || 'none'] ||
+                threatLevelColors[String(summary?.threat_level || 'none')] ||
                 'text-gray-400'
               }
             >
-              {(summary?.threat_level || 'none').toUpperCase()}
+              {String(summary?.threat_level || 'none').toUpperCase()}
             </span>
           }
           iconColor="text-red-500"

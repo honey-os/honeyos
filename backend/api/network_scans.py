@@ -22,23 +22,26 @@ def list_scans():
         limit  (int) default 50
         offset (int) default 0
     """
-    limit = min(int(request.args.get("limit", 50)), 500)
-    offset = int(request.args.get("offset", 0))
+    per_page = min(int(request.args.get("per_page", request.args.get("limit", 50))), 500)
+    page = max(int(request.args.get("page", 1)), 1)
+    offset = (page - 1) * per_page
 
     total = NetworkScan.query.count()
+    pages = max((total + per_page - 1) // per_page, 1)
     scans = (
         NetworkScan.query
         .order_by(NetworkScan.timestamp.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(per_page)
         .all()
     )
 
     return jsonify({
-        "scans": [s.to_dict() for s in scans],
+        "items": [s.to_dict() for s in scans],
         "total": total,
-        "limit": limit,
-        "offset": offset,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
     })
 
 

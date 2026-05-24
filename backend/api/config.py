@@ -17,10 +17,7 @@ config_bp = Blueprint("config", __name__)
 def get_all_config():
     """Return all system configuration entries."""
     configs = SystemConfig.query.order_by(SystemConfig.key).all()
-    return jsonify({
-        "config": [c.to_dict() for c in configs],
-        "total": len(configs),
-    })
+    return jsonify([c.to_dict() for c in configs])
 
 
 @config_bp.route("/api/config", methods=["PUT"])

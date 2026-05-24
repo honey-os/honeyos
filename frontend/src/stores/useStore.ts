@@ -101,10 +101,10 @@ export const useStore = create<HoneyStore>((set) => ({
     try {
       const data = await getEvents(params as Parameters<typeof getEvents>[0]);
       set({
-        events: data.items,
-        eventsTotal: data.total,
-        eventsPage: data.page,
-        eventsPages: data.pages,
+        events: data.items || [],
+        eventsTotal: data.total || 0,
+        eventsPage: data.page || 1,
+        eventsPages: data.pages || 1,
         eventsLoading: false,
       });
     } catch (err) {
@@ -127,10 +127,10 @@ export const useStore = create<HoneyStore>((set) => ({
     try {
       const data = await getSessions(params as Parameters<typeof getSessions>[0]);
       set({
-        sessions: data.items,
-        sessionsTotal: data.total,
-        sessionsPage: data.page,
-        sessionsPages: data.pages,
+        sessions: data.items || [],
+        sessionsTotal: data.total || 0,
+        sessionsPage: data.page || 1,
+        sessionsPages: data.pages || 1,
         sessionsLoading: false,
       });
     } catch (err) {
@@ -149,7 +149,7 @@ export const useStore = create<HoneyStore>((set) => ({
     set({ honeypotsLoading: true, honeypotsError: null });
     try {
       const data = await getHoneypots();
-      set({ honeypots: data, honeypotsLoading: false });
+      set({ honeypots: Array.isArray(data) ? data : [], honeypotsLoading: false });
     } catch (err) {
       set({
         honeypotsLoading: false,
@@ -166,7 +166,7 @@ export const useStore = create<HoneyStore>((set) => ({
     set({ alertsLoading: true, alertsError: null });
     try {
       const data = await getAlerts();
-      set({ alerts: data, alertsLoading: false });
+      set({ alerts: Array.isArray(data) ? data : [], alertsLoading: false });
     } catch (err) {
       set({
         alertsLoading: false,
@@ -230,7 +230,7 @@ export const useStore = create<HoneyStore>((set) => ({
     set({ configLoading: true, configError: null });
     try {
       const data = await getConfig();
-      set({ config: data, configLoading: false });
+      set({ config: Array.isArray(data) ? data : [], configLoading: false });
     } catch (err) {
       set({
         configLoading: false,
