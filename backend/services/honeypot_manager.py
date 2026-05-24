@@ -1,12 +1,20 @@
 """
 HoneypotManager -- start / stop / query protocol-specific listeners.
+
+Uses real OS threads (not eventlet green threads) so that blocking socket
+operations in the honeypot listeners don't starve the eventlet event loop
+that gunicorn relies on for heartbeats and request handling.
 """
 
 import logging
-import threading
 from typing import Any
 
+from eventlet.patcher import original
+
 from models import Honeypot, db
+
+# Get the *real* threading module before eventlet monkey-patches it.
+_threading = original("threading")
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +27,6 @@ class HoneypotManager:
     protocol-specific listener class.
     """
 
-    # Map protocol names to their listener classes (lazily imported to
-    # avoid circular imports at module level).
     PROTOCOL_MAP: dict[str, str] = {
         "ssh": "services.protocols.ssh_honeypot.SSHHoneypot",
         "http": "services.protocols.http_honeypot.HTTPHoneypot",
@@ -35,7 +41,7 @@ class HoneypotManager:
         self.session_recorder = session_recorder
         # honeypot_id -> {"thread": Thread, "instance": listener, "running": bool}
         self._running: dict[str, dict[str, Any]] = {}
-        self._lock = threading.Lock()
+        self._lock = _threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -69,7 +75,7 @@ class HoneypotManager:
             app=self.app,
         )
 
-        thread = threading.Thread(
+        thread = _threading.Thread(
             target=instance.run,
             name=f"honeypot-{protocol}-{honeypot_config['port']}",
             daemon=True,
