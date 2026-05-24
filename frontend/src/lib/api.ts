@@ -113,6 +113,11 @@ export interface ApiError {
   message: string;
 }
 
+export interface AuthStatus {
+  has_admin: boolean;
+  authenticated: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Base URL & fetch helper
 // ---------------------------------------------------------------------------
@@ -143,6 +148,10 @@ async function fetchApi<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.location.reload();
+      throw new Error('Session expired');
+    }
     let errorData: ApiError;
     try {
       errorData = await response.json();
@@ -359,4 +368,67 @@ export async function importConfig(data: Record<string, unknown>): Promise<{ suc
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  const url = `${getBaseUrl()}/api/auth/status`;
+  const res = await fetch(url, { credentials: 'same-origin' });
+  return res.json();
+}
+
+export async function authSetup(password: string): Promise<void> {
+  const url = `${getBaseUrl()}/api/auth/setup`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || 'Setup failed');
+  }
+}
+
+export async function authLogin(password: string): Promise<void> {
+  const url = `${getBaseUrl()}/api/auth/login`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || 'Login failed');
+  }
+}
+
+export async function authLogout(): Promise<void> {
+  const url = `${getBaseUrl()}/api/auth/logout`;
+  await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+}
+
+export async function authChangePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const url = `${getBaseUrl()}/api/auth/change-password`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || 'Password change failed');
+  }
 }

@@ -10,7 +10,7 @@ import logging
 import os
 import sys
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
 
@@ -60,6 +60,7 @@ def create_app(config_class=Config) -> Flask:
     from api.network_scans import network_scans_bp
     from api.dashboard import dashboard_bp
     from api.config import config_bp
+    from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -68,6 +69,26 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(network_scans_bp)
     application.register_blueprint(dashboard_bp)
     application.register_blueprint(config_bp)
+    application.register_blueprint(auth_bp)
+
+    # --- Auth middleware --------------------------------------------------
+    AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
+                     "/api/auth/login", "/api/auth/logout"}
+
+    @application.before_request
+    def check_auth():
+        if request.method == "OPTIONS":
+            return None
+        if request.path in AUTH_ALLOWLIST:
+            return None
+        if not has_admin():
+            return None
+        cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+        if not is_authenticated(cookie_token):
+            return jsonify({
+                "error": "unauthorized",
+                "message": "Authentication required",
+            }), 401
 
     # --- Health check -----------------------------------------------------
     @application.route("/health", methods=["GET"])

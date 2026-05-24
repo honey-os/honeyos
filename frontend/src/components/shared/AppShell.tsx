@@ -15,8 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Server,
+  LogOut,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
+import { authLogout } from '@/lib/api';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -97,8 +99,19 @@ export default function AppShell({ children }: AppShellProps) {
           })}
         </nav>
 
-        {/* Collapse toggle */}
-        <div className="border-t border-[#2a2a3a] p-2">
+        {/* Sign out + collapse toggle */}
+        <div className="border-t border-[#2a2a3a] p-2 space-y-1">
+          <button
+            onClick={async () => {
+              await authLogout();
+              window.location.reload();
+            }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-[#1c1c28] transition-colors text-sm"
+            title={!sidebarOpen ? 'Sign Out' : undefined}
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {sidebarOpen && <span>Sign Out</span>}
+          </button>
           <button
             onClick={toggleSidebar}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors text-sm"

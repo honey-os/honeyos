@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import AuthGate from '@/components/shared/AuthGate';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -29,7 +30,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased bg-[#0a0a0f] text-gray-200`}
       >
-        {children}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
