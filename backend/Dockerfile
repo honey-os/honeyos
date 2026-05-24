@@ -23,7 +23,7 @@ ENV FLASK_ENV=production
 
 EXPOSE 7778
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=30s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7778/health')" || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:7778", "--worker-class", "eventlet", "--workers", "1", "--threads", "4", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:7778", "--worker-class", "eventlet", "--workers", "1", "--timeout", "120", "app:app"]

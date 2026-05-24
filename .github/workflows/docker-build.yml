@@ -9,6 +9,7 @@ on:
 env:
   GHCR_REGISTRY: ghcr.io
   DOCKERHUB_USERNAME: honeyos
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-test:
@@ -164,9 +165,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  update-dockerhub-readme:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update Backend Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_USERNAME }}/honeyos-backend
+          readme-filepath: ./README.md
+          short-description: "HoneyOS Backend — Network deception & intrusion detection API"
+
+      - name: Update Frontend Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_USERNAME }}/honeyos-frontend
+          readme-filepath: ./README.md
+          short-description: "HoneyOS Frontend — Network deception & intrusion detection dashboard"
+
   summary:
     runs-on: ubuntu-latest
-    needs: [build-backend, build-frontend]
+    needs: [build-backend, build-frontend, update-dockerhub-readme]
     if: always()
     steps:
       - name: Check build status
