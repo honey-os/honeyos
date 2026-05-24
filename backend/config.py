@@ -28,7 +28,7 @@ class Config:
     PORT_RANGE_START = int(os.getenv("PORT_RANGE_START", "1"))
     PORT_RANGE_END = int(os.getenv("PORT_RANGE_END", "1024"))
     BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
-    API_PORT = int(os.getenv("API_PORT", "5000"))
+    API_PORT = int(os.getenv("API_PORT", "7778"))
 
     # --- SMTP / Email Alerts ---
     SMTP_HOST = os.getenv("SMTP_HOST", "")

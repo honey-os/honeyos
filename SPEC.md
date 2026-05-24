@@ -495,8 +495,8 @@ cd honeyos
 make setup
 cp .env.example .env
 make dev
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:5000
+# Frontend: http://localhost:7777
+# Backend API: http://localhost:7778
 ```
 
 ### Production Deployment

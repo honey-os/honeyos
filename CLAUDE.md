@@ -4,8 +4,8 @@
 HoneyOS is a self-hosted network deception and intrusion detection system. It deploys honeypot services (SSH, HTTP, Telnet, FTP, MySQL) to catch attackers during lateral movement on local networks.
 
 ## Architecture
-- **Backend**: Python 3.11+ / Flask / SQLAlchemy / SQLite — runs at port 5000
-- **Frontend**: Next.js 14 / React 18 / Tailwind CSS / Zustand — runs at port 3000
+- **Backend**: Python 3.11+ / Flask / SQLAlchemy / SQLite — runs at port 7778
+- **Frontend**: Next.js 14 / React 18 / Tailwind CSS / Zustand — runs at port 7777
 - **Deployment**: Docker Compose (primary), Raspberry Pi image (secondary)
 
 ## Quick Start
@@ -48,8 +48,8 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - Tables auto-created on first run
 
 ## API Base URL
-- Development: `http://localhost:5000`
-- Docker internal: `http://backend:5000`
+- Development: `http://localhost:7778`
+- Docker internal: `http://backend:7778`
 - All API routes prefixed with `/api/`
 - Health check: `GET /health`
 

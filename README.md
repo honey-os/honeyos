@@ -32,7 +32,7 @@ make setup    # creates .env from template
 make prod     # builds and starts everything
 ```
 
-Open `http://localhost:3000` in your browser.
+Open `http://localhost:7777` in your browser.
 
 ### Raspberry Pi
 
@@ -40,7 +40,7 @@ Open `http://localhost:3000` in your browser.
 curl -sSL https://raw.githubusercontent.com/your-repo/honeyos/main/bin/setup-pi.sh | sudo bash
 ```
 
-Access at `http://honeyos.local:3000` after setup completes.
+Access at `http://honeyos.local:7777` after setup completes.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ Access at `http://honeyos.local:3000` after setup completes.
 │  │          ▼                                │       │
 │  │  ┌─────────────┐  ┌────────────────┐     │       │
 │  │  │  Dashboard  │  │    Alerts       │     │       │
-│  │  │  :3000      │  │ Email/Slack/etc │     │       │
+│  │  │  :7777      │  │ Email/Slack/etc │     │       │
 │  │  └─────────────┘  └────────────────┘     │       │
 │  └────────────────────────────────────────────┘       │
 └──────────────────────────────────────────────────────┘
@@ -80,7 +80,7 @@ Access at `http://honeyos.local:3000` after setup completes.
 
 ## Dashboard
 
-The web dashboard at port 3000 provides:
+The web dashboard at port 7777 provides:
 
 - **Real-time event feed** — live stream of all honeypot interactions
 - **Session replay** — watch attacker keystrokes in a terminal player
@@ -110,19 +110,21 @@ LOG_LEVEL=INFO                      # DEBUG, INFO, WARNING, ERROR
 
 ## Default Honeypot Ports
 
-| Protocol | Port | Mimics |
-|----------|------|--------|
-| SSH | 2222 | OpenSSH 8.9 file server |
-| HTTP | 8080 | Apache admin portal |
-| Telnet | 2323 | Network router |
-| FTP | 2121 | ProFTPD NAS |
-| MySQL | 3307 | MySQL 8.0 database |
+In production (Docker/Pi), honeypots bind to standard ports so they look real to attackers. Internally the containers use high ports to avoid running as root.
 
-All ports are configurable through the dashboard or API.
+| Protocol | External Port | Internal Port | Mimics |
+|----------|--------------|---------------|--------|
+| SSH | 22 | 2222 | OpenSSH 8.9 file server |
+| HTTP | 80 | 8080 | Apache admin portal |
+| Telnet | 23 | 2323 | Network router |
+| FTP | 21 | 2121 | ProFTPD NAS |
+| MySQL | 3306 | 3307 | MySQL 8.0 database |
+
+In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
 
 ## API
 
-Full REST API available at port 5000:
+Full REST API available at port 7778:
 
 ```
 GET  /health                    # Health check

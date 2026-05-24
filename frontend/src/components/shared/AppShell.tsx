@@ -4,12 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Activity,
   Terminal,
-  Hexagon,
-  Shield,
   Bell,
   Globe,
   Settings,
@@ -49,13 +48,22 @@ export default function AppShell({ children }: AppShellProps) {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-[#2a2a3a]">
-          <Link href="/" className="relative shrink-0">
-            <Hexagon className="w-8 h-8 text-amber-500" />
-            <Shield className="w-4 h-4 text-amber-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+          <Link href="/" className="shrink-0">
+            <Image
+              src="/images/logo-icon.png"
+              alt="HoneyOS"
+              width={32}
+              height={32}
+            />
           </Link>
           {sidebarOpen && (
-            <Link href="/" className="text-lg font-bold text-gradient whitespace-nowrap">
-              HoneyOS
+            <Link href="/" className="shrink-0">
+              <Image
+                src="/images/logo-text-white.png"
+                alt="HoneyOS"
+                width={110}
+                height={26}
+              />
             </Link>
           )}
         </div>

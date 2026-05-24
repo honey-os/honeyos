@@ -7,7 +7,7 @@ import clsx from 'clsx';
 interface MetricsCardProps {
   icon: LucideIcon;
   label: string;
-  value: string | number;
+  value: React.ReactNode;
   trend?: {
     value: number;
     label: string;

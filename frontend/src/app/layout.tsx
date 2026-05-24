@@ -8,6 +8,15 @@ export const metadata: Metadata = {
   title: 'HoneyOS - Network Deception & Intrusion Detection',
   description:
     'Open-source honeypot management and intrusion detection system with multi-protocol deception, session recording, and real-time alerts.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
 };
 
 export default function RootLayout({
