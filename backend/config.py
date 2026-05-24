@@ -58,4 +58,4 @@ class Config:
     MYSQL_HONEYPOT_PORT = int(os.getenv("MYSQL_HONEYPOT_PORT", "3307"))
 
     # --- Geolocation ---
-    GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "false").lower() in ("true", "1", "yes")
+    GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "true").lower() in ("true", "1", "yes")

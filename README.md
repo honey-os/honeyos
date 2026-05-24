@@ -91,22 +91,37 @@ The web dashboard at port 7777 provides:
 
 ## Configuration
 
-Copy `.env.example` to `.env` and configure:
+Copy `.env.example` to `.env` and customize. See [Environment Variables](#environment-variables) for the full list of options and their defaults.
 
-```bash
-# Core
-SECRET_KEY=your-random-secret       # Generate with: openssl rand -hex 32
-NETWORK_INTERFACE=eth0              # Your network interface
+## Environment Variables
 
-# Alerts (optional)
-SMTP_HOST=smtp.gmail.com            # Email alerts
-SLACK_WEBHOOK_URL=https://hooks...  # Slack alerts
-WEBHOOK_URL=https://your-endpoint   # Webhook alerts
+All settings are configured via environment variables in `.env`. Copy `.env.example` to get started.
 
-# Tuning
-RETENTION_DAYS=365                  # How long to keep event data
-LOG_LEVEL=INFO                      # DEBUG, INFO, WARNING, ERROR
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECRET_KEY` | `honeyos-default-secret-change-me` | Flask secret key. Generate with `openssl rand -hex 32` |
+| `DEBUG` | `false` | Enable Flask debug mode |
+| `DATABASE_URL` | `sqlite:///honeyos.db` | SQLAlchemy database URI |
+| `BIND_HOST` | `0.0.0.0` | Address the backend binds to |
+| `API_PORT` | `7778` | Backend API port |
+| `NETWORK_INTERFACE` | `eth0` | Primary network interface for scanning |
+| `SSH_HONEYPOT_PORT` | `2222` | Internal SSH honeypot port |
+| `HTTP_HONEYPOT_PORT` | `8080` | Internal HTTP honeypot port |
+| `TELNET_HONEYPOT_PORT` | `2323` | Internal Telnet honeypot port |
+| `FTP_HONEYPOT_PORT` | `2121` | Internal FTP honeypot port |
+| `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
+| `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
+| `RETENTION_DAYS` | `90` | Days to retain event data |
+| `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
+| `LOG_LEVEL` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `SMTP_HOST` | *(empty)* | SMTP server for email alerts |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_USERNAME` | *(empty)* | SMTP username |
+| `SMTP_PASSWORD` | *(empty)* | SMTP password |
+| `SMTP_USE_TLS` | `true` | Use TLS for SMTP |
+| `SMTP_FROM_ADDRESS` | `honeyos@localhost` | From address for alert emails |
+| `SLACK_WEBHOOK_URL` | *(empty)* | Slack incoming webhook URL for alerts |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
 
 ## Default Honeypot Ports
 
