@@ -13,7 +13,6 @@ import {
   Globe,
   Settings,
   ChevronLeft,
-  ChevronRight,
   Server,
   LogOut,
 } from 'lucide-react';
@@ -49,39 +48,39 @@ export default function AppShell({ children }: AppShellProps) {
           sidebarOpen ? 'w-60' : 'w-16'
         )}
       >
-        {/* Logo + collapse toggle */}
+        {/* Logo */}
         <div className="flex items-center justify-between px-4 py-5 border-b border-[#2a2a3a]">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="shrink-0">
-              <Image
-                src="/images/logo-icon.png"
-                alt="HoneyOS"
-                width={32}
-                height={32}
-              />
-            </Link>
+          <div
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={!sidebarOpen ? toggleSidebar : undefined}
+            title={!sidebarOpen ? 'Expand sidebar' : undefined}
+          >
+            <Image
+              src="/images/logo-icon.png"
+              alt="HoneyOS"
+              width={32}
+              height={32}
+              className="shrink-0"
+            />
             {sidebarOpen && (
-              <Link href="/" className="shrink-0">
-                <Image
-                  src="/images/logo-text-white.png"
-                  alt="HoneyOS"
-                  width={110}
-                  height={26}
-                />
-              </Link>
+              <Image
+                src="/images/logo-text-white.png"
+                alt="HoneyOS"
+                width={110}
+                height={26}
+                className="shrink-0"
+              />
             )}
           </div>
-          <button
-            onClick={toggleSidebar}
-            className="p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors"
-            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            {sidebarOpen ? (
+          {sidebarOpen && (
+            <button
+              onClick={toggleSidebar}
+              className="p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors"
+              title="Collapse sidebar"
+            >
               <ChevronLeft className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
