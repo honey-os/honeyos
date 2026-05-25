@@ -32,8 +32,12 @@ def list_sessions():
     if protocol:
         query = query.filter(Session.protocol == protocol)
 
+    status = request.args.get("status")
+    if status:
+        query = query.filter(Session.status == status)
+
     active_only = request.args.get("active_only", "false").lower() in ("true", "1", "yes")
-    if active_only:
+    if active_only and not status:
         query = query.filter(Session.status == "active")
 
     total = query.count()

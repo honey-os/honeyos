@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Users,
   Filter,
@@ -40,8 +42,11 @@ export default function AttackersPage() {
     per_page: 25,
   });
 
+  const searchParams = useSearchParams();
   const [showFilters, setShowFilters] = useState(true);
-  const [expandedIP, setExpandedIP] = useState<string | null>(null);
+  const [expandedIP, setExpandedIP] = useState<string | null>(
+    searchParams.get('ip')
+  );
 
   const loadAttackers = useCallback(
     (page: number = 1) => {
@@ -428,7 +433,11 @@ function AttackerDetails({ attacker }: { attacker: Attacker }) {
           ) : (
             <div className="divide-y divide-[#2a2a3a]/50">
               {events.map((event) => (
-                <div key={event.id} className="px-4 py-3 flex items-center gap-3">
+                <Link
+                  key={event.id}
+                  href={`/events?event=${event.id}`}
+                  className="px-4 py-3 flex items-center gap-3 hover:bg-[#1c1c28] transition-colors block"
+                >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs text-gray-500">
@@ -442,7 +451,7 @@ function AttackerDetails({ attacker }: { attacker: Attacker }) {
                       {event.destination_port ? ` :${event.destination_port}` : ''}
                     </p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

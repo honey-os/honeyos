@@ -251,4 +251,5 @@ if __name__ == "__main__":
         port=Config.API_PORT,
         debug=Config.DEBUG,
         use_reloader=False,
+        allow_unsafe_werkzeug=True,
     )

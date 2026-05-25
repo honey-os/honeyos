@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   Radio,
@@ -321,30 +322,37 @@ export default function DashboardPage() {
                   summary.top_attackers.map((attacker) => (
                     <tr
                       key={attacker.ip}
-                      className="hover:bg-[#1c1c28] transition-colors"
+                      className="hover:bg-[#1c1c28] transition-colors cursor-pointer"
                     >
-                      <td className="px-5 py-3 font-mono text-sm text-amber-400">
-                        {attacker.ip}
-                      </td>
-                      <td className="px-5 py-3 text-sm text-gray-300">
-                        {attacker.country ? (
-                          <div>
-                            <span>{countryFlag(attacker.country_code)} {attacker.country}</span>
-                            {attacker.org && (
-                              <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]" title={attacker.org}>
-                                {attacker.org}
-                              </p>
+                      <td className="p-0" colSpan={4}>
+                        <Link
+                          href={`/attackers?ip=${encodeURIComponent(attacker.ip)}`}
+                          className="grid grid-cols-[1fr_1fr_1fr_1fr] w-full"
+                        >
+                          <span className="px-5 py-3 font-mono text-sm text-amber-400">
+                            {attacker.ip}
+                          </span>
+                          <span className="px-5 py-3 text-sm text-gray-300">
+                            {attacker.country ? (
+                              <span>
+                                <span>{countryFlag(attacker.country_code)} {attacker.country}</span>
+                                {attacker.org && (
+                                  <span className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px] block" title={attacker.org}>
+                                    {attacker.org}
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-gray-600">--</span>
                             )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-600">--</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-sm text-gray-300">
-                        {formatNumber(attacker.count)}
-                      </td>
-                      <td className="px-5 py-3 text-sm text-gray-500">
-                        {formatRelativeTime(attacker.last_seen)}
+                          </span>
+                          <span className="px-5 py-3 text-sm text-gray-300">
+                            {formatNumber(attacker.count)}
+                          </span>
+                          <span className="px-5 py-3 text-sm text-gray-500">
+                            {formatRelativeTime(attacker.last_seen)}
+                          </span>
+                        </Link>
                       </td>
                     </tr>
                   ))
