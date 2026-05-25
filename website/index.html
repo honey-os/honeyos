@@ -3,8 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HoneyOS - Network Deception & Intrusion Detection</title>
-  <meta name="description" content="Open-source honeypot management and intrusion detection system. Deploy silent decoy services to catch attackers with zero false positives.">
+  <title>HoneyOS - Open-Source Network Deception & Intrusion Detection</title>
+  <meta name="description" content="Deploy honeypot services across your network to detect lateral movement, ransomware, and insider threats. Self-hosted on Raspberry Pi or Docker. SSH, HTTP, HTTPS, Telnet, FTP, and MySQL deception with real-time alerts.">
+  <meta name="keywords" content="honeypot, intrusion detection, network security, deception technology, lateral movement detection, open source security, raspberry pi honeypot, SSH honeypot, network monitoring, threat detection, self-hosted, HoneyOS">
+  <meta name="author" content="HoneyOS">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="msapplication-TileColor" content="#0a0a0f">
+  <link rel="canonical" href="https://honeyos.io">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://honeyos.io">
+  <meta property="og:site_name" content="HoneyOS">
+  <meta property="og:title" content="HoneyOS - Catch Intruders. Zero False Positives.">
+  <meta property="og:description" content="Open-source network deception platform. Deploy silent decoy services to detect lateral movement, ransomware, and insider threats — before real damage is done.">
+  <meta property="og:image" content="https://honeyos.io/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HoneyOS - Open-source network deception platform">
+  <meta property="og:image:type" content="image/png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="HoneyOS - Catch Intruders. Zero False Positives.">
+  <meta name="twitter:description" content="Open-source network deception platform. Deploy honeypots to detect lateral movement and insider threats. Self-hosted on Raspberry Pi or Docker.">
+  <meta name="twitter:image" content="https://honeyos.io/images/og-image.png">
+
+  <!-- Robots -->
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+
   <link rel="icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -303,6 +331,12 @@
               <td class="px-6 py-3.5 font-mono text-sm text-gray-300">80</td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8080</td>
               <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">HTTPS</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">443</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8443</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal (TLS)</td>
             </tr>
             <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
               <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">Telnet</span></td>

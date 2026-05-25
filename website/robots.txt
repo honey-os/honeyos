@@ -1,0 +1,5 @@
+# HoneyOS
+User-agent: *
+Allow: /
+
+Sitemap: https://honeyos.io/sitemap.xml
