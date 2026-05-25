@@ -322,37 +322,30 @@ export default function DashboardPage() {
                   summary.top_attackers.map((attacker) => (
                     <tr
                       key={attacker.ip}
-                      className="hover:bg-[#1c1c28] transition-colors cursor-pointer"
+                      className="hover:bg-[#1c1c28] transition-colors"
                     >
-                      <td className="p-0" colSpan={4}>
+                      <td className="px-5 py-3 font-mono text-sm whitespace-nowrap">
                         <Link
                           href={`/attackers?ip=${encodeURIComponent(attacker.ip)}`}
-                          className="grid grid-cols-[1fr_1fr_1fr_1fr] w-full"
+                          className="text-amber-400 hover:text-amber-300"
                         >
-                          <span className="px-5 py-3 font-mono text-sm text-amber-400">
-                            {attacker.ip}
-                          </span>
-                          <span className="px-5 py-3 text-sm text-gray-300">
-                            {attacker.country ? (
-                              <span>
-                                <span>{countryFlag(attacker.country_code)} {attacker.country}</span>
-                                {attacker.org && (
-                                  <span className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px] block" title={attacker.org}>
-                                    {attacker.org}
-                                  </span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="text-gray-600">--</span>
-                            )}
-                          </span>
-                          <span className="px-5 py-3 text-sm text-gray-300">
-                            {formatNumber(attacker.count)}
-                          </span>
-                          <span className="px-5 py-3 text-sm text-gray-500">
-                            {formatRelativeTime(attacker.last_seen)}
-                          </span>
+                          {attacker.ip}
                         </Link>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-300 whitespace-nowrap">
+                        {attacker.country_code ? (
+                          <span title={[attacker.country, attacker.org].filter(Boolean).join(' — ')}>
+                            {countryFlag(attacker.country_code)} {attacker.country_code}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-300 whitespace-nowrap">
+                        {formatNumber(attacker.count)}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
+                        {formatRelativeTime(attacker.last_seen)}
                       </td>
                     </tr>
                   ))

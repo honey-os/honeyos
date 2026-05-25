@@ -14,6 +14,7 @@ import { useStore } from '@/stores/useStore';
 import SeverityBadge from '@/components/ui/SeverityBadge';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatDate, formatRelativeTime, truncateText } from '@/utils/formatters';
+import { getEvent } from '@/lib/api';
 import type { Event } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -50,9 +51,9 @@ export default function EventsPage() {
   });
 
   const searchParams = useSearchParams();
-  const [expandedEvent, setExpandedEvent] = useState<string | null>(
-    searchParams.get('event')
-  );
+  const linkedEventId = searchParams.get('event');
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(linkedEventId);
+  const [linkedEvent, setLinkedEvent] = useState<Event | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
   const loadEvents = useCallback(
@@ -65,6 +66,17 @@ export default function EventsPage() {
   useEffect(() => {
     loadEvents(1);
   }, [loadEvents]);
+
+  // Fetch the specific linked event so it displays even if not on the current page
+  useEffect(() => {
+    if (!linkedEventId) {
+      setLinkedEvent(null);
+      return;
+    }
+    getEvent(linkedEventId)
+      .then((e) => setLinkedEvent(e))
+      .catch(() => setLinkedEvent(null));
+  }, [linkedEventId]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -226,6 +238,60 @@ export default function EventsPage() {
       {eventsError && (
         <div className="card p-4 border-red-500/30 bg-red-500/5 text-red-400 text-sm">
           {eventsError}
+        </div>
+      )}
+
+      {/* Linked event (from ?event=id, when not on the current page) */}
+      {linkedEvent && !events.some((e) => e.id === linkedEvent.id) && (
+        <div className="card overflow-hidden border-amber-500/20">
+          <div className="px-4 py-2 bg-amber-500/5 border-b border-amber-500/20">
+            <span className="text-xs font-medium text-amber-400">Linked Event</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <tbody>
+                <tr
+                  className="cursor-pointer hover:bg-[#1c1c28] transition-colors"
+                  onClick={() =>
+                    setExpandedEvent(
+                      expandedEvent === linkedEvent.id ? null : linkedEvent.id
+                    )
+                  }
+                >
+                  <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
+                    {formatDate(linkedEvent.timestamp, 'MMM d, HH:mm:ss')}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-300">
+                    {linkedEvent.event_type.replace('_', ' ')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ProtocolBadge protocol={linkedEvent.protocol} />
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-amber-400">
+                    {linkedEvent.source_ip}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-gray-400">
+                    {linkedEvent.destination_port || '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <SeverityBadge severity={linkedEvent.severity} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
+                    {linkedEvent.details
+                      ? truncateText(JSON.stringify(linkedEvent.details), 60)
+                      : '-'}
+                  </td>
+                </tr>
+                {expandedEvent === linkedEvent.id && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-4 bg-[#111118]">
+                      <EventDetails event={linkedEvent} />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
