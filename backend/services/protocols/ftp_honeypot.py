@@ -78,9 +78,56 @@ class FTPHoneypot:
     # Connection handler
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Data channel helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _open_pasv_socket() -> tuple[socket.socket, int]:
+        """Open an ephemeral TCP socket for PASV data connections.
+        Returns (socket, port)."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("0.0.0.0", 0))
+        s.listen(1)
+        s.settimeout(10)
+        port = s.getsockname()[1]
+        return s, port
+
+    @staticmethod
+    def _send_via_data(data_sock: socket.socket, payload: bytes) -> None:
+        """Accept one connection on *data_sock*, send *payload*, close."""
+        try:
+            conn, _ = data_sock.accept()
+            try:
+                conn.sendall(payload)
+            finally:
+                conn.close()
+        finally:
+            data_sock.close()
+
+    @staticmethod
+    def _connect_active(host: str, port: int) -> socket.socket | None:
+        """Connect to the client's PORT address for active-mode transfers."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(5)
+            s.connect((host, port))
+            return s
+        except OSError:
+            return None
+
+    # ------------------------------------------------------------------
+    # Connection handler
+    # ------------------------------------------------------------------
+
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
         session_id = None
         username = ""
+        # Pending PASV listener (socket, port) or None
+        pasv_sock: socket.socket | None = None
+        # Pending PORT target (host, port) or None
+        active_addr: tuple[str, int] | None = None
         try:
             client_sock.settimeout(120)
             client_sock.sendall(self.BANNER.encode())
@@ -159,15 +206,78 @@ class FTPHoneypot:
                     client_sock.sendall(b"200 Type set\r\n")
 
                 elif cmd == "PASV":
-                    # Send a fake PASV response (connection will fail for
-                    # actual data transfer, which is fine -- we log the intent)
-                    client_sock.sendall(b"227 Entering Passive Mode (127,0,0,1,0,0)\r\n")
+                    # Close any previous PASV socket
+                    if pasv_sock:
+                        try:
+                            pasv_sock.close()
+                        except OSError:
+                            pass
+                    active_addr = None
+                    pasv_sock, pasv_port = self._open_pasv_socket()
+                    # Encode the local IP and port into the PASV response
+                    local_ip = client_sock.getsockname()[0]
+                    ip_parts = local_ip.replace(".", ",")
+                    p1, p2 = pasv_port >> 8, pasv_port & 0xFF
+                    client_sock.sendall(
+                        f"227 Entering Passive Mode ({ip_parts},{p1},{p2})\r\n".encode()
+                    )
+
+                elif cmd == "PORT":
+                    # Parse PORT h1,h2,h3,h4,p1,p2
+                    if pasv_sock:
+                        try:
+                            pasv_sock.close()
+                        except OSError:
+                            pass
+                        pasv_sock = None
+                    try:
+                        nums = [int(x) for x in arg.split(",")]
+                        host = f"{nums[0]}.{nums[1]}.{nums[2]}.{nums[3]}"
+                        port_num = nums[4] * 256 + nums[5]
+                        active_addr = (host, port_num)
+                        client_sock.sendall(b"200 PORT command successful\r\n")
+                    except (ValueError, IndexError):
+                        client_sock.sendall(b"501 Syntax error in PORT\r\n")
+
+                elif cmd == "EPSV":
+                    if pasv_sock:
+                        try:
+                            pasv_sock.close()
+                        except OSError:
+                            pass
+                    active_addr = None
+                    pasv_sock, pasv_port = self._open_pasv_socket()
+                    client_sock.sendall(
+                        f"229 Entering Extended Passive Mode (|||{pasv_port}|)\r\n".encode()
+                    )
 
                 elif cmd == "LIST" or cmd == "NLST":
-                    client_sock.sendall(b"150 Opening data connection\r\n")
-                    # We cannot actually send data over a data channel without
-                    # a real PASV socket, but we log the attempt.
-                    client_sock.sendall(b"226 Transfer complete\r\n")
+                    listing = _DIR_LISTING.encode() if cmd == "LIST" else b"backups\r\nconfig\r\nreadme.txt\r\ndatabase.sql\r\n"
+                    sent = False
+
+                    if pasv_sock:
+                        client_sock.sendall(b"150 Opening data connection\r\n")
+                        try:
+                            self._send_via_data(pasv_sock, listing)
+                            sent = True
+                        except OSError:
+                            pass
+                        pasv_sock = None
+                    elif active_addr:
+                        client_sock.sendall(b"150 Opening data connection\r\n")
+                        conn = self._connect_active(*active_addr)
+                        if conn:
+                            try:
+                                conn.sendall(listing)
+                            finally:
+                                conn.close()
+                            sent = True
+                        active_addr = None
+
+                    if sent:
+                        client_sock.sendall(b"226 Transfer complete\r\n")
+                    else:
+                        client_sock.sendall(b"425 Can't open data connection\r\n")
 
                     if self.event_processor and self.app:
                         with self.app.app_context():
@@ -230,6 +340,11 @@ class FTPHoneypot:
         except Exception:
             logger.exception("FTP handler error for %s", addr)
         finally:
+            if pasv_sock:
+                try:
+                    pasv_sock.close()
+                except OSError:
+                    pass
             if session_id and self.session_recorder and self.app:
                 with self.app.app_context():
                     self.session_recorder.end_session(session_id)
