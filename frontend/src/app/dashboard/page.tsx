@@ -142,21 +142,24 @@ export default function DashboardPage() {
           value={formatNumber(summary?.active_honeypots)}
           iconColor="text-green-500"
         />
-        <MetricsCard
-          icon={AlertTriangle}
-          label="Threat Level"
-          value={
-            <span
-              className={
-                threatLevelColors[String(summary?.threat_level || 'none')] ||
-                'text-gray-400'
-              }
-            >
-              {String(summary?.threat_level || 'none').toUpperCase()}
-            </span>
-          }
-          iconColor="text-red-500"
-        />
+        <Link href="/threat-level">
+          <MetricsCard
+            icon={AlertTriangle}
+            label="Threat Level"
+            value={
+              <span
+                className={
+                  threatLevelColors[String(summary?.threat_level?.level || 'none')] ||
+                  'text-gray-400'
+                }
+              >
+                {String(summary?.threat_level?.level || 'none').toUpperCase()}
+              </span>
+            }
+            iconColor="text-red-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
       </div>
 
       {/* Timeline chart & Protocol breakdown */}

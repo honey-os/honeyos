@@ -76,11 +76,20 @@ export interface NetworkScan {
   previous_scan_id: string | null;
 }
 
+export interface ThreatLevel {
+  level: string;
+  score: number;
+  recent_events: number;
+  high_severity_events: number;
+  unique_attackers: number;
+  unique_protocols: number;
+}
+
 export interface DashboardSummary {
   total_events: number;
   active_sessions: number;
   active_honeypots: number;
-  threat_level: string;
+  threat_level: ThreatLevel;
   top_attackers: Array<{ ip: string; count: number; last_seen: string; country?: string; country_code?: string; org?: string }>;
   protocol_breakdown: Array<{ protocol: string; count: number }>;
   recent_events: Event[];

@@ -78,16 +78,15 @@ def summary():
     )
     recent_events = [e.to_dict() for e in recent]
 
-    # Threat level as a string
+    # Threat level -- full breakdown
     processor = EventProcessor()
     threat_info = processor.get_threat_level()
-    threat_level = threat_info.get("level", "none") if isinstance(threat_info, dict) else str(threat_info)
 
     return jsonify({
         "total_events": total_events,
         "active_sessions": active_sessions,
         "active_honeypots": active_honeypots,
-        "threat_level": threat_level,
+        "threat_level": threat_info,
         "top_attackers": top_attackers,
         "protocol_breakdown": protocol_breakdown,
         "recent_events": recent_events,
