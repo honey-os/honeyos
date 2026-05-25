@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from config import Config
-from models import Event, Session, db
+from models import Event, Honeypot, Session, db
 from services.geoip import GeoIPService
 from utils.helpers import generate_id, sanitize_input
 
@@ -71,6 +71,13 @@ class EventProcessor:
                 event.session_id = session.id
 
         db.session.add(event)
+
+        # Update honeypot interaction stats
+        honeypot = Honeypot.query.filter_by(protocol=event.protocol).first()
+        if honeypot:
+            honeypot.total_interactions = (honeypot.total_interactions or 0) + 1
+            honeypot.last_activity = event.timestamp
+
         db.session.commit()
 
         logger.info(
