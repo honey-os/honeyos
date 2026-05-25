@@ -121,9 +121,13 @@ export default function ThreatLevelPage() {
   const volumePoints = threat
     ? Math.min(100, Math.round(Math.log2(threat.recent_events + 1) * 3))
     : 0;
-  const breadthPoints = threat ? threat.unique_attackers * 8 : 0;
+  const breadthPoints = threat
+    ? Math.round(Math.sqrt(threat.unique_attackers) * 12)
+    : 0;
   const reconPoints = threat ? threat.unique_protocols * 5 : 0;
-  const severityPoints = threat ? threat.high_severity_events * 4 : 0;
+  const severityPoints = threat
+    ? Math.round(Math.sqrt(threat.high_severity_events) * 8)
+    : 0;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -218,9 +222,9 @@ export default function ThreatLevelPage() {
               icon={Users}
               label="Unique Attackers"
               value={threat?.unique_attackers ?? 0}
-              formula="unique IPs &times; 8"
+              formula="&radic;(unique IPs) &times; 12"
               points={breadthPoints}
-              maxDescription="Each new attacker IP adds 8 pts"
+              maxDescription="Diminishing returns per additional IP"
             />
             <FactorCard
               icon={Radio}
@@ -234,9 +238,9 @@ export default function ThreatLevelPage() {
               icon={Flame}
               label="High Severity Events"
               value={threat?.high_severity_events ?? 0}
-              formula="capped events &times; 4"
+              formula="&radic;(capped events) &times; 8"
               points={severityPoints}
-              maxDescription="Capped at 5 per IP to limit bot noise"
+              maxDescription="Capped at 5 per IP, then sqrt scaled"
             />
           </div>
         )}
