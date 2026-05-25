@@ -60,6 +60,7 @@ def create_app(config_class=Config) -> Flask:
     from api.network_scans import network_scans_bp
     from api.dashboard import dashboard_bp
     from api.config import config_bp
+    from api.attackers import attackers_bp
     from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
 
     application.register_blueprint(events_bp)
@@ -69,6 +70,7 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(network_scans_bp)
     application.register_blueprint(dashboard_bp)
     application.register_blueprint(config_bp)
+    application.register_blueprint(attackers_bp)
     application.register_blueprint(auth_bp)
 
     # --- Auth middleware --------------------------------------------------

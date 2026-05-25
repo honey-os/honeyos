@@ -26,7 +26,7 @@ const EVENT_TYPES = [
   'brute_force',
 ];
 
-const PROTOCOLS = ['ssh', 'http', 'telnet', 'ftp', 'mysql', 'smb', 'rdp'];
+const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb', 'rdp'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'];
 
 export default function EventsPage() {

@@ -100,6 +100,30 @@ export interface SystemConfigItem {
   config_type: string;
 }
 
+export interface Attacker {
+  ip: string;
+  event_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  protocols: string[];
+  country: string | null;
+  country_code: string | null;
+  city: string | null;
+  org: string | null;
+  isp: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface AttackerParams {
+  page?: number;
+  per_page?: number;
+  protocol?: string;
+  country_code?: string;
+  search?: string;
+  sort_by?: string;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -207,6 +231,25 @@ export async function createEvent(data: Partial<Event>): Promise<Event> {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Attackers
+// ---------------------------------------------------------------------------
+
+export async function getAttackers(params: AttackerParams = {}): Promise<PaginatedResponse<Attacker>> {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '' && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return fetchApi<PaginatedResponse<Attacker>>(`/attackers${query ? `?${query}` : ''}`);
+}
+
+export async function getAttackerEvents(ip: string, params: EventParams = {}): Promise<PaginatedResponse<Event>> {
+  return getEvents({ source_ip: ip, ...params });
 }
 
 // ---------------------------------------------------------------------------

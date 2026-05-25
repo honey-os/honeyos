@@ -4,6 +4,7 @@ import {
   type Session,
   type Honeypot,
   type Alert,
+  type Attacker,
   type DashboardSummary,
   type TimelinePoint,
   type NetworkScan,
@@ -12,6 +13,7 @@ import {
   getSessions,
   getHoneypots,
   getAlerts,
+  getAttackers,
   getDashboardSummary,
   getDashboardTimeline,
   getNetworkScans,
@@ -27,6 +29,15 @@ interface HoneyStore {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+
+  // Attackers
+  attackers: Attacker[];
+  attackersTotal: number;
+  attackersPage: number;
+  attackersPages: number;
+  attackersLoading: boolean;
+  attackersError: string | null;
+  fetchAttackers: (params?: Record<string, unknown>) => Promise<void>;
 
   // Events
   events: Event[];
@@ -90,6 +101,32 @@ export const useStore = create<HoneyStore>((set) => ({
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+  // Attackers
+  attackers: [],
+  attackersTotal: 0,
+  attackersPage: 1,
+  attackersPages: 1,
+  attackersLoading: false,
+  attackersError: null,
+  fetchAttackers: async (params = {}) => {
+    set({ attackersLoading: true, attackersError: null });
+    try {
+      const data = await getAttackers(params as Parameters<typeof getAttackers>[0]);
+      set({
+        attackers: data.items || [],
+        attackersTotal: data.total || 0,
+        attackersPage: data.page || 1,
+        attackersPages: data.pages || 1,
+        attackersLoading: false,
+      });
+    } catch (err) {
+      set({
+        attackersLoading: false,
+        attackersError: err instanceof Error ? err.message : 'Failed to fetch attackers',
+      });
+    }
+  },
 
   // Events
   events: [],

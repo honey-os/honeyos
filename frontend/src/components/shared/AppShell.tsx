@@ -8,6 +8,7 @@ import Image from 'next/image';
 import {
   LayoutDashboard,
   Activity,
+  Users,
   Terminal,
   Bell,
   Globe,
@@ -22,6 +23,7 @@ import { authLogout } from '@/lib/api';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/events', label: 'Events', icon: Activity },
+  { href: '/attackers', label: 'Attackers', icon: Users },
   { href: '/sessions', label: 'Sessions', icon: Terminal },
   { href: '/honeypots', label: 'Honeypots', icon: Server },
   { href: '/alerts', label: 'Alerts', icon: Bell },

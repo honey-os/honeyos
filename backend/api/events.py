@@ -37,6 +37,10 @@ def list_events():
     if event_type:
         query = query.filter(Event.event_type == event_type)
 
+    source_ip = request.args.get("source_ip")
+    if source_ip:
+        query = query.filter(Event.source_ip == source_ip)
+
     protocol = request.args.get("protocol")
     if protocol:
         query = query.filter(Event.protocol == protocol)
