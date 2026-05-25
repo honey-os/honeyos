@@ -12,7 +12,7 @@ An open-source, self-hosted alternative to commercial honeypot appliances. No cl
 
 When an attacker compromises a device on your network, they scan for other targets — file servers, databases, admin panels. HoneyOS creates convincing fake versions of these services that no legitimate user would ever touch. Any interaction is an immediate indicator of compromise.
 
-**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL (with SMB and RDP planned)
+**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL (with SMB and RDP planned)
 
 **Key Capabilities**:
 - Catches ransomware, lateral movement, and insider threats
@@ -111,6 +111,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `TELNET_HONEYPOT_PORT` | `2323` | Internal Telnet honeypot port |
 | `FTP_HONEYPOT_PORT` | `2121` | Internal FTP honeypot port |
 | `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
+| `POSTGRESQL_HONEYPOT_PORT` | `5433` | Internal PostgreSQL honeypot port |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
@@ -138,6 +139,7 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 | Telnet | 23 | 2323 | Network router |
 | FTP | 21 | 2121 | ProFTPD NAS |
 | MySQL | 3306 | 3307 | MySQL 8.0 database |
+| PostgreSQL | 5432 | 5433 | PostgreSQL 14.5 database |
 
 In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
 

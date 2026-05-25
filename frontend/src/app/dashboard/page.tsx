@@ -34,6 +34,7 @@ const PROTOCOL_COLORS: Record<string, string> = {
   telnet: '#8b5cf6', // purple
   ftp: '#06b6d4',    // cyan
   mysql: '#f97316',  // orange
+  postgresql: '#0ea5e9',  // sky
   smb: '#f43f5e',    // rose
   rdp: '#6366f1',    // indigo
   dns: '#14b8a6',    // teal

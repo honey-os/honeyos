@@ -15,6 +15,7 @@ services:
       - "23:2323"     # Telnet honeypot
       - "21:2121"     # FTP honeypot
       - "3306:3307"   # MySQL honeypot
+      - "5432:5433"   # PostgreSQL honeypot
     volumes:
       - ./data:/data
     env_file:

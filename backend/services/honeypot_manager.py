@@ -26,6 +26,7 @@ class HoneypotManager:
         "telnet": "services.protocols.telnet_honeypot.TelnetHoneypot",
         "ftp": "services.protocols.ftp_honeypot.FTPHoneypot",
         "mysql": "services.protocols.mysql_honeypot.MySQLHoneypot",
+        "postgresql": "services.protocols.postgresql_honeypot.PostgreSQLHoneypot",
     }
 
     def __init__(self, app=None, event_processor=None, session_recorder=None):
@@ -138,6 +139,7 @@ class HoneypotManager:
             "telnet": ("services.protocols.telnet_honeypot", "TelnetHoneypot"),
             "ftp": ("services.protocols.ftp_honeypot", "FTPHoneypot"),
             "mysql": ("services.protocols.mysql_honeypot", "MySQLHoneypot"),
+            "postgresql": ("services.protocols.postgresql_honeypot", "PostgreSQLHoneypot"),
         }
         entry = mapping.get(protocol)
         if not entry:

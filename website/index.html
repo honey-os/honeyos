@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HoneyOS - Open-Source Network Deception & Intrusion Detection</title>
-  <meta name="description" content="Deploy honeypot services across your network to detect lateral movement, ransomware, and insider threats. Self-hosted on Raspberry Pi or Docker. SSH, HTTP, HTTPS, Telnet, FTP, and MySQL deception with real-time alerts.">
+  <meta name="description" content="Deploy honeypot services across your network to detect lateral movement, ransomware, and insider threats. Self-hosted on Raspberry Pi or Docker. SSH, HTTP, HTTPS, Telnet, FTP, MySQL, and PostgreSQL deception with real-time alerts.">
   <meta name="keywords" content="honeypot, intrusion detection, network security, deception technology, lateral movement detection, open source security, raspberry pi honeypot, SSH honeypot, network monitoring, threat detection, self-hosted, HoneyOS">
   <meta name="author" content="HoneyOS">
   <meta name="theme-color" content="#0a0a0f">
@@ -207,7 +207,7 @@
             <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4 17 6-6-6-6m8 14h8"/></svg>
           </div>
           <h3 class="text-lg font-semibold text-gray-100 mb-2">Multi-Protocol Deception</h3>
-          <p class="text-sm text-gray-400 leading-relaxed">Deploy honeypots across SSH, HTTP, Telnet, FTP, MySQL, SMB, and RDP. Each protocol emulates realistic services to lure and study attackers.</p>
+          <p class="text-sm text-gray-400 leading-relaxed">Deploy honeypots across SSH, HTTP, Telnet, FTP, MySQL, PostgreSQL, SMB, and RDP. Each protocol emulates realistic services to lure and study attackers.</p>
         </div>
         <!-- Session Recording -->
         <div class="card-hover p-6 group">
@@ -355,6 +355,12 @@
               <td class="px-6 py-3.5 font-mono text-sm text-gray-300">3306</td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">3307</td>
               <td class="px-6 py-3.5 text-sm text-gray-400">MySQL 8.0 database</td>
+            </tr>
+            <tr class="hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">PostgreSQL</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">5432</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">5433</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">PostgreSQL 14.5 database</td>
             </tr>
           </tbody>
         </table>

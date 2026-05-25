@@ -182,6 +182,13 @@ def _seed_defaults() -> None:
                 "description": "Fake MySQL server capturing authentication and queries",
                 "config": {"version_string": "5.7.38-log"},
             },
+            {
+                "name": "PostgreSQL Honeypot",
+                "protocol": "postgresql",
+                "port": Config.POSTGRESQL_HONEYPOT_PORT,
+                "description": "Fake PostgreSQL server capturing authentication and queries",
+                "config": {"version_string": "14.5"},
+            },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
     for hp_data in new_honeypots:

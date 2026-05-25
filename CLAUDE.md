@@ -60,6 +60,7 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - Telnet: 2323
 - FTP: 2121
 - MySQL: 3307
+- PostgreSQL: 5433
 
 ## Code Conventions
 - Python: type hints, snake_case, docstrings for public functions
