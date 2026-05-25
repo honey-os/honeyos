@@ -26,16 +26,25 @@ import EventFeed from '@/components/shared/EventFeed';
 import { useStore } from '@/stores/useStore';
 import { formatDate, formatNumber, formatRelativeTime } from '@/utils/formatters';
 
-const PIE_COLORS = [
-  '#f59e0b',
-  '#3b82f6',
-  '#10b981',
-  '#8b5cf6',
-  '#ef4444',
-  '#06b6d4',
-  '#f97316',
-  '#ec4899',
-];
+/** Locked protocol → hex color map matching ProtocolBadge palette. */
+const PROTOCOL_COLORS: Record<string, string> = {
+  ssh: '#10b981',    // emerald
+  http: '#3b82f6',   // blue
+  https: '#3b82f6',  // blue
+  telnet: '#8b5cf6', // purple
+  ftp: '#06b6d4',    // cyan
+  mysql: '#f97316',  // orange
+  smb: '#f43f5e',    // rose
+  rdp: '#6366f1',    // indigo
+  dns: '#14b8a6',    // teal
+  smtp: '#ec4899',   // pink
+};
+
+const DEFAULT_PROTOCOL_COLOR = '#6b7280'; // gray
+
+function protocolColor(protocol: string): string {
+  return PROTOCOL_COLORS[protocol.toLowerCase()] || DEFAULT_PROTOCOL_COLOR;
+}
 
 function countryFlag(code?: string): string {
   if (!code || code.length !== 2) return '';
@@ -229,10 +238,10 @@ export default function DashboardPage() {
                     nameKey="protocol"
                     stroke="none"
                   >
-                    {summary.protocol_breakdown.map((_, idx) => (
+                    {summary.protocol_breakdown.map((entry, idx) => (
                       <Cell
                         key={idx}
-                        fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                        fill={protocolColor(entry.protocol)}
                       />
                     ))}
                   </Pie>
@@ -248,7 +257,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-3 space-y-2">
-                {summary.protocol_breakdown.map((item, idx) => (
+                {summary.protocol_breakdown.map((item) => (
                   <div
                     key={item.protocol}
                     className="flex items-center justify-between text-sm"
@@ -257,8 +266,7 @@ export default function DashboardPage() {
                       <div
                         className="w-3 h-3 rounded-sm"
                         style={{
-                          backgroundColor:
-                            PIE_COLORS[idx % PIE_COLORS.length],
+                          backgroundColor: protocolColor(item.protocol),
                         }}
                       />
                       <span className="text-gray-300 uppercase font-mono text-xs">
