@@ -5,6 +5,7 @@ import {
   type Honeypot,
   type Alert,
   type Attacker,
+  type CredentialsData,
   type DashboardSummary,
   type TimelinePoint,
   type NetworkScan,
@@ -14,6 +15,7 @@ import {
   getHoneypots,
   getAlerts,
   getAttackers,
+  getCredentials,
   getDashboardSummary,
   getDashboardTimeline,
   getNetworkScans,
@@ -38,6 +40,12 @@ interface HoneyStore {
   attackersLoading: boolean;
   attackersError: string | null;
   fetchAttackers: (params?: Record<string, unknown>) => Promise<void>;
+
+  // Credentials
+  credentials: CredentialsData | null;
+  credentialsLoading: boolean;
+  credentialsError: string | null;
+  fetchCredentials: (params?: Record<string, unknown>) => Promise<void>;
 
   // Events
   events: Event[];
@@ -124,6 +132,23 @@ export const useStore = create<HoneyStore>((set) => ({
       set({
         attackersLoading: false,
         attackersError: err instanceof Error ? err.message : 'Failed to fetch attackers',
+      });
+    }
+  },
+
+  // Credentials
+  credentials: null,
+  credentialsLoading: false,
+  credentialsError: null,
+  fetchCredentials: async (params = {}) => {
+    set({ credentialsLoading: true, credentialsError: null });
+    try {
+      const data = await getCredentials(params as Parameters<typeof getCredentials>[0]);
+      set({ credentials: data, credentialsLoading: false });
+    } catch (err) {
+      set({
+        credentialsLoading: false,
+        credentialsError: err instanceof Error ? err.message : 'Failed to fetch credentials',
       });
     }
   },

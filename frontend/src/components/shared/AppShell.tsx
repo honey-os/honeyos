@@ -15,6 +15,7 @@ import {
   Settings,
   ChevronLeft,
   Server,
+  KeyRound,
   LogOut,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/events', label: 'Events', icon: Activity },
   { href: '/attackers', label: 'Attackers', icon: Users },
+  { href: '/credentials', label: 'Credentials', icon: KeyRound },
   { href: '/sessions', label: 'Sessions', icon: Terminal },
   { href: '/honeypots', label: 'Honeypots', icon: Server },
   { href: '/alerts', label: 'Alerts', icon: Bell },

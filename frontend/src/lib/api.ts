@@ -132,6 +132,36 @@ export interface PaginatedResponse<T> {
   pages: number;
 }
 
+export interface TopUsername {
+  username: string;
+  count: number;
+  protocols: string[];
+}
+
+export interface TopPassword {
+  password: string;
+  count: number;
+}
+
+export interface TopCombo {
+  username: string;
+  password: string;
+  count: number;
+  protocols: string[];
+}
+
+export interface CredentialsData {
+  total_attempts: number;
+  top_usernames: TopUsername[];
+  top_passwords: TopPassword[];
+  top_combos: TopCombo[];
+}
+
+export interface CredentialsParams {
+  protocol?: string;
+  limit?: number;
+}
+
 export interface ApiError {
   error: string;
   message: string;
@@ -250,6 +280,21 @@ export async function getAttackers(params: AttackerParams = {}): Promise<Paginat
 
 export async function getAttackerEvents(ip: string, params: EventParams = {}): Promise<PaginatedResponse<Event>> {
   return getEvents({ source_ip: ip, ...params });
+}
+
+// ---------------------------------------------------------------------------
+// Credentials
+// ---------------------------------------------------------------------------
+
+export async function getCredentials(params: CredentialsParams = {}): Promise<CredentialsData> {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '' && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return fetchApi<CredentialsData>(`/credentials${query ? `?${query}` : ''}`);
 }
 
 // ---------------------------------------------------------------------------
