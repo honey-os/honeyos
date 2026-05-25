@@ -117,19 +117,24 @@ class EventProcessor:
 
     def get_threat_level(self) -> dict:
         """
-        Calculate a simple threat-level indicator based on recent activity.
+        Calculate a threat-level indicator based on recent activity.
+
+        The score prioritises *breadth* and *intent* over raw volume:
+        - Multiple unique source IPs (breadth of attack)
+        - Multiple protocols from the same IP (reconnaissance)
+        - High-severity events capped per-IP (one bot can't dominate)
+        - Total event volume with logarithmic scaling (diminishing returns)
 
         Returns a dict with ``level`` (low / medium / high / critical) and
         ``score`` (0-100).
         """
+        import math
+
         now = datetime.now(timezone.utc)
         one_hour_ago = now - timedelta(hours=1)
 
-        recent_count = Event.query.filter(Event.timestamp >= one_hour_ago).count()
-
-        high_sev = Event.query.filter(
+        recent_count = Event.query.filter(
             Event.timestamp >= one_hour_ago,
-            Event.severity.in_(["high", "critical"]),
         ).count()
 
         unique_ips = (
@@ -139,17 +144,46 @@ class EventProcessor:
             .count()
         )
 
-        # Weighted score -- tuned so routine scanning doesn't spike to critical.
-        # Rough calibration:
-        #   low    : a handful of probes from one IP  (< 20)
-        #   medium : moderate scanning or a few credential attempts  (20-49)
-        #   high   : sustained attack from multiple IPs  (50-79)
-        #   critical: heavy, multi-source, high-severity assault  (>= 80)
-        score = min(
-            100,
-            int(recent_count * 0.5 + high_sev * 5 + unique_ips * 3),
+        unique_protocols = (
+            db.session.query(Event.protocol)
+            .filter(Event.timestamp >= one_hour_ago)
+            .distinct()
+            .count()
         )
 
+        # High-severity events capped at 5 per source IP so a single bot
+        # brute-forcing one service can't push us to critical on its own.
+        high_sev_by_ip = (
+            db.session.query(
+                Event.source_ip,
+                db.func.min(db.func.count(), 5).label("capped"),
+            )
+            .filter(
+                Event.timestamp >= one_hour_ago,
+                Event.severity.in_(["high", "critical"]),
+            )
+            .group_by(Event.source_ip)
+            .all()
+        )
+        capped_high_sev = sum(row.capped for row in high_sev_by_ip)
+
+        # Scoring components:
+        #   volume  : log2(events+1) * 3  — 100 events ≈ 20 pts, 1000 ≈ 30
+        #   breadth : unique_ips * 8      — each new attacker is significant
+        #   recon   : unique_protocols * 5 — multi-protocol probing
+        #   severity: capped_high_sev * 4 — intent matters, but bounded
+        volume_score = math.log2(recent_count + 1) * 3
+        breadth_score = unique_ips * 8
+        recon_score = unique_protocols * 5
+        severity_score = capped_high_sev * 4
+
+        score = min(100, int(volume_score + breadth_score + recon_score + severity_score))
+
+        # Thresholds:
+        #   1 IP, 1 protocol, low sev, 50 events  → ~30 (medium)
+        #   1 IP, 1 protocol, high sev, 500 events → ~45 (medium)
+        #   3 IPs, 2 protocols, some high sev       → ~55 (high)
+        #   5+ IPs, 3+ protocols, high sev spread   → ~80+ (critical)
         if score >= 80:
             level = "critical"
         elif score >= 50:
@@ -163,6 +197,7 @@ class EventProcessor:
             "level": level,
             "score": score,
             "recent_events": recent_count,
-            "high_severity_events": high_sev,
+            "high_severity_events": capped_high_sev,
             "unique_attackers": unique_ips,
+            "unique_protocols": unique_protocols,
         }
