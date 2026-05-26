@@ -67,6 +67,7 @@ _SECTIONS = [
             ("MYSQL_HONEYPOT_PORT", "MySQL", "int"),
             ("POSTGRESQL_HONEYPOT_PORT", "PostgreSQL", "int"),
             ("DNS_HONEYPOT_PORT", "DNS", "int"),
+            ("SMB_HONEYPOT_PORT", "SMB", "int"),
         ],
     },
     {

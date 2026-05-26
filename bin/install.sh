@@ -149,6 +149,7 @@ services:
       - "5432:5433"
       - "53:5353/udp"
       - "53:5353/tcp"
+      - "445:4450"
     volumes:
       - ./data:/data
     env_file:
@@ -278,7 +279,7 @@ wait_healthy() {
 # Port conflict check
 # -------------------------------------------------------------------
 check_ports() {
-    local ports=(22 23 80 443 21 3306 5432 53 7777)
+    local ports=(22 23 80 443 21 3306 5432 53 445 7777)
     local conflicts=()
     for port in "${ports[@]}"; do
         if ss -tulnp 2>/dev/null | grep -q ":${port} " || \
@@ -332,7 +333,7 @@ main() {
     echo -e "  TLS:        Self-signed certificate (accept browser warning)"
     echo -e "              Custom certs: place in ${CYAN}${HONEYOS_DIR}/data/certs/${NC} and update .env"
     echo ""
-    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)${NC}"
+    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)  445 (SMB)${NC}"
     echo ""
     echo -e "  Manage:     ${CYAN}cd ${HONEYOS_DIR} && docker compose logs -f${NC}"
     echo -e "  Stop:       ${CYAN}cd ${HONEYOS_DIR} && docker compose down${NC}"

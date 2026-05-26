@@ -12,7 +12,7 @@ import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatNumber } from '@/utils/formatters';
 import clsx from 'clsx';
 
-const PROTOCOLS = ['ssh', 'telnet', 'ftp', 'mysql', 'postgresql'];
+const PROTOCOLS = ['ssh', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb'];
 
 export default function CredentialsPage() {
   const {

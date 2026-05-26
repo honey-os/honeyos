@@ -260,7 +260,7 @@ export default function SessionsPage() {
           className="select-field text-sm"
         >
           <option value="">All protocols</option>
-          {['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns'].map((p) => (
+          {['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb'].map((p) => (
             <option key={p} value={p}>
               {p.toUpperCase()}
             </option>

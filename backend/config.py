@@ -59,6 +59,7 @@ class Config:
     MYSQL_HONEYPOT_PORT = int(os.getenv("MYSQL_HONEYPOT_PORT", "3307"))
     POSTGRESQL_HONEYPOT_PORT = int(os.getenv("POSTGRESQL_HONEYPOT_PORT", "5433"))
     DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
+    SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
 
     # --- Authentication ---
     SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "168"))

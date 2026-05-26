@@ -17,6 +17,7 @@ services:
       - "5433:5433"   # PostgreSQL honeypot
       - "5353:5353/udp"  # DNS honeypot (UDP)
       - "5353:5353/tcp"  # DNS honeypot (TCP)
+      - "4450:4450"   # SMB honeypot
     volumes:
       - ./backend:/app
       - ./data:/data

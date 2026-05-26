@@ -200,6 +200,13 @@ def _seed_defaults() -> None:
                 "description": "Fake DNS server logging reconnaissance and zone transfer attempts",
                 "config": {"domain": "corp.local", "version": "dnsmasq-2.90"},
             },
+            {
+                "name": "SMB Honeypot",
+                "protocol": "smb",
+                "port": Config.SMB_HONEYPOT_PORT,
+                "description": "Fake SMB/CIFS file server capturing authentication and share access attempts",
+                "config": {"server_name": "FILESERVER", "domain": "WORKGROUP"},
+            },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
     for hp_data in new_honeypots:
