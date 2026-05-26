@@ -175,22 +175,22 @@ class EventProcessor:
         capped_high_sev = sum(row.capped for row in high_sev_by_ip)
 
         # Scoring components:
-        #   volume  : log2(events+1) * 3       — 100 events ≈ 20 pts, 1000 ≈ 30
-        #   breadth : sqrt(unique_ips) * 12    — diminishing returns per IP
-        #   recon   : unique_protocols * 5     — multi-protocol probing
-        #   severity: sqrt(capped_high_sev) * 8 — diminishing returns on severity
-        volume_score = math.log2(recent_count + 1) * 3
-        breadth_score = math.sqrt(unique_ips) * 12
-        recon_score = unique_protocols * 5
-        severity_score = math.sqrt(capped_high_sev) * 8
+        #   volume  : log2(events+1) * 2       — 100 events ≈ 13 pts, 1000 ≈ 20
+        #   breadth : sqrt(unique_ips) * 4     — diminishing returns per IP
+        #   recon   : unique_protocols * 3     — multi-protocol probing
+        #   severity: sqrt(capped_high_sev) * 3 — diminishing returns on severity
+        volume_score = math.log2(recent_count + 1) * 2
+        breadth_score = math.sqrt(unique_ips) * 4
+        recon_score = unique_protocols * 3
+        severity_score = math.sqrt(capped_high_sev) * 3
 
         score = min(100, int(volume_score + breadth_score + recon_score + severity_score))
 
         # Thresholds:
-        #   1 IP, 1 protocol, low sev, 50 events   → ~32 (medium)
-        #   5 IPs, 1 protocol, high sev, 500 events → ~72 (high)
-        #   12 IPs, 3 protocols, high sev spread     → ~80+ (critical)
-        #   25+ IPs, 4+ protocols, high sev spread   → 100 (critical)
+        #   2 IPs, 1 protocol, low sev, 5 events    → ~18 (low)
+        #   8 IPs, 4 protocols, 27 events, some sev  → ~43 (medium)
+        #   30 IPs, 5 protocols, 500 events, high sev → ~71 (high)
+        #   50+ IPs, 7 protocols, 1000+ events        → ~90 (critical)
         if score >= 80:
             level = "critical"
         elif score >= 50:

@@ -119,14 +119,14 @@ export default function ThreatLevelPage() {
 
   // Reconstruct individual score components from the raw values
   const volumePoints = threat
-    ? Math.min(100, Math.round(Math.log2(threat.recent_events + 1) * 3))
+    ? Math.min(100, Math.round(Math.log2(threat.recent_events + 1) * 2))
     : 0;
   const breadthPoints = threat
-    ? Math.round(Math.sqrt(threat.unique_attackers) * 12)
+    ? Math.round(Math.sqrt(threat.unique_attackers) * 4)
     : 0;
-  const reconPoints = threat ? threat.unique_protocols * 5 : 0;
+  const reconPoints = threat ? threat.unique_protocols * 3 : 0;
   const severityPoints = threat
-    ? Math.round(Math.sqrt(threat.high_severity_events) * 8)
+    ? Math.round(Math.sqrt(threat.high_severity_events) * 3)
     : 0;
 
   return (
@@ -214,7 +214,7 @@ export default function ThreatLevelPage() {
               icon={Activity}
               label="Event Volume"
               value={threat?.recent_events ?? 0}
-              formula="log2(events + 1) &times; 3"
+              formula="log2(events + 1) &times; 2"
               points={volumePoints}
               maxDescription="Logarithmic scaling prevents volume spam"
             />
@@ -222,7 +222,7 @@ export default function ThreatLevelPage() {
               icon={Users}
               label="Unique Attackers"
               value={threat?.unique_attackers ?? 0}
-              formula="&radic;(unique IPs) &times; 12"
+              formula="&radic;(unique IPs) &times; 4"
               points={breadthPoints}
               maxDescription="Diminishing returns per additional IP"
             />
@@ -230,7 +230,7 @@ export default function ThreatLevelPage() {
               icon={Radio}
               label="Protocol Diversity"
               value={threat?.unique_protocols ?? 0}
-              formula="unique protocols &times; 5"
+              formula="unique protocols &times; 3"
               points={reconPoints}
               maxDescription="Multi-protocol probing signals recon"
             />
@@ -238,7 +238,7 @@ export default function ThreatLevelPage() {
               icon={Flame}
               label="High Severity Events"
               value={threat?.high_severity_events ?? 0}
-              formula="&radic;(capped events) &times; 8"
+              formula="&radic;(capped events) &times; 3"
               points={severityPoints}
               maxDescription="Capped at 5 per IP, then sqrt scaled"
             />
@@ -290,7 +290,7 @@ export default function ThreatLevelPage() {
           </div>
           <p>
             High-severity events are capped at 5 per source IP before being scored,
-            so a single noisy bot can contribute at most 20 severity points. Volume uses
+            so a single noisy bot can contribute at most 7 severity points. Volume uses
             logarithmic scaling (log<sub>2</sub>) to provide diminishing returns — 100
             events scores about the same as 1,000.
           </p>
