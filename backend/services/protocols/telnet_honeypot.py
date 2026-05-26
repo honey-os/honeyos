@@ -9,6 +9,7 @@ and writable-directory discovery.
 import logging
 import re
 import socket
+import struct
 import threading
 from datetime import datetime, timezone
 
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 _COMMAND_RESPONSES = {
     "whoami": "admin",
     "id": "uid=0(root) gid=0(root)",
-    "uname -a": "Linux gateway 4.15.0-20-generic #21 SMP x86_64 GNU/Linux",
-    "uname -m": "x86_64",
+    "uname -a": "Linux gateway 3.10.14 #1 SMP armv7l GNU/Linux",
+    "uname -m": "armv7l",
     "uname": "Linux",
     "hostname": "gateway",
     "pwd": "/home/admin",
@@ -33,8 +34,19 @@ _COMMAND_RESPONSES = {
     ),
     "cat /proc/cpuinfo": (
         "processor\t: 0\n"
-        "model name\t: Intel(R) Xeon(R) CPU E5-2686 v4 @ 2.30GHz\n"
-        "cpu MHz\t\t: 2300.000\n"
+        "model name\t: ARMv7 Processor rev 4 (v7l)\n"
+        "BogoMIPS\t: 38.40\n"
+        "Features\t: half thumb fastmult vfp edsp neon vfpv3 tls vfpv4 "
+        "idiva idivt vfpd32 lpae evtstrm\n"
+        "CPU implementer\t: 0x41\n"
+        "CPU architecture: 7\n"
+        "CPU variant\t: 0x0\n"
+        "CPU part\t: 0xd03\n"
+        "CPU revision\t: 4\n"
+        "\n"
+        "Hardware\t: BCM2835\n"
+        "Revision\t: a02082\n"
+        "Serial\t\t: 00000000deadbeef"
     ),
     "ifconfig": (
         "eth0      Link encap:Ethernet  HWaddr 00:11:22:33:44:55\n"
@@ -60,6 +72,31 @@ _COMMAND_RESPONSES = {
 
 # Commands that succeed silently (exit code 0, no output)
 _SILENT_OK_PREFIXES = ("cd", "chmod", "rm", "cp", "mv", "mkdir", "touch")
+
+# Valid 52-byte ARM 32-bit little-endian ELF header.
+# Bots read this via cat/hexdump/dd to determine CPU architecture before
+# downloading the matching payload.
+_ARM_ELF_HEADER: bytes = (
+    b"\x7fELF"              # e_ident: magic
+    b"\x01\x01\x01\x00"     # ELFCLASS32, ELFDATA2LSB, EV_CURRENT, SYSV ABI
+    + b"\x00" * 8            # EI_ABIVERSION + padding (completes 16-byte e_ident)
+    + struct.pack(
+        "<HHIIIIIHHHHHH",
+        2,            # e_type: ET_EXEC
+        0x28,         # e_machine: EM_ARM (40)
+        1,            # e_version: EV_CURRENT
+        0x00008354,   # e_entry
+        0x34,         # e_phoff (52)
+        0x0001A4F0,   # e_shoff
+        0x05000000,   # e_flags: EF_ARM_ABI_VER5
+        0x34,         # e_ehsize (52)
+        0x20,         # e_phentsize (32)
+        8,            # e_phnum
+        0x28,         # e_shentsize (40)
+        30,           # e_shnum
+        27,           # e_shstrndx
+    )
+)
 
 
 def _interpret_escapes(text: str) -> str:
@@ -213,7 +250,10 @@ class TelnetHoneypot:
                     break
 
                 response = self._execute_line(cmd)
-                client_sock.sendall((response + "\r\n").encode())
+                if isinstance(response, bytes):
+                    client_sock.sendall(response + b"\r\n")
+                else:
+                    client_sock.sendall((response + "\r\n").encode())
                 client_sock.sendall(prompt)
 
         except Exception:
@@ -231,9 +271,9 @@ class TelnetHoneypot:
     # Shell emulation
     # ------------------------------------------------------------------
 
-    def _execute_line(self, line: str) -> str:
+    def _execute_line(self, line: str) -> str | bytes:
         """Execute a compound command line, handling ``;``, ``&&``, ``||``."""
-        output_parts: list[str] = []
+        output_parts: list[str | bytes] = []
 
         # Split on ; for independent command groups
         for group in line.split(";"):
@@ -271,9 +311,15 @@ class TelnetHoneypot:
 
                 pending_op = None
 
-        return "\n".join(output_parts)
+        # If any part is bytes, convert everything to bytes
+        if any(isinstance(p, bytes) for p in output_parts):
+            return b"\n".join(
+                p if isinstance(p, bytes) else p.encode()
+                for p in output_parts
+            )
+        return "\n".join(output_parts)  # type: ignore[arg-type]
 
-    def _execute_single(self, cmd: str) -> tuple[str, bool]:
+    def _execute_single(self, cmd: str) -> tuple[str | bytes, bool]:
         """Execute one simple command.  Returns ``(output, success)``."""
         cmd = cmd.strip()
         if not cmd:
@@ -284,7 +330,7 @@ class TelnetHoneypot:
             return "", True
 
         # --- Strip busybox path prefixes ---
-        for prefix in ("/bin/busybox ", "/usr/bin/busybox "):
+        for prefix in ("/bin/busybox ", "/usr/bin/busybox ", "busybox "):
             if cmd.startswith(prefix):
                 cmd = cmd[len(prefix):]
                 break
@@ -292,6 +338,11 @@ class TelnetHoneypot:
         # --- Pipes: execute first command only (best-effort) ---
         if "|" in cmd:
             cmd = cmd.split("|", 1)[0].strip()
+
+        # --- Architecture probes (ELF header reads) ---
+        arch_result = self._handle_arch_probe(cmd)
+        if arch_result is not None:
+            return arch_result
 
         # --- Built-in: echo ---
         if cmd == "echo" or cmd.startswith("echo "):
@@ -310,7 +361,7 @@ class TelnetHoneypot:
 
         # --- Download commands: log the URL, return realistic failure ---
         if base_name in ("wget", "curl", "tftp"):
-            return self._handle_download(cmd, base_name), False
+            return self._handle_download(cmd, base_name)
 
         # --- Static response table ---
         response = _COMMAND_RESPONSES.get(cmd)
@@ -373,14 +424,77 @@ class TelnetHoneypot:
             text = text[1:-1]
         return _interpret_escapes(text)
 
+    def _handle_arch_probe(self, cmd: str) -> tuple[str | bytes, bool] | None:
+        """Handle ELF architecture-probe commands.
+
+        Mirai-family bots read the first 52 bytes of a system binary to
+        extract the ``e_machine`` field and determine CPU architecture.
+        Returns ``None`` if *cmd* is not an arch-probe command.
+        """
+        # cat /bin/ls  or  cat /bin/busybox  (pipe already stripped)
+        if cmd in ("cat /bin/ls", "cat /bin/busybox"):
+            return _ARM_ELF_HEADER + b"\x00" * 200, True
+
+        # hexdump with /bin/ls or /bin/busybox
+        if cmd.startswith("hexdump") and (
+            "/bin/ls" in cmd or "/bin/busybox" in cmd
+        ):
+            return self._format_hexdump(_ARM_ELF_HEADER), True
+
+        # dd with if=/bin/ls or if=/bin/busybox
+        if cmd.startswith("dd") and (
+            "if=/bin/ls" in cmd or "if=/bin/busybox" in cmd
+        ):
+            stats = b"1+0 records in\n1+0 records out\n52 bytes transferred"
+            return _ARM_ELF_HEADER + b"\n" + stats, True
+
+        return None
+
     @staticmethod
-    def _handle_download(cmd: str, tool: str) -> str:
-        """Return a realistic connection-refused error for wget/curl/tftp."""
+    def _format_hexdump(data: bytes) -> str:
+        """Format *data* as BusyBox-style ``hexdump`` output.
+
+        Default hexdump format: 7-digit hex offset followed by eight
+        little-endian 16-bit words per line.
+        """
+        lines: list[str] = []
+        for offset in range(0, len(data), 16):
+            chunk = data[offset:offset + 16]
+            words: list[str] = []
+            for i in range(0, len(chunk), 2):
+                if i + 1 < len(chunk):
+                    word = chunk[i] | (chunk[i + 1] << 8)
+                    words.append(f"{word:04x}")
+                else:
+                    words.append(f"  {chunk[i]:02x}")
+            lines.append(f"{offset:07x} " + " ".join(words))
+        lines.append(f"{len(data):07x}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _handle_download(cmd: str, tool: str) -> tuple[str, bool]:
+        """Return realistic output for wget/curl/tftp.
+
+        For ``wget`` without a URL (or with ``--help``), return BusyBox usage
+        text with ``success=True`` so the bot believes wget is available.
+        """
         if tool == "wget":
-            return "wget: can't connect to remote host: Connection refused"
+            parts = cmd.split()
+            has_url = any(p.startswith("http") for p in parts[1:])
+            if not has_url or "--help" in cmd:
+                usage = (
+                    "BusyBox v1.26.2 (2018-01-10 12:57:09 UTC) multi-call binary.\n"
+                    "\n"
+                    "Usage: wget [-c|--continue] [-s|--spider] [-q|--quiet] "
+                    "[-O|--output-document FILE]\n"
+                    "        [--header 'header: value'] [-Y|--proxy on/off] [-P DIR]\n"
+                    "        [-U|--user-agent AGENT] [-T SEC] URL..."
+                )
+                return usage, True
+            return "wget: can't connect to remote host: Connection refused", False
         elif tool == "curl":
-            return "curl: (7) Failed to connect: Connection refused"
-        return ""  # tftp fails silently
+            return "curl: (7) Failed to connect: Connection refused", False
+        return "", False  # tftp fails silently
 
     # ------------------------------------------------------------------
     # Helpers
