@@ -225,6 +225,14 @@ TLS_CERT=honeyos.example.com
 
 Caddy will automatically provision and renew a certificate.
 
+### Plain HTTP (no TLS)
+
+To disable TLS entirely, set in `.env`:
+
+```
+TLS_CERT=off
+```
+
 ### Development Mode
 
 `make dev` bypasses Caddy entirely and serves plain HTTP on ports 7777/7778 directly.
