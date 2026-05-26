@@ -119,6 +119,8 @@ services:
       - "21:2121"
       - "3306:3307"
       - "5432:5433"
+      - "53:5353/udp"
+      - "53:5353/tcp"
     volumes:
       - ./data:/data
     env_file:
@@ -193,7 +195,7 @@ wait_healthy() {
 # Port conflict check
 # -------------------------------------------------------------------
 check_ports() {
-    local ports=(22 23 80 443 21 3306 5432 7777 7778)
+    local ports=(22 23 80 443 21 3306 5432 53 7777 7778)
     local conflicts=()
     for port in "${ports[@]}"; do
         if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
@@ -241,7 +243,7 @@ main() {
     echo -e "  API:        ${GREEN}http://localhost:7778${NC}"
     echo -e "  Config:     ${CYAN}${HONEYOS_DIR}/.env${NC}"
     echo ""
-    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)${NC}"
+    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)${NC}"
     echo ""
     echo -e "  Manage:     ${CYAN}cd ${HONEYOS_DIR} && docker compose logs -f${NC}"
     echo -e "  Stop:       ${CYAN}cd ${HONEYOS_DIR} && docker compose down${NC}"
