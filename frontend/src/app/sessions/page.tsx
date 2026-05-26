@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Terminal,
   ChevronLeft,
@@ -48,9 +49,10 @@ export default function SessionsPage() {
     setSelectedSession,
   } = useStore();
 
+  const searchParams = useSearchParams();
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterProtocol, setFilterProtocol] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '');
 
   const loadSessions = useCallback(
     (page: number = 1) => {

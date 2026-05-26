@@ -130,18 +130,24 @@ export default function DashboardPage() {
           value={formatNumber(summary?.total_events)}
           iconColor="text-amber-500"
         />
-        <MetricsCard
-          icon={Radio}
-          label="Active Sessions"
-          value={formatNumber(summary?.active_sessions)}
-          iconColor="text-blue-500"
-        />
-        <MetricsCard
-          icon={Server}
-          label="Active Honeypots"
-          value={formatNumber(summary?.active_honeypots)}
-          iconColor="text-green-500"
-        />
+        <Link href="/sessions?status=active">
+          <MetricsCard
+            icon={Radio}
+            label="Active Sessions"
+            value={formatNumber(summary?.active_sessions)}
+            iconColor="text-blue-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
+        <Link href="/honeypots">
+          <MetricsCard
+            icon={Server}
+            label="Active Honeypots"
+            value={formatNumber(summary?.active_honeypots)}
+            iconColor="text-green-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
         <Link href="/threat-level">
           <MetricsCard
             icon={AlertTriangle}
