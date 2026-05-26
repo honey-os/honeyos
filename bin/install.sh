@@ -55,6 +55,8 @@ setup_dir() {
     info "Setting up HoneyOS in ${HONEYOS_DIR}"
     mkdir -p "$HONEYOS_DIR"
     mkdir -p "$HONEYOS_DIR/data"
+    mkdir -p "$HONEYOS_DIR/data/certs"
+    mkdir -p "$HONEYOS_DIR/caddy"
     cd "$HONEYOS_DIR"
 }
 
@@ -87,6 +89,16 @@ NETWORK_INTERFACE=eth0
 LOG_LEVEL=INFO
 RETENTION_DAYS=365
 
+# TLS Configuration
+# Leave defaults for auto self-signed certificate.
+# Set to file paths for custom certs:
+#   TLS_CERT=/data/certs/honeyos.pem
+#   TLS_KEY=/data/certs/honeyos.key
+# Set TLS_CERT to your domain for auto Let's Encrypt:
+#   TLS_CERT=honeyos.example.com
+TLS_CERT=internal
+TLS_KEY=
+
 # Alert Configuration (optional -- fill in to enable)
 # SMTP_HOST=smtp.gmail.com
 # SMTP_PORT=587
@@ -106,12 +118,30 @@ write_compose() {
 
     cat > docker-compose.yml <<EOF
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: honeyos-caddy
+    restart: unless-stopped
+    ports:
+      - "7777:7777"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/certs:/data/certs:ro
+      - caddy_data:/data/caddy
+    environment:
+      - TLS_CERT=\${TLS_CERT:-internal}
+      - TLS_KEY=\${TLS_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - honeyos-net
+
   backend:
     image: ${IMAGE_PREFIX}/honeyos-backend:${TAG}
     container_name: honeyos-backend
     restart: unless-stopped
     ports:
-      - "7778:7778"
       - "22:2222"
       - "80:8080"
       - "443:8443"
@@ -140,8 +170,6 @@ services:
     image: ${IMAGE_PREFIX}/honeyos-frontend:${TAG}
     container_name: honeyos-frontend
     restart: unless-stopped
-    ports:
-      - "7777:7777"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:7778
     depends_on:
@@ -159,6 +187,20 @@ services:
 networks:
   honeyos-net:
     driver: bridge
+
+volumes:
+  caddy_data:
+EOF
+}
+
+write_caddyfile() {
+    info "Writing Caddyfile"
+    cat > caddy/Caddyfile <<'EOF'
+:7777 {
+	tls {$TLS_CERT:internal} {$TLS_KEY:}
+	reverse_proxy /api/* backend:7778
+	reverse_proxy frontend:7777
+}
 EOF
 }
 
@@ -195,7 +237,7 @@ wait_healthy() {
 # Port conflict check
 # -------------------------------------------------------------------
 check_ports() {
-    local ports=(22 23 80 443 21 3306 5432 53 7777 7778)
+    local ports=(22 23 80 443 21 3306 5432 53 7777)
     local conflicts=()
     for port in "${ports[@]}"; do
         if ss -tulnp 2>/dev/null | grep -q ":${port} " || \
@@ -234,6 +276,7 @@ main() {
     setup_dir
     write_env
     write_compose
+    write_caddyfile
     check_ports
     pull_images
     start_stack
@@ -242,9 +285,11 @@ main() {
     echo ""
     ok "HoneyOS is running!"
     echo ""
-    echo -e "  Dashboard:  ${GREEN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):7777${NC}"
-    echo -e "  API:        ${GREEN}http://localhost:7778${NC}"
+    echo -e "  Dashboard:  ${GREEN}https://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):7777${NC}"
     echo -e "  Config:     ${CYAN}${HONEYOS_DIR}/.env${NC}"
+    echo ""
+    echo -e "  TLS:        Self-signed certificate (accept browser warning)"
+    echo -e "              Custom certs: place in ${CYAN}${HONEYOS_DIR}/data/certs/${NC} and update .env"
     echo ""
     echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)${NC}"
     echo ""
