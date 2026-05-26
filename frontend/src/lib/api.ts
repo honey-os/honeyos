@@ -102,11 +102,28 @@ export interface TimelinePoint {
   count: number;
 }
 
-export interface SystemConfigItem {
+export interface SettingItem {
   key: string;
+  label: string;
   value: string;
-  description: string | null;
-  config_type: string;
+  type: string;
+}
+
+export interface SettingsSection {
+  id: string;
+  label: string;
+  settings: SettingItem[];
+}
+
+export interface SettingsSystem {
+  version: string;
+  database: string;
+  uptime_seconds: number;
+}
+
+export interface SettingsResponse {
+  sections: SettingsSection[];
+  system: SettingsSystem;
 }
 
 export interface Attacker {
@@ -442,29 +459,11 @@ export async function getDashboardTimeline(hours: number = 24): Promise<Timeline
 }
 
 // ---------------------------------------------------------------------------
-// Config / Settings
+// Settings (read-only)
 // ---------------------------------------------------------------------------
 
-export async function getConfig(): Promise<SystemConfigItem[]> {
-  return fetchApi<SystemConfigItem[]>('/config');
-}
-
-export async function updateConfig(data: Record<string, string>): Promise<{ success: boolean }> {
-  return fetchApi<{ success: boolean }>('/config', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function exportConfig(): Promise<Record<string, unknown>> {
-  return fetchApi<Record<string, unknown>>('/config/export');
-}
-
-export async function importConfig(data: Record<string, unknown>): Promise<{ success: boolean }> {
-  return fetchApi<{ success: boolean }>('/config/import', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export async function getSettings(): Promise<SettingsResponse> {
+  return fetchApi<SettingsResponse>('/settings');
 }
 
 // ---------------------------------------------------------------------------

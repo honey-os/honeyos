@@ -23,7 +23,7 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from config import Config
-from models import Alert, Honeypot, SystemConfig, db
+from models import Honeypot, db
 from utils.helpers import generate_id
 
 # ---------------------------------------------------------------------------
@@ -217,29 +217,6 @@ def _seed_defaults() -> None:
     if new_honeypots:
         db.session.commit()
         logger.info("Seeded %d default honeypots", len(new_honeypots))
-
-    # Default system config entries
-    if SystemConfig.query.count() == 0:
-        settings = [
-            ("retention_days", str(Config.RETENTION_DAYS), "Days to retain events", "int"),
-            ("alert_cooldown_seconds", str(Config.ALERT_COOLDOWN_SECONDS),
-             "Minimum seconds between repeated alerts", "int"),
-            ("log_level", Config.LOG_LEVEL, "Application log level", "string"),
-            ("network_interface", Config.NETWORK_INTERFACE,
-             "Primary network interface for scanning", "string"),
-            ("geoip_enabled", str(Config.GEOIP_ENABLED).lower(),
-             "Enable GeoIP lookups for source IPs", "bool"),
-        ]
-        for key, value, description, config_type in settings:
-            sc = SystemConfig(
-                key=key,
-                value=value,
-                description=description,
-                config_type=config_type,
-            )
-            db.session.add(sc)
-        db.session.commit()
-        logger.info("Seeded %d default config entries", len(settings))
 
 
 # ---------------------------------------------------------------------------
