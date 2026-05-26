@@ -99,11 +99,11 @@ EOF
 
 write_compose() {
     if [ -f docker-compose.yml ]; then
-        warn "docker-compose.yml already exists, keeping existing configuration"
-        return
+        info "Updating docker-compose.yml"
+    else
+        info "Writing docker-compose.yml"
     fi
 
-    info "Writing docker-compose.yml"
     cat > docker-compose.yml <<EOF
 services:
   backend:
@@ -172,7 +172,7 @@ pull_images() {
 
 start_stack() {
     info "Starting HoneyOS..."
-    $COMPOSE up -d
+    $COMPOSE up -d --force-recreate
 }
 
 wait_healthy() {
@@ -198,8 +198,8 @@ check_ports() {
     local ports=(22 23 80 443 21 3306 5432 53 7777 7778)
     local conflicts=()
     for port in "${ports[@]}"; do
-        if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
-           netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+        if ss -tulnp 2>/dev/null | grep -q ":${port} " || \
+           netstat -tulnp 2>/dev/null | grep -q ":${port} " 2>/dev/null; then
             conflicts+=("$port")
         fi
     done
@@ -207,6 +207,9 @@ check_ports() {
         warn "Ports already in use: ${conflicts[*]}"
         warn "HoneyOS needs these ports for honeypot services."
         warn "Stop conflicting services or edit docker-compose.yml to change port mappings."
+        if [[ " ${conflicts[*]} " == *" 53 "* ]]; then
+            warn "Port 53: see README Troubleshooting section to disable systemd-resolved stub listener."
+        fi
         echo ""
         read -r -p "Continue anyway? [y/N] " answer
         if [[ ! "$answer" =~ ^[Yy]$ ]]; then

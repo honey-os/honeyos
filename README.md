@@ -12,7 +12,7 @@ An open-source, self-hosted alternative to commercial honeypot appliances. No cl
 
 When an attacker compromises a device on your network, they scan for other targets — file servers, databases, admin panels. HoneyOS creates convincing fake versions of these services that no legitimate user would ever touch. Any interaction is an immediate indicator of compromise.
 
-**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL (with SMB and RDP planned)
+**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL, DNS (with SMB and RDP planned)
 
 **Key Capabilities**:
 - Catches ransomware, lateral movement, and insider threats
@@ -112,6 +112,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `FTP_HONEYPOT_PORT` | `2121` | Internal FTP honeypot port |
 | `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
 | `POSTGRESQL_HONEYPOT_PORT` | `5433` | Internal PostgreSQL honeypot port |
+| `DNS_HONEYPOT_PORT` | `5353` | Internal DNS honeypot port |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
@@ -140,6 +141,7 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 | FTP | 21 | 2121 | ProFTPD NAS |
 | MySQL | 3306 | 3307 | MySQL 8.0 database |
 | PostgreSQL | 5432 | 5433 | PostgreSQL 14.5 database |
+| DNS | 53 | 5353 | Misconfigured DNS server (UDP + TCP) |
 
 In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
 
@@ -195,6 +197,43 @@ npm run dev
 - **Schools**: Catch unauthorized network activity
 - **MSPs**: Add honeypot monitoring to client networks
 - **Security research**: Study attacker behavior and techniques
+
+## Troubleshooting
+
+### Port 53 conflict (DNS honeypot)
+
+On Ubuntu/Debian, `systemd-resolved` listens on port 53 by default. Docker cannot bind the DNS honeypot to port 53 until this is disabled.
+
+To free port 53:
+
+```bash
+# Disable the stub listener
+sudo mkdir -p /etc/systemd/resolved.conf.d
+sudo tee /etc/systemd/resolved.conf.d/no-stub.conf > /dev/null <<EOF
+[Resolve]
+DNSStubListener=no
+EOF
+
+# Point resolv.conf to the full resolver (DNS still works)
+sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+# Restart resolved
+sudo systemctl restart systemd-resolved
+```
+
+Verify port 53 is free:
+
+```bash
+ss -tlnp | grep :53
+```
+
+Then restart HoneyOS (`docker compose up -d`). To undo this later, remove the conf file and restore the symlink:
+
+```bash
+sudo rm /etc/systemd/resolved.conf.d/no-stub.conf
+sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+sudo systemctl restart systemd-resolved
+```
 
 ## License
 
