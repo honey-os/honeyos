@@ -117,16 +117,12 @@ class SMBHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
-        session_id = None
+        # session_id is created lazily on first auth/share event so that
+        # bare negotiate-only connections don't produce 0-command sessions.
+        ctx: dict = {"session_id": None}
         smb_version = "unknown"
         try:
             client_sock.settimeout(30)
-
-            # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "smb")
-                    session_id = sess.id
 
             while not self._stop_event.is_set():
                 # Read NetBIOS session header (4 bytes: type + 3 bytes length)
@@ -145,10 +141,10 @@ class SMBHoneypot:
                 # Detect SMB version from magic
                 if payload[:4] == _SMB1_MAGIC:
                     smb_version = "SMB1"
-                    response = self._handle_smb1(payload, addr, session_id, smb_version)
+                    response = self._handle_smb1(payload, addr, ctx, smb_version)
                 elif payload[:4] == _SMB2_MAGIC:
                     smb_version = "SMB2"
-                    response = self._handle_smb2(payload, addr, session_id, smb_version)
+                    response = self._handle_smb2(payload, addr, ctx, smb_version)
                 else:
                     break
 
@@ -165,20 +161,28 @@ class SMBHoneypot:
         except Exception:
             logger.exception("SMB handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
+            if ctx["session_id"] and self.session_recorder and self.app:
                 with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+                    self.session_recorder.end_session(ctx["session_id"])
             try:
                 client_sock.close()
             except OSError:
                 pass
+
+    def _ensure_session(self, addr: tuple, ctx: dict) -> str | None:
+        """Lazily create a session on first meaningful interaction."""
+        if ctx["session_id"] is None and self.session_recorder and self.app:
+            with self.app.app_context():
+                sess = self.session_recorder.start_session(addr[0], "smb")
+                ctx["session_id"] = sess.id
+        return ctx["session_id"]
 
     # ------------------------------------------------------------------
     # SMB1 handling
     # ------------------------------------------------------------------
 
     def _handle_smb1(self, payload: bytes, addr: tuple,
-                     session_id: str | None, smb_version: str) -> bytes | None:
+                     ctx: dict, smb_version: str) -> bytes | None:
         """Handle an SMB1 message and return a response."""
         if len(payload) < 33:
             return None
@@ -186,14 +190,14 @@ class SMBHoneypot:
         command = payload[4]
 
         if command == _SMB1_COM_NEGOTIATE:
-            self._emit_connection_event(addr, session_id, smb_version)
+            self._emit_connection_event(addr, ctx, smb_version)
             return self._smb1_negotiate_response(payload)
 
         elif command == _SMB1_COM_SESSION_SETUP:
-            return self._smb1_session_setup(payload, addr, session_id)
+            return self._smb1_session_setup(payload, addr, ctx)
 
         elif command == _SMB1_COM_TREE_CONNECT:
-            return self._smb1_tree_connect(payload, addr, session_id)
+            return self._smb1_tree_connect(payload, addr, ctx)
 
         return None
 
@@ -242,27 +246,24 @@ class SMBHoneypot:
         return bytes(header) + bytes(resp)
 
     def _smb1_session_setup(self, payload: bytes, addr: tuple,
-                            session_id: str | None) -> bytes:
+                            ctx: dict) -> bytes:
         """Handle SMB1 session setup (NTLMSSP negotiate/auth)."""
-        # Extract security blob from the request
         ntlmssp_type = self._find_ntlmssp_type(payload)
 
         if ntlmssp_type == _NTLMSSP_NEGOTIATE:
-            # Send challenge
             challenge_blob = self._build_ntlmssp_challenge()
             return self._smb1_session_setup_response(
                 payload, _STATUS_MORE_PROCESSING, challenge_blob
             )
 
         elif ntlmssp_type == _NTLMSSP_AUTH:
-            # Extract credentials and reject
             creds = self._parse_ntlmssp_auth(payload)
+            session_id = self._ensure_session(addr, ctx)
             self._emit_auth_event(addr, session_id, creds)
             return self._smb1_session_setup_response(
                 payload, _STATUS_LOGON_FAILURE, b""
             )
 
-        # Unknown NTLMSSP, send challenge anyway
         challenge_blob = self._build_ntlmssp_challenge()
         return self._smb1_session_setup_response(
             payload, _STATUS_MORE_PROCESSING, challenge_blob
@@ -297,9 +298,10 @@ class SMBHoneypot:
         return bytes(header) + bytes(resp)
 
     def _smb1_tree_connect(self, payload: bytes, addr: tuple,
-                           session_id: str | None) -> bytes:
+                           ctx: dict) -> bytes:
         """Handle SMB1 tree connect — log and reject."""
         share_name = self._extract_tree_path(payload)
+        session_id = self._ensure_session(addr, ctx)
         self._emit_share_event(addr, session_id, share_name)
 
         header = bytearray(32)
@@ -322,7 +324,7 @@ class SMBHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_smb2(self, payload: bytes, addr: tuple,
-                     session_id: str | None, smb_version: str) -> bytes | None:
+                     ctx: dict, smb_version: str) -> bytes | None:
         """Handle an SMB2 message and return a response."""
         if len(payload) < 64:
             return None
@@ -330,14 +332,14 @@ class SMBHoneypot:
         command = struct.unpack_from("<H", payload, 12)[0]
 
         if command == _SMB2_COM_NEGOTIATE:
-            self._emit_connection_event(addr, session_id, smb_version)
+            self._emit_connection_event(addr, ctx, smb_version)
             return self._smb2_negotiate_response(payload)
 
         elif command == _SMB2_COM_SESSION_SETUP:
-            return self._smb2_session_setup(payload, addr, session_id)
+            return self._smb2_session_setup(payload, addr, ctx)
 
         elif command == _SMB2_COM_TREE_CONNECT:
-            return self._smb2_tree_connect(payload, addr, session_id)
+            return self._smb2_tree_connect(payload, addr, ctx)
 
         return None
 
@@ -379,7 +381,7 @@ class SMBHoneypot:
         return bytes(header) + bytes(body) + security_blob
 
     def _smb2_session_setup(self, payload: bytes, addr: tuple,
-                            session_id: str | None) -> bytes:
+                            ctx: dict) -> bytes:
         """Handle SMB2 session setup (NTLMSSP flow)."""
         ntlmssp_type = self._find_ntlmssp_type(payload)
 
@@ -391,6 +393,7 @@ class SMBHoneypot:
 
         elif ntlmssp_type == _NTLMSSP_AUTH:
             creds = self._parse_ntlmssp_auth(payload)
+            session_id = self._ensure_session(addr, ctx)
             self._emit_auth_event(addr, session_id, creds)
             return self._smb2_session_setup_response(
                 payload, _STATUS_LOGON_FAILURE, b""
@@ -425,9 +428,10 @@ class SMBHoneypot:
         return bytes(header) + bytes(body) + security_blob
 
     def _smb2_tree_connect(self, payload: bytes, addr: tuple,
-                           session_id: str | None) -> bytes:
+                           ctx: dict) -> bytes:
         """Handle SMB2 tree connect — log and reject."""
         share_name = self._extract_tree_path(payload)
+        session_id = self._ensure_session(addr, ctx)
         self._emit_share_event(addr, session_id, share_name)
 
         header = bytearray(64)
@@ -583,7 +587,7 @@ class SMBHoneypot:
     # Event emission
     # ------------------------------------------------------------------
 
-    def _emit_connection_event(self, addr: tuple, session_id: str | None,
+    def _emit_connection_event(self, addr: tuple, ctx: dict,
                                smb_version: str) -> None:
         if self.event_processor and self.app:
             with self.app.app_context():
@@ -594,7 +598,7 @@ class SMBHoneypot:
                     "source_port": addr[1],
                     "destination_port": self.port,
                     "severity": "low",
-                    "session_id": session_id,
+                    "session_id": ctx["session_id"],
                     "details": {
                         "smb_version": smb_version,
                         "server_name": self.server_name,

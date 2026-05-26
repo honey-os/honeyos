@@ -38,10 +38,20 @@ class SessionRecorder:
         return session
 
     def end_session(self, session_id: str) -> Session | None:
-        """Mark a session as completed and calculate its duration."""
+        """Mark a session as completed and calculate its duration.
+
+        If the session recorded zero commands it is deleted instead —
+        bare connections without meaningful interaction are noise.
+        """
         session = Session.query.get(session_id)
         if session is None:
             logger.warning("end_session called for unknown id %s", session_id)
+            return None
+
+        if (session.commands_count or 0) == 0:
+            db.session.delete(session)
+            db.session.commit()
+            logger.debug("Session %s discarded (0 commands)", session_id)
             return None
 
         now = datetime.now(timezone.utc)
