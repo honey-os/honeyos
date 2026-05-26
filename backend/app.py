@@ -117,8 +117,10 @@ def create_app(config_class=Config) -> Flask:
     from services.event_processor import EventProcessor
     from services.session_recorder import SessionRecorder
     from services.honeypot_manager import HoneypotManager
+    from services.alert_service import AlertService
 
-    event_processor = EventProcessor()
+    alert_service = AlertService(config=config_class)
+    event_processor = EventProcessor(alert_service=alert_service)
     session_recorder = SessionRecorder()
     manager = HoneypotManager(
         app=application,
