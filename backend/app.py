@@ -193,6 +193,13 @@ def _seed_defaults() -> None:
                 "description": "Fake PostgreSQL server capturing authentication and queries",
                 "config": {"version_string": "14.5"},
             },
+            {
+                "name": "DNS Honeypot",
+                "protocol": "dns",
+                "port": Config.DNS_HONEYPOT_PORT,
+                "description": "Fake DNS server logging reconnaissance and zone transfer attempts",
+                "config": {"domain": "corp.local"},
+            },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
     for hp_data in new_honeypots:

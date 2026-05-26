@@ -16,6 +16,8 @@ services:
       - "21:2121"     # FTP honeypot
       - "3306:3307"   # MySQL honeypot
       - "5432:5433"   # PostgreSQL honeypot
+      - "53:5353/udp"  # DNS honeypot (UDP)
+      - "53:5353/tcp"  # DNS honeypot (TCP)
     volumes:
       - ./data:/data
     env_file:

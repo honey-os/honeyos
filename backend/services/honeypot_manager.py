@@ -27,6 +27,7 @@ class HoneypotManager:
         "ftp": "services.protocols.ftp_honeypot.FTPHoneypot",
         "mysql": "services.protocols.mysql_honeypot.MySQLHoneypot",
         "postgresql": "services.protocols.postgresql_honeypot.PostgreSQLHoneypot",
+        "dns": "services.protocols.dns_honeypot.DNSHoneypot",
     }
 
     def __init__(self, app=None, event_processor=None, session_recorder=None):
@@ -140,6 +141,7 @@ class HoneypotManager:
             "ftp": ("services.protocols.ftp_honeypot", "FTPHoneypot"),
             "mysql": ("services.protocols.mysql_honeypot", "MySQLHoneypot"),
             "postgresql": ("services.protocols.postgresql_honeypot", "PostgreSQLHoneypot"),
+            "dns": ("services.protocols.dns_honeypot", "DNSHoneypot"),
         }
         entry = mapping.get(protocol)
         if not entry:

@@ -42,6 +42,7 @@ const protocolColors: Record<string, string> = {
   mysql: 'text-orange-400 bg-orange-500/10',
   smb: 'text-rose-400 bg-rose-500/10',
   rdp: 'text-indigo-400 bg-indigo-500/10',
+  dns: 'text-teal-400 bg-teal-500/10',
 };
 
 export default function HoneypotsPage() {
@@ -128,6 +129,7 @@ export default function HoneypotsPage() {
     mysql: 3307,
     smb: 4450,
     rdp: 3390,
+    dns: 5353,
   };
 
   return (

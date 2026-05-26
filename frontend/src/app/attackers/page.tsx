@@ -22,7 +22,7 @@ import { getAttackerEvents } from '@/lib/api';
 import type { Event, Attacker } from '@/lib/api';
 import clsx from 'clsx';
 
-const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql'];
+const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns'];
 
 export default function AttackersPage() {
   const {

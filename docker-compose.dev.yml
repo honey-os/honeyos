@@ -15,6 +15,8 @@ services:
       - "2121:2121"   # FTP honeypot
       - "3307:3307"   # MySQL honeypot
       - "5433:5433"   # PostgreSQL honeypot
+      - "5353:5353/udp"  # DNS honeypot (UDP)
+      - "5353:5353/tcp"  # DNS honeypot (TCP)
     volumes:
       - ./backend:/app
       - ./data:/data
