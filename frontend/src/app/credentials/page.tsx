@@ -10,6 +10,7 @@ import {
 import { useStore } from '@/stores/useStore';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatNumber } from '@/utils/formatters';
+import { useUrlFilters } from '@/utils/useUrlFilters';
 import clsx from 'clsx';
 
 const PROTOCOLS = ['ssh', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb'];
@@ -22,7 +23,8 @@ export default function CredentialsPage() {
     fetchCredentials,
   } = useStore();
 
-  const [protocol, setProtocol] = useState('');
+  const { getParam, setParam, clearParams } = useUrlFilters();
+  const protocol = getParam('protocol');
   const [showFilters, setShowFilters] = useState(true);
 
   const loadCredentials = useCallback(() => {
@@ -34,7 +36,7 @@ export default function CredentialsPage() {
   }, [loadCredentials]);
 
   const clearFilters = () => {
-    setProtocol('');
+    clearParams();
   };
 
   const hasActiveFilters = !!protocol;
@@ -133,7 +135,7 @@ export default function CredentialsPage() {
               <label className="label-text">Protocol</label>
               <select
                 value={protocol}
-                onChange={(e) => setProtocol(e.target.value)}
+                onChange={(e) => setParam('protocol', e.target.value)}
                 className="select-field w-full"
               >
                 <option value="">All protocols</option>
