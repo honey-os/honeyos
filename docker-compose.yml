@@ -38,6 +38,7 @@ services:
       - "53:5353/udp"  # DNS honeypot (UDP)
       - "53:5353/tcp"  # DNS honeypot (TCP)
       - "445:4450"    # SMB honeypot
+      - "4400-4404:4400-4404"  # FTP passive data ports
     volumes:
       - ./data:/data
     env_file:

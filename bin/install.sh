@@ -150,6 +150,7 @@ services:
       - "53:5353/udp"
       - "53:5353/tcp"
       - "445:4450"
+      - "4400-4404:4400-4404"
     volumes:
       - ./data:/data
     env_file:
