@@ -3,10 +3,11 @@ services:
     image: caddy:2-alpine
     container_name: honeyos-caddy
     restart: unless-stopped
+    command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs:ro
       - caddy_data:/data/caddy
     environment:

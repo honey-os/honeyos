@@ -89,13 +89,10 @@ NETWORK_INTERFACE=eth0
 LOG_LEVEL=INFO
 RETENTION_DAYS=365
 
-# TLS Configuration
-# Leave defaults for auto self-signed certificate.
-# Set to file paths for custom certs:
-#   TLS_CERT=/data/certs/honeyos.pem
-#   TLS_KEY=/data/certs/honeyos.key
-# Set TLS_CERT to your domain for auto Let's Encrypt:
-#   TLS_CERT=honeyos.example.com
+# TLS Configuration (default is self-signed HTTPS)
+# For plain HTTP:    TLS_CERT=off
+# For custom certs:  TLS_CERT=/data/certs/honeyos.pem  TLS_KEY=/data/certs/honeyos.key
+# For Let's Encrypt: TLS_CERT=honeyos.example.com
 TLS_CERT=internal
 TLS_KEY=
 
@@ -122,10 +119,11 @@ services:
     image: caddy:2-alpine
     container_name: honeyos-caddy
     restart: unless-stopped
+    command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs:ro
       - caddy_data:/data/caddy
     environment:
@@ -193,15 +191,46 @@ volumes:
 EOF
 }
 
-write_caddyfile() {
-    info "Writing Caddyfile"
-    cat > caddy/Caddyfile <<'EOF'
+write_entrypoint() {
+    info "Writing Caddy entrypoint"
+    cat > caddy/entrypoint.sh <<'SCRIPT'
+#!/bin/sh
+set -e
+
+TLS_CERT="${TLS_CERT:-off}"
+TLS_KEY="${TLS_KEY:-}"
+
+if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
+    cat > /tmp/Caddyfile <<'EOF'
 :7777 {
-	tls {$TLS_CERT:internal} {$TLS_KEY:}
+	reverse_proxy /health backend:7778
 	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
 }
 EOF
+elif [ "$TLS_CERT" = "internal" ]; then
+    cat > /tmp/Caddyfile <<'EOF'
+:7777 {
+	tls internal
+	reverse_proxy /health backend:7778
+	reverse_proxy /api/* backend:7778
+	reverse_proxy frontend:7777
+}
+EOF
+else
+    cat > /tmp/Caddyfile <<EOF
+:7777 {
+	tls ${TLS_CERT} ${TLS_KEY}
+	reverse_proxy /health backend:7778
+	reverse_proxy /api/* backend:7778
+	reverse_proxy frontend:7777
+}
+EOF
+fi
+
+exec caddy run --config /tmp/Caddyfile --adapter caddyfile
+SCRIPT
+    chmod +x caddy/entrypoint.sh
 }
 
 # -------------------------------------------------------------------
@@ -276,7 +305,7 @@ main() {
     setup_dir
     write_env
     write_compose
-    write_caddyfile
+    write_entrypoint
     check_ports
     pull_images
     start_stack

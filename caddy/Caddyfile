@@ -1,5 +1,0 @@
-:7777 {
-	tls {$TLS_CERT:internal} {$TLS_KEY:}
-	reverse_proxy /api/* backend:7778
-	reverse_proxy frontend:7777
-}
