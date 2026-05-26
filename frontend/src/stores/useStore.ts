@@ -250,7 +250,7 @@ export const useStore = create<HoneyStore>((set) => ({
     set({ dashboardLoading: true, dashboardError: null });
     try {
       const [summary, timeline] = await Promise.all([
-        getDashboardSummary(),
+        getDashboardSummary(timelineHours),
         getDashboardTimeline(timelineHours),
       ]);
       set({

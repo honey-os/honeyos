@@ -450,8 +450,8 @@ export async function getNetworkScanChanges(id: string): Promise<{
 // Dashboard
 // ---------------------------------------------------------------------------
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
-  return fetchApi<DashboardSummary>('/dashboard/summary');
+export async function getDashboardSummary(hours: number = 24): Promise<DashboardSummary> {
+  return fetchApi<DashboardSummary>(`/dashboard/summary?hours=${hours}`);
 }
 
 export async function getDashboardTimeline(hours: number = 24): Promise<TimelinePoint[]> {
