@@ -49,6 +49,7 @@ QTYPE_NAMES: dict[int, str] = {
 }
 
 QCLASS_IN = 1
+QCLASS_CH = 3  # CHAOS class (used for version.bind queries)
 DEFAULT_TTL = 3600
 
 # ---------------------------------------------------------------------------
@@ -199,6 +200,7 @@ class DNSHoneypot:
 
         # --- Build fake zone data ---
         self.domain = self.config.get("domain", "corp.local")
+        self.version_string = self.config.get("version", "dnsmasq-2.90")
         self._zone = self._build_zone()
 
     # ------------------------------------------------------------------
@@ -293,9 +295,37 @@ class DNSHoneypot:
         txn_id = query["txn_id"]
         qname = query["qname"].lower()
         qtype = query["qtype"]
-        question = query["raw_question"]
+        qclass = query["qclass"]
 
         records: list[bytes] = []
+
+        # CHAOS class queries (version.bind, hostname.bind, etc.)
+        if qclass == QCLASS_CH and qtype == QTYPE_TXT:
+            txt = None
+            if qname in ("version.bind", "version.server"):
+                txt = self.version_string
+            elif qname in ("hostname.bind", "id.server"):
+                txt = self.config.get("hostname", "ns1")
+            if txt is not None:
+                rdata = _build_txt_rdata(txt)
+                encoded_name = _encode_name(query["qname"])
+                rr = (
+                    encoded_name
+                    + struct.pack("!HHI", QTYPE_TXT, QCLASS_CH, 0)
+                    + struct.pack("!H", len(rdata))
+                    + rdata
+                )
+                records.append(rr)
+
+                flags = 0x8400
+                if query["flags"] & 0x0100:
+                    flags |= 0x0100
+                header = struct.pack("!HHHHHH", txn_id, flags, 1, 1, 0, 0)
+                response = header + _encode_name(query["qname"]) + struct.pack(
+                    "!HH", qtype, QCLASS_CH
+                )
+                response += records[0]
+                return response, 1
 
         # Gather matching records
         zone_entry = self._zone.get(qname, [])

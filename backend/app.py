@@ -198,7 +198,7 @@ def _seed_defaults() -> None:
                 "protocol": "dns",
                 "port": Config.DNS_HONEYPOT_PORT,
                 "description": "Fake DNS server logging reconnaissance and zone transfer attempts",
-                "config": {"domain": "corp.local"},
+                "config": {"domain": "corp.local", "version": "dnsmasq-2.90"},
             },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
