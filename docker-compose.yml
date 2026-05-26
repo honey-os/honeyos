@@ -8,7 +8,7 @@ services:
       - "7777:7777"
     volumes:
       - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
-      - ./data/certs:/data/certs:ro
+      - ./data/certs:/data/certs
       - caddy_data:/data/caddy
     environment:
       - TLS_CERT=${TLS_CERT:-internal}
