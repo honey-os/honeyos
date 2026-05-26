@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
 import { Activity } from 'lucide-react';
 import SeverityBadge from '@/components/ui/SeverityBadge';
@@ -12,14 +13,12 @@ interface EventFeedProps {
   events: Event[];
   maxItems?: number;
   className?: string;
-  onEventClick?: (event: Event) => void;
 }
 
 export default function EventFeed({
   events,
   maxItems = 10,
   className,
-  onEventClick,
 }: EventFeedProps) {
   const displayEvents = events.slice(0, maxItems);
 
@@ -40,15 +39,10 @@ export default function EventFeed({
           </div>
         ) : (
           displayEvents.map((event) => (
-            <div
+            <Link
               key={event.id}
-              className={clsx(
-                'px-5 py-3 flex items-center gap-4 transition-colors',
-                onEventClick
-                  ? 'cursor-pointer hover:bg-[#1c1c28]'
-                  : 'hover:bg-[#16161f]/50'
-              )}
-              onClick={() => onEventClick?.(event)}
+              href={`/events?event=${event.id}`}
+              className="px-5 py-3 flex items-center gap-4 transition-colors cursor-pointer hover:bg-[#1c1c28] block"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -67,7 +61,7 @@ export default function EventFeed({
               </div>
 
               <SeverityBadge severity={event.severity} />
-            </div>
+            </Link>
           ))
         )}
       </div>

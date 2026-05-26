@@ -27,14 +27,19 @@ def list_events():
         start_date (ISO-8601)
         end_date   (ISO-8601)
     """
-    limit = min(int(request.args.get("limit", 50)), 500)
-    offset = int(request.args.get("offset", 0))
+    per_page = min(int(request.args.get("per_page", request.args.get("limit", 50))), 500)
+    page = max(int(request.args.get("page", 1)), 1)
+    offset = (page - 1) * per_page
 
     query = Event.query
 
     event_type = request.args.get("event_type")
     if event_type:
         query = query.filter(Event.event_type == event_type)
+
+    source_ip = request.args.get("source_ip")
+    if source_ip:
+        query = query.filter(Event.source_ip == source_ip)
 
     protocol = request.args.get("protocol")
     if protocol:
@@ -61,19 +66,21 @@ def list_events():
             pass
 
     total = query.count()
+    pages = max((total + per_page - 1) // per_page, 1)
     events = (
         query
         .order_by(Event.timestamp.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(per_page)
         .all()
     )
 
     return jsonify({
-        "events": [e.to_dict() for e in events],
+        "items": [e.to_dict() for e in events],
         "total": total,
-        "limit": limit,
-        "offset": offset,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
     })
 
 

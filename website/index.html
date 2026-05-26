@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HoneyOS - Open-Source Network Deception & Intrusion Detection</title>
+  <meta name="description" content="Deploy honeypot services across your network to detect lateral movement, ransomware, and insider threats. Self-hosted on Raspberry Pi or Docker. SSH, HTTP, HTTPS, Telnet, FTP, MySQL, and PostgreSQL deception with real-time alerts.">
+  <meta name="keywords" content="honeypot, intrusion detection, network security, deception technology, lateral movement detection, open source security, raspberry pi honeypot, SSH honeypot, network monitoring, threat detection, self-hosted, HoneyOS">
+  <meta name="author" content="HoneyOS">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="msapplication-TileColor" content="#0a0a0f">
+  <link rel="canonical" href="https://honeyos.io">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://honeyos.io">
+  <meta property="og:site_name" content="HoneyOS">
+  <meta property="og:title" content="HoneyOS - Catch Intruders. Zero False Positives.">
+  <meta property="og:description" content="Open-source network deception platform. Deploy silent decoy services to detect lateral movement, ransomware, and insider threats — before real damage is done.">
+  <meta property="og:image" content="https://honeyos.io/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HoneyOS - Open-source network deception platform">
+  <meta property="og:image:type" content="image/png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="HoneyOS - Catch Intruders. Zero False Positives.">
+  <meta name="twitter:description" content="Open-source network deception platform. Deploy honeypots to detect lateral movement and insider threats. Self-hosted on Raspberry Pi or Docker.">
+  <meta name="twitter:image" content="https://honeyos.io/images/og-image.png">
+
+  <!-- Robots -->
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    * { scrollbar-width: thin; scrollbar-color: #2a2a3a transparent; }
+    *::-webkit-scrollbar { width: 6px; height: 6px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background-color: #2a2a3a; border-radius: 3px; }
+    ::selection { background-color: rgba(245, 158, 11, 0.3); color: #fef3c7; }
+    .text-gradient {
+      background: linear-gradient(to right, #fbbf24, #d97706);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .bg-grid {
+      background-image:
+        linear-gradient(rgba(245, 158, 11, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .glow-amber {
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15), 0 0 30px rgba(245, 158, 11, 0.05);
+    }
+    .card {
+      background-color: #16161f;
+      border: 1px solid #2a2a3a;
+      border-radius: 0.5rem;
+    }
+    .card-hover {
+      background-color: #16161f;
+      border: 1px solid #2a2a3a;
+      border-radius: 0.5rem;
+      transition: all 0.2s;
+    }
+    .card-hover:hover {
+      border-color: rgba(245, 158, 11, 0.3);
+      background-color: #1c1c28;
+    }
+    .terminal {
+      background-color: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 1rem;
+      overflow: auto;
+    }
+    .btn-primary {
+      background-color: #f59e0b;
+      color: #0a0a0f;
+      font-weight: 500;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-primary:hover {
+      background-color: #fbbf24;
+      box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.2);
+    }
+    .btn-secondary {
+      background-color: #1c1c28;
+      color: #e2e8f0;
+      border: 1px solid #2a2a3a;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-secondary:hover {
+      background-color: #24243a;
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+  </style>
+</head>
+<body class="bg-[#0a0a0f] text-gray-200 font-sans antialiased">
+  <div class="min-h-screen bg-grid relative">
+    <!-- Gradient overlay -->
+    <div class="absolute inset-0 bg-gradient-to-b from-amber-500/5 via-transparent to-transparent pointer-events-none"></div>
+
+    <!-- Nav -->
+    <nav class="relative z-50 border-b border-[#2a2a3a]/50 backdrop-blur-sm bg-[#0a0a0f]/80 sticky top-0">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <img src="images/logo-icon.png" alt="HoneyOS" width="36" height="36" class="shrink-0">
+          <img src="images/logo-text-white.png" alt="HoneyOS" width="120" height="28" class="hidden sm:block">
+        </div>
+        <div class="flex items-center gap-4">
+          <a href="https://github.com/honey-os/honeyos" target="_blank" rel="noopener noreferrer" class="text-sm text-gray-400 hover:text-gray-200 transition-colors hidden sm:block">
+            GitHub
+          </a>
+          <a href="#deploy" class="btn-primary text-sm px-4 py-2">
+            Get Started
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="relative z-10 max-w-6xl mx-auto px-6 pt-8 pb-20 text-center">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm font-medium mb-8">
+        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+        Open-source network deception platform
+      </div>
+
+      <div class="flex justify-center mb-8">
+        <img src="images/logo-icon.png" alt="HoneyOS Shield" width="96" height="96" style="filter: drop-shadow(0 0 30px rgba(245,158,11,0.3));">
+      </div>
+
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+        <span class="text-gray-100">Catch intruders.</span>
+        <br>
+        <span class="text-gradient">Zero false positives.</span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-gray-400 font-light mb-4 max-w-2xl mx-auto leading-relaxed">
+        Deploy silent decoy services across your network to detect lateral movement,
+        ransomware, and insider threats &mdash; before real damage is done.
+      </p>
+
+      <p class="text-sm text-gray-500 max-w-xl mx-auto mb-12">
+        No cloud. No accounts. No cost. Runs on a Raspberry Pi or any Docker host.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#deploy" class="btn-primary text-base px-8 py-3 w-full sm:w-auto justify-center">
+          Get Started
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/honey-os/honeyos" target="_blank" rel="noopener noreferrer" class="btn-secondary text-base px-8 py-3 w-full sm:w-auto justify-center">
+          View on GitHub
+        </a>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="relative z-10 max-w-6xl mx-auto px-6 pb-24">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl font-bold text-gray-100 mb-3">Enterprise-grade deception for everyone</h2>
+        <p class="text-gray-400 max-w-lg mx-auto">
+          The same detection techniques used by Fortune 500 security teams, packaged for home labs and small networks.
+        </p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Multi-Protocol Deception -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4 17 6-6-6-6m8 14h8"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">Multi-Protocol Deception</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Deploy honeypots across SSH, HTTP, Telnet, FTP, MySQL, PostgreSQL, SMB, and RDP. Each protocol emulates realistic services to lure and study attackers.</p>
+        </div>
+        <!-- Session Recording -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">Session Recording</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Capture every keystroke, command, and file transfer. Replay attacker sessions with full fidelity to understand TTPs and attack patterns.</p>
+        </div>
+        <!-- Instant Alerts -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">Instant Alerts</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Get notified immediately via email, Slack, webhooks, or SMS when an intrusion is detected. Configurable thresholds and cooldown periods.</p>
+        </div>
+        <!-- WAN Monitoring -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">WAN Monitoring</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Continuously scan your network perimeter to detect unauthorized services, open ports, and configuration drift before attackers do.</p>
+        </div>
+        <!-- Zero False Positives -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">Zero False Positives</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Every interaction with a honeypot is by definition unauthorized. No tuning needed &mdash; if someone touches it, they should not be there.</p>
+        </div>
+        <!-- Fully Local -->
+        <div class="card-hover p-6 group">
+          <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/15 transition-colors">
+            <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-100 mb-2">Fully Local</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Run entirely on your own hardware. No cloud dependencies, no data leaving your network. Perfect for air-gapped environments and Raspberry Pi deployments.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="relative z-10 border-y border-[#2a2a3a]/50 bg-[#111118]/50 py-24">
+      <div class="max-w-6xl mx-auto px-6">
+        <div class="text-center mb-16">
+          <h2 class="text-3xl font-bold text-gray-100 mb-3">How it works</h2>
+          <p class="text-gray-400 max-w-lg mx-auto">From deployment to detection in four steps. No security expertise required.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <!-- Deploy -->
+          <div class="relative">
+            <svg class="hidden lg:block absolute -right-5 top-8 w-5 h-5 text-[#2a2a3a]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+            <div class="text-xs font-mono text-amber-500/60 mb-3">01</div>
+            <div class="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+              <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-100 mb-2">Deploy</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Flash a Raspberry Pi image or run a single Docker command. HoneyOS is up and running in under five minutes with zero configuration.</p>
+          </div>
+          <!-- Deceive -->
+          <div class="relative">
+            <svg class="hidden lg:block absolute -right-5 top-8 w-5 h-5 text-[#2a2a3a]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+            <div class="text-xs font-mono text-amber-500/60 mb-3">02</div>
+            <div class="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+              <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-100 mb-2">Deceive</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Fake SSH servers, HTTP admin panels, databases, and file shares appear on your network. They look real to scanners and attackers.</p>
+          </div>
+          <!-- Detect -->
+          <div class="relative">
+            <svg class="hidden lg:block absolute -right-5 top-8 w-5 h-5 text-[#2a2a3a]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+            <div class="text-xs font-mono text-amber-500/60 mb-3">03</div>
+            <div class="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+              <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-100 mb-2">Detect</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Any connection to a honeypot triggers an instant alert. No legitimate user has a reason to touch these services &mdash; every hit is suspicious.</p>
+          </div>
+          <!-- Respond -->
+          <div>
+            <div class="text-xs font-mono text-amber-500/60 mb-3">04</div>
+            <div class="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+              <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-100 mb-2">Respond</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Review full session recordings, analyze attacker commands, and export evidence. Know exactly what happened and how far they got.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Protocol Table -->
+    <section class="relative z-10 max-w-6xl mx-auto px-6 py-24">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl font-bold text-gray-100 mb-3">Supported protocols</h2>
+        <p class="text-gray-400 max-w-lg mx-auto">Each honeypot mimics a real service on standard ports. Attackers see convincing targets &mdash; you see every move they make.</p>
+      </div>
+      <div class="card overflow-hidden max-w-3xl mx-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-[#2a2a3a] text-left">
+              <th class="px-6 py-4 text-sm font-medium text-gray-400">Protocol</th>
+              <th class="px-6 py-4 text-sm font-medium text-gray-400">Port</th>
+              <th class="px-6 py-4 text-sm font-medium text-gray-400 hidden sm:table-cell">Internal</th>
+              <th class="px-6 py-4 text-sm font-medium text-gray-400">Emulates</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">SSH</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">22</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">2222</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">OpenSSH 8.9 file server</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">HTTP</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">80</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8080</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">HTTPS</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">443</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8443</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal (TLS)</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">Telnet</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">23</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">2323</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Network router</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">FTP</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">21</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">2121</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">ProFTPD NAS</td>
+            </tr>
+            <tr class="hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">MySQL</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">3306</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">3307</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">MySQL 8.0 database</td>
+            </tr>
+            <tr class="hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">PostgreSQL</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">5432</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">5433</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">PostgreSQL 14.5 database</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Deployment Options -->
+    <section id="deploy" class="relative z-10 border-y border-[#2a2a3a]/50 bg-[#111118]/50 py-24 scroll-mt-16">
+      <div class="max-w-6xl mx-auto px-6">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold text-gray-100 mb-3">Deploy anywhere</h2>
+          <p class="text-gray-400 max-w-lg mx-auto">Two deployment options. Both take under five minutes. Both run fully offline.</p>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-[70rem] mx-auto">
+          <!-- Raspberry Pi -->
+          <div class="card-hover p-8">
+            <div class="w-14 h-14 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-5">
+              <svg class="w-7 h-7 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-100 mb-2">Raspberry Pi</h3>
+            <p class="text-sm text-gray-400 mb-6 leading-relaxed">
+              Dedicated hardware appliance. Flash, plug in, and forget. Appears as a separate device on your network with its own IP.
+            </p>
+            <div class="terminal leading-relaxed relative group/cmd">
+              <button onclick="copyCommand(this, 'curl -sSL https://honeyos.io/setup-pi.sh | bash')" class="absolute top-2 right-2 p-1.5 rounded-md text-gray-600 hover:text-gray-300 hover:bg-[#2a2a3a] transition-colors opacity-0 group-hover/cmd:opacity-100" title="Copy command">
+                <svg class="w-4 h-4 copy-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="w-4 h-4 check-icon hidden text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <div class="pr-8">
+                <span class="text-gray-500">$</span>
+                <span class="text-green-400"> curl</span>
+                <span class="text-gray-300"> -sSL https://honeyos.io/setup-pi.sh | bash</span>
+              </div>
+              <span class="text-gray-500 block mt-1"># Access at http://honeyos.local:7777</span>
+            </div>
+          </div>
+          <!-- Docker -->
+          <div class="card-hover p-8">
+            <div class="w-14 h-14 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-5">
+              <svg class="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12.5c0-.3-.2-.7-.5-1a4.4 4.4 0 0 0-1.7-1c.2-.5.2-1.1 0-1.6a3 3 0 0 0-1.5-1.3c-.3-.1-.7-.2-1-.2H17V7a3 3 0 0 0-3-3h-1V2.5A.5.5 0 0 0 12.5 2h-1a.5.5 0 0 0-.5.5V4H9a3 3 0 0 0-3 3v.4H5.7a3 3 0 0 0-2.5 1.5 3 3 0 0 0 0 1.6 4.4 4.4 0 0 0-1.7 1c-.3.3-.5.7-.5 1s.2.7.5 1c.2.2.4.3.7.4A4 4 0 0 0 6 16h12a4 4 0 0 0 3.8-5.1c.3-.1.5-.2.7-.4.3-.3.5-.7.5-1z"/></svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-100 mb-2">Docker</h3>
+            <p class="text-sm text-gray-400 mb-6 leading-relaxed">
+              Run on any Linux host, VM, or NAS. Single compose file with all services included. Works on x86 and ARM.
+            </p>
+            <div class="terminal leading-relaxed relative group/cmd">
+              <button onclick="copyCommand(this, 'curl -sSL https://honeyos.io/setup-docker.sh | bash')" class="absolute top-2 right-2 p-1.5 rounded-md text-gray-600 hover:text-gray-300 hover:bg-[#2a2a3a] transition-colors opacity-0 group-hover/cmd:opacity-100" title="Copy command">
+                <svg class="w-4 h-4 copy-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg class="w-4 h-4 check-icon hidden text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <div class="pr-8">
+                <span class="text-gray-500">$</span>
+                <span class="text-blue-400"> curl</span>
+                <span class="text-gray-300"> -sSL https://honeyos.io/setup-docker.sh | bash</span>
+              </div>
+              <span class="text-gray-500 block mt-1"># Access at http://localhost:7777</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="relative z-10 max-w-6xl mx-auto px-6 py-24">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl font-bold text-gray-100 mb-3">Built for</h2>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+        <div class="card p-5 text-center">
+          <h3 class="text-sm font-semibold text-amber-400 mb-1">Home Labs</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">Detect compromised IoT devices and malware</p>
+        </div>
+        <div class="card p-5 text-center">
+          <h3 class="text-sm font-semibold text-amber-400 mb-1">Small Business</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">Internal threat detection without enterprise costs</p>
+        </div>
+        <div class="card p-5 text-center">
+          <h3 class="text-sm font-semibold text-amber-400 mb-1">Schools</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">Catch unauthorized network activity</p>
+        </div>
+        <div class="card p-5 text-center">
+          <h3 class="text-sm font-semibold text-amber-400 mb-1">MSPs</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">Add honeypot monitoring to client networks</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="relative z-10 max-w-6xl mx-auto px-6 pb-24">
+      <div class="card p-12 text-center glow-amber" style="border-color: rgba(245, 158, 11, 0.2);">
+        <img src="images/logo-icon.png" alt="HoneyOS" width="56" height="56" class="mx-auto mb-6">
+        <h2 class="text-3xl font-bold text-gray-100 mb-3">Start catching intruders today</h2>
+        <p class="text-gray-400 max-w-md mx-auto mb-8">
+          Free, open-source, and runs on hardware you already own.
+          No cloud accounts, no subscriptions, no data leaving your network.
+        </p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a href="#deploy" class="btn-primary text-base px-8 py-3">
+            Get Started
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
+          </a>
+          <a href="https://github.com/honey-os/honeyos" target="_blank" rel="noopener noreferrer" class="btn-secondary text-base px-8 py-3">
+            Star on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="relative z-10 border-t border-[#2a2a3a]/50 py-8">
+      <div class="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <img src="images/logo-icon.png" alt="HoneyOS" width="24" height="24">
+          <span class="text-sm text-gray-600">HoneyOS &mdash; Open-source network deception platform</span>
+        </div>
+        <div class="flex items-center gap-6 text-sm text-gray-600">
+          <a href="https://github.com/honey-os/honeyos" target="_blank" rel="noopener noreferrer" class="hover:text-gray-400 transition-colors">GitHub</a>
+          <span>MIT License</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <script>
+    function copyCommand(btn, text) {
+      navigator.clipboard.writeText(text).then(function() {
+        var copyIcon = btn.querySelector('.copy-icon');
+        var checkIcon = btn.querySelector('.check-icon');
+        copyIcon.classList.add('hidden');
+        checkIcon.classList.remove('hidden');
+        setTimeout(function() {
+          copyIcon.classList.remove('hidden');
+          checkIcon.classList.add('hidden');
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

@@ -10,12 +10,14 @@ import {
   CheckCircle,
   AlertTriangle,
   Server,
+  Lock,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 import {
   updateConfig,
   exportConfig,
   importConfig,
+  authChangePassword,
 } from '@/lib/api';
 import type { SystemConfigItem } from '@/lib/api';
 import clsx from 'clsx';
@@ -387,8 +389,129 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Change Password */}
+          <ChangePasswordSection />
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Change Password Section
+// ---------------------------------------------------------------------------
+
+function ChangePasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResult(null);
+
+    if (newPassword.length < 8) {
+      setResult({ success: false, message: 'New password must be at least 8 characters' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResult({ success: false, message: 'New passwords do not match' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await authChangePassword(currentPassword, newPassword);
+      setResult({ success: true, message: 'Password changed successfully' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to change password',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+        <Lock className="w-4 h-4 text-amber-500" />
+        Change Password
+      </h3>
+      <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-1.5">
+            Current Password
+          </label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="input-field w-full text-sm"
+            placeholder="Enter current password"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-1.5">
+            New Password
+          </label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="input-field w-full text-sm"
+            placeholder="Minimum 8 characters"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-1.5">
+            Confirm New Password
+          </label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="input-field w-full text-sm"
+            placeholder="Re-enter new password"
+          />
+        </div>
+
+        {result && (
+          <div
+            className={clsx(
+              'flex items-center gap-2 text-sm px-3 py-2 rounded-lg border',
+              result.success
+                ? 'border-green-500/30 bg-green-500/5 text-green-400'
+                : 'border-red-500/30 bg-red-500/5 text-red-400'
+            )}
+          >
+            {result.success ? (
+              <CheckCircle className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+            )}
+            {result.message}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="btn-primary text-sm disabled:opacity-50"
+        >
+          {saving ? 'Changing...' : 'Change Password'}
+        </button>
+      </form>
     </div>
   );
 }

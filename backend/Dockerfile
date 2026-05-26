@@ -21,9 +21,9 @@ RUN mkdir -p /data
 ENV DATABASE_URL=sqlite:////data/honeyos.db
 ENV FLASK_ENV=production
 
-EXPOSE 5000
+EXPOSE 7778
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=10 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7778/health')" || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "eventlet", "--workers", "1", "--threads", "4", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:7778", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--timeout", "120", "app:app"]

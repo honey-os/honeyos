@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   backend:
     build:
@@ -8,15 +6,20 @@ services:
     container_name: honeyos-backend-dev
     restart: unless-stopped
     ports:
-      - "5000:5000"
-      - "2222:2222"
-      - "8080:8080"
-      - "2323:2323"
-      - "2121:2121"
-      - "3307:3307"
+      - "7778:7778"
+      # Dev uses high ports to avoid conflicts with host services
+      - "2222:2222"   # SSH honeypot
+      - "8080:8080"   # HTTP honeypot
+      - "8443:8443"   # HTTPS honeypot
+      - "2323:2323"   # Telnet honeypot
+      - "2121:2121"   # FTP honeypot
+      - "3307:3307"   # MySQL honeypot
+      - "5433:5433"   # PostgreSQL honeypot
+      - "5353:5353/udp"  # DNS honeypot (UDP)
+      - "5353:5353/tcp"  # DNS honeypot (TCP)
     volumes:
       - ./backend:/app
-      - honeyos-data-dev:/data
+      - ./data:/data
     env_file:
       - .env
     environment:
@@ -31,24 +34,20 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: honeyos-frontend-dev
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "7777:7777"
     volumes:
       - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:5000
+      - NEXT_PUBLIC_API_URL=http://backend:7778
     depends_on:
       - backend
-    command: ["npm", "run", "dev"]
     networks:
       - honeyos-net-dev
-
-volumes:
-  honeyos-data-dev:
-    driver: local
 
 networks:
   honeyos-net-dev:

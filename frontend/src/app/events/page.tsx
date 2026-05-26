@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   Filter,
@@ -13,6 +14,7 @@ import { useStore } from '@/stores/useStore';
 import SeverityBadge from '@/components/ui/SeverityBadge';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatDate, formatRelativeTime, truncateText } from '@/utils/formatters';
+import { getEvent } from '@/lib/api';
 import type { Event } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -25,7 +27,7 @@ const EVENT_TYPES = [
   'brute_force',
 ];
 
-const PROTOCOLS = ['ssh', 'http', 'telnet', 'ftp', 'mysql', 'smb', 'rdp'];
+const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb', 'rdp', 'dns'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'];
 
 export default function EventsPage() {
@@ -48,7 +50,10 @@ export default function EventsPage() {
     per_page: 25,
   });
 
-  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const linkedEventId = searchParams.get('event');
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(linkedEventId);
+  const [linkedEvent, setLinkedEvent] = useState<Event | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
   const loadEvents = useCallback(
@@ -61,6 +66,17 @@ export default function EventsPage() {
   useEffect(() => {
     loadEvents(1);
   }, [loadEvents]);
+
+  // Fetch the specific linked event so it displays even if not on the current page
+  useEffect(() => {
+    if (!linkedEventId) {
+      setLinkedEvent(null);
+      return;
+    }
+    getEvent(linkedEventId)
+      .then((e) => setLinkedEvent(e))
+      .catch(() => setLinkedEvent(null));
+  }, [linkedEventId]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -222,6 +238,60 @@ export default function EventsPage() {
       {eventsError && (
         <div className="card p-4 border-red-500/30 bg-red-500/5 text-red-400 text-sm">
           {eventsError}
+        </div>
+      )}
+
+      {/* Linked event (from ?event=id, when not on the current page) */}
+      {linkedEvent && !events.some((e) => e.id === linkedEvent.id) && (
+        <div className="card overflow-hidden border-amber-500/20">
+          <div className="px-4 py-2 bg-amber-500/5 border-b border-amber-500/20">
+            <span className="text-xs font-medium text-amber-400">Linked Event</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <tbody>
+                <tr
+                  className="cursor-pointer hover:bg-[#1c1c28] transition-colors"
+                  onClick={() =>
+                    setExpandedEvent(
+                      expandedEvent === linkedEvent.id ? null : linkedEvent.id
+                    )
+                  }
+                >
+                  <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
+                    {formatDate(linkedEvent.timestamp, 'MMM d, HH:mm:ss')}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-300">
+                    {linkedEvent.event_type.replace('_', ' ')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ProtocolBadge protocol={linkedEvent.protocol} />
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-amber-400">
+                    {linkedEvent.source_ip}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-gray-400">
+                    {linkedEvent.destination_port || '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <SeverityBadge severity={linkedEvent.severity} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
+                    {linkedEvent.details
+                      ? truncateText(JSON.stringify(linkedEvent.details), 60)
+                      : '-'}
+                  </td>
+                </tr>
+                {expandedEvent === linkedEvent.id && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-4 bg-[#111118]">
+                      <EventDetails event={linkedEvent} />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -401,13 +471,53 @@ function EventDetails({ event }: { event: Event }) {
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               Geolocation
             </span>
-            <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3">
-              {JSON.stringify(event.geolocation, null, 2)}
-            </pre>
+            <div className="mt-1 text-sm text-gray-400 bg-[#0a0a0f] rounded-lg p-3 space-y-1">
+              <GeoDisplay geo={event.geolocation} />
+            </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function countryFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  const offset = 0x1F1E6 - 65;
+  return String.fromCodePoint(
+    code.codePointAt(0)! + offset,
+    code.codePointAt(1)! + offset,
+  );
+}
+
+function GeoDisplay({ geo }: { geo: Record<string, unknown> }) {
+  const country = geo.country as string | undefined;
+  const countryCode = geo.country_code as string | undefined;
+  const city = geo.city as string | undefined;
+  const isp = geo.isp as string | undefined;
+  const org = geo.org as string | undefined;
+  const lat = geo.lat as number | undefined;
+  const lon = geo.lon as number | undefined;
+
+  return (
+    <>
+      {country && (
+        <p className="text-gray-300">
+          {countryFlag(countryCode)} {country}
+          {city ? `, ${city}` : ''}
+        </p>
+      )}
+      {(isp || org) && (
+        <p className="text-gray-500 text-xs">
+          {[isp, org].filter(Boolean).join(' / ')}
+        </p>
+      )}
+      {lat != null && lon != null && (
+        <p className="text-gray-600 text-xs font-mono">
+          {lat.toFixed(4)}, {lon.toFixed(4)}
+        </p>
+      )}
+    </>
   );
 }
 

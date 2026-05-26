@@ -16,6 +16,15 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _iso_utc(dt: datetime | None) -> str | None:
+    """Serialise a datetime as an ISO-8601 string with a Z suffix."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
 def _json_col_to_python(value):
     """Deserialise a JSON text column into a Python object."""
     if value is None:
@@ -61,15 +70,15 @@ class Event(db.Model):
             "source_ip": self.source_ip,
             "source_port": self.source_port,
             "destination_port": self.destination_port,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _iso_utc(self.timestamp),
             "severity": self.severity,
             "details": _json_col_to_python(self.details),
             "session_id": self.session_id,
             "user_agent": self.user_agent,
             "raw_payload": self.raw_payload,
             "geolocation": _json_col_to_python(self.geolocation),
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": _iso_utc(self.created_at),
+            "updated_at": _iso_utc(self.updated_at),
         }
 
 
@@ -97,8 +106,8 @@ class Session(db.Model):
             "id": self.id,
             "source_ip": self.source_ip,
             "protocol": self.protocol,
-            "start_time": self.start_time.isoformat() if self.start_time else None,
-            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "start_time": _iso_utc(self.start_time),
+            "end_time": _iso_utc(self.end_time),
             "duration_seconds": self.duration_seconds,
             "commands_count": self.commands_count,
             "keystrokes": _json_col_to_python(self.keystrokes),
@@ -134,7 +143,7 @@ class Honeypot(db.Model):
             "enabled": self.enabled,
             "description": self.description,
             "config": _json_col_to_python(self.config),
-            "last_activity": self.last_activity.isoformat() if self.last_activity else None,
+            "last_activity": _iso_utc(self.last_activity),
             "total_interactions": self.total_interactions,
         }
 
@@ -163,7 +172,7 @@ class Alert(db.Model):
             "alert_type": self.alert_type,
             "config": _json_col_to_python(self.config),
             "conditions": _json_col_to_python(self.conditions),
-            "last_sent": self.last_sent.isoformat() if self.last_sent else None,
+            "last_sent": _iso_utc(self.last_sent),
             "send_count": self.send_count,
         }
 
@@ -191,7 +200,7 @@ class NetworkScan(db.Model):
             "scan_type": self.scan_type,
             "discovered_ports": _json_col_to_python(self.discovered_ports),
             "scan_duration_ms": self.scan_duration_ms,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _iso_utc(self.timestamp),
             "changes_detected": self.changes_detected,
             "previous_scan_id": self.previous_scan_id,
         }
@@ -215,4 +224,37 @@ class SystemConfig(db.Model):
             "value": self.value,
             "description": self.description,
             "config_type": self.config_type,
+        }
+
+
+# ---------------------------------------------------------------------------
+# IPGeoCache
+# ---------------------------------------------------------------------------
+
+class IPGeoCache(db.Model):
+    __tablename__ = "ip_geo_cache"
+
+    ip = db.Column(db.String(45), primary_key=True)
+    country = db.Column(db.String(128))
+    country_code = db.Column(db.String(8))
+    region = db.Column(db.String(128))
+    city = db.Column(db.String(128))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    isp = db.Column(db.String(256))
+    org = db.Column(db.String(256))
+    asn = db.Column(db.String(64))
+    looked_up_at = db.Column(db.DateTime, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "country": self.country,
+            "country_code": self.country_code,
+            "region": self.region,
+            "city": self.city,
+            "lat": self.lat,
+            "lon": self.lon,
+            "isp": self.isp,
+            "org": self.org,
+            "asn": self.asn,
         }

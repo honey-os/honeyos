@@ -6,7 +6,9 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
-from models import Event, Session, db
+from config import Config
+from models import Event, Honeypot, Session, db
+from services.geoip import GeoIPService
 from utils.helpers import generate_id, sanitize_input
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ class EventProcessor:
 
     def __init__(self, alert_service=None):
         self.alert_service = alert_service
+        self.geoip_service = GeoIPService()
 
     # -----------------------------------------------------------------
     # Public API
@@ -52,6 +55,15 @@ class EventProcessor:
             geolocation=json.dumps(event_data.get("geolocation")) if event_data.get("geolocation") else None,
         )
 
+        # GeoIP enrichment
+        if Config.GEOIP_ENABLED and not event.geolocation:
+            try:
+                geo = self.geoip_service.lookup(event.source_ip)
+                if geo:
+                    event.geolocation = json.dumps(geo)
+            except Exception:
+                logger.exception("GeoIP lookup failed for %s", event.source_ip)
+
         # Try to correlate with an existing session
         if not event.session_id:
             session = self.correlate_session(event)
@@ -59,6 +71,13 @@ class EventProcessor:
                 event.session_id = session.id
 
         db.session.add(event)
+
+        # Update honeypot interaction stats
+        honeypot = Honeypot.query.filter_by(protocol=event.protocol).first()
+        if honeypot:
+            honeypot.total_interactions = (honeypot.total_interactions or 0) + 1
+            honeypot.last_activity = event.timestamp
+
         db.session.commit()
 
         logger.info(
@@ -105,19 +124,24 @@ class EventProcessor:
 
     def get_threat_level(self) -> dict:
         """
-        Calculate a simple threat-level indicator based on recent activity.
+        Calculate a threat-level indicator based on recent activity.
+
+        The score prioritises *breadth* and *intent* over raw volume:
+        - Multiple unique source IPs (breadth of attack)
+        - Multiple protocols from the same IP (reconnaissance)
+        - High-severity events capped per-IP (one bot can't dominate)
+        - Total event volume with logarithmic scaling (diminishing returns)
 
         Returns a dict with ``level`` (low / medium / high / critical) and
         ``score`` (0-100).
         """
+        import math
+
         now = datetime.now(timezone.utc)
         one_hour_ago = now - timedelta(hours=1)
 
-        recent_count = Event.query.filter(Event.timestamp >= one_hour_ago).count()
-
-        high_sev = Event.query.filter(
+        recent_count = Event.query.filter(
             Event.timestamp >= one_hour_ago,
-            Event.severity.in_(["high", "critical"]),
         ).count()
 
         unique_ips = (
@@ -127,14 +151,51 @@ class EventProcessor:
             .count()
         )
 
-        # Weighted score
-        score = min(100, recent_count * 2 + high_sev * 15 + unique_ips * 5)
+        unique_protocols = (
+            db.session.query(Event.protocol)
+            .filter(Event.timestamp >= one_hour_ago)
+            .distinct()
+            .count()
+        )
 
-        if score >= 75:
+        # High-severity events capped at 5 per source IP so a single bot
+        # brute-forcing one service can't push us to critical on its own.
+        high_sev_by_ip = (
+            db.session.query(
+                Event.source_ip,
+                db.func.min(db.func.count(), 5).label("capped"),
+            )
+            .filter(
+                Event.timestamp >= one_hour_ago,
+                Event.severity.in_(["high", "critical"]),
+            )
+            .group_by(Event.source_ip)
+            .all()
+        )
+        capped_high_sev = sum(row.capped for row in high_sev_by_ip)
+
+        # Scoring components:
+        #   volume  : log2(events+1) * 2       — 100 events ≈ 13 pts, 1000 ≈ 20
+        #   breadth : sqrt(unique_ips) * 4     — diminishing returns per IP
+        #   recon   : unique_protocols * 3     — multi-protocol probing
+        #   severity: sqrt(capped_high_sev) * 3 — diminishing returns on severity
+        volume_score = math.log2(recent_count + 1) * 2
+        breadth_score = math.sqrt(unique_ips) * 4
+        recon_score = unique_protocols * 3
+        severity_score = math.sqrt(capped_high_sev) * 3
+
+        score = min(100, int(volume_score + breadth_score + recon_score + severity_score))
+
+        # Thresholds:
+        #   2 IPs, 1 protocol, low sev, 5 events    → ~18 (low)
+        #   8 IPs, 4 protocols, 27 events, some sev  → ~43 (medium)
+        #   30 IPs, 5 protocols, 500 events, high sev → ~71 (high)
+        #   50+ IPs, 7 protocols, 1000+ events        → ~90 (critical)
+        if score >= 80:
             level = "critical"
         elif score >= 50:
             level = "high"
-        elif score >= 25:
+        elif score >= 20:
             level = "medium"
         else:
             level = "low"
@@ -143,6 +204,7 @@ class EventProcessor:
             "level": level,
             "score": score,
             "recent_events": recent_count,
-            "high_severity_events": high_sev,
+            "high_severity_events": capped_high_sev,
             "unique_attackers": unique_ips,
+            "unique_protocols": unique_protocols,
         }

@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Server,
-  Plus,
   X,
   Power,
   PowerOff,
@@ -17,7 +16,7 @@ import {
   Wifi,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
-import { createHoneypot, updateHoneypot, deleteHoneypot } from '@/lib/api';
+import { updateHoneypot, deleteHoneypot } from '@/lib/api';
 import type { Honeypot } from '@/lib/api';
 import { formatDate, formatRelativeTime, formatNumber } from '@/utils/formatters';
 import clsx from 'clsx';
@@ -43,6 +42,7 @@ const protocolColors: Record<string, string> = {
   mysql: 'text-orange-400 bg-orange-500/10',
   smb: 'text-rose-400 bg-rose-500/10',
   rdp: 'text-indigo-400 bg-indigo-500/10',
+  dns: 'text-teal-400 bg-teal-500/10',
 };
 
 export default function HoneypotsPage() {
@@ -93,18 +93,6 @@ export default function HoneypotsPage() {
     }
   };
 
-  const openAddModal = () => {
-    setEditingHoneypot(null);
-    setFormData({
-      name: '',
-      protocol: 'ssh',
-      port: 2222,
-      description: '',
-      enabled: true,
-    });
-    setShowAddModal(true);
-  };
-
   const openEditModal = (honeypot: Honeypot) => {
     setEditingHoneypot(honeypot);
     setFormData({
@@ -123,8 +111,6 @@ export default function HoneypotsPage() {
     try {
       if (editingHoneypot) {
         await updateHoneypot(editingHoneypot.id, formData);
-      } else {
-        await createHoneypot(formData);
       }
       await fetchHoneypots();
       setShowAddModal(false);
@@ -143,6 +129,7 @@ export default function HoneypotsPage() {
     mysql: 3307,
     smb: 4450,
     rdp: 3390,
+    dns: 5353,
   };
 
   return (
@@ -155,13 +142,6 @@ export default function HoneypotsPage() {
             Manage your deception services
           </p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="btn-primary flex items-center gap-2 text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Honeypot
-        </button>
       </div>
 
       {/* Error */}
@@ -183,16 +163,9 @@ export default function HoneypotsPage() {
           <h3 className="text-lg font-medium text-gray-400 mb-2">
             No honeypots configured
           </h3>
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-gray-600">
             Deploy your first deception service to start catching intruders.
           </p>
-          <button
-            onClick={openAddModal}
-            className="btn-primary inline-flex items-center gap-2 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Honeypot
-          </button>
         </div>
       ) : (
         /* Honeypot grid */
@@ -313,7 +286,7 @@ export default function HoneypotsPage() {
           <div className="card max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-gray-100">
-                {editingHoneypot ? 'Edit Honeypot' : 'Add New Honeypot'}
+                Edit Honeypot
               </h2>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -415,7 +388,7 @@ export default function HoneypotsPage() {
                   disabled={saving}
                   className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : editingHoneypot ? 'Update' : 'Create'}
+                  {saving ? 'Saving...' : 'Update'}
                 </button>
                 <button
                   type="button"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   Radio,
@@ -26,16 +27,35 @@ import EventFeed from '@/components/shared/EventFeed';
 import { useStore } from '@/stores/useStore';
 import { formatDate, formatNumber, formatRelativeTime } from '@/utils/formatters';
 
-const PIE_COLORS = [
-  '#f59e0b',
-  '#3b82f6',
-  '#10b981',
-  '#8b5cf6',
-  '#ef4444',
-  '#06b6d4',
-  '#f97316',
-  '#ec4899',
-];
+/** Locked protocol → hex color map matching ProtocolBadge palette. */
+const PROTOCOL_COLORS: Record<string, string> = {
+  ssh: '#10b981',    // emerald
+  http: '#3b82f6',   // blue
+  https: '#3b82f6',  // blue
+  telnet: '#8b5cf6', // purple
+  ftp: '#06b6d4',    // cyan
+  mysql: '#f97316',  // orange
+  postgresql: '#0ea5e9',  // sky
+  smb: '#f43f5e',    // rose
+  rdp: '#6366f1',    // indigo
+  dns: '#14b8a6',    // teal
+  smtp: '#ec4899',   // pink
+};
+
+const DEFAULT_PROTOCOL_COLOR = '#6b7280'; // gray
+
+function protocolColor(protocol: string): string {
+  return PROTOCOL_COLORS[protocol.toLowerCase()] || DEFAULT_PROTOCOL_COLOR;
+}
+
+function countryFlag(code?: string): string {
+  if (!code || code.length !== 2) return '';
+  const offset = 0x1F1E6 - 65; // 'A' = 65
+  return String.fromCodePoint(
+    code.codePointAt(0)! + offset,
+    code.codePointAt(1)! + offset,
+  );
+}
 
 const threatLevelColors: Record<string, string> = {
   critical: 'text-red-400',
@@ -122,21 +142,24 @@ export default function DashboardPage() {
           value={formatNumber(summary?.active_honeypots)}
           iconColor="text-green-500"
         />
-        <MetricsCard
-          icon={AlertTriangle}
-          label="Threat Level"
-          value={
-            <span
-              className={
-                threatLevelColors[summary?.threat_level || 'none'] ||
-                'text-gray-400'
-              }
-            >
-              {(summary?.threat_level || 'none').toUpperCase()}
-            </span>
-          }
-          iconColor="text-red-500"
-        />
+        <Link href="/threat-level">
+          <MetricsCard
+            icon={AlertTriangle}
+            label="Threat Level"
+            value={
+              <span
+                className={
+                  threatLevelColors[String(summary?.threat_level?.level || 'none')] ||
+                  'text-gray-400'
+                }
+              >
+                {String(summary?.threat_level?.level || 'none').toUpperCase()}
+              </span>
+            }
+            iconColor="text-red-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
       </div>
 
       {/* Timeline chart & Protocol breakdown */}
@@ -170,6 +193,7 @@ export default function DashboardPage() {
                   tickLine={false}
                   axisLine={{ stroke: '#2a2a3a' }}
                   tickFormatter={(val: string) => formatDate(val, 'HH:mm')}
+                  interval={Math.max(0, Math.floor((timelineHours * 6) / 12) - 1)}
                 />
                 <YAxis
                   tick={{ fill: '#64748b', fontSize: 11 }}
@@ -219,10 +243,10 @@ export default function DashboardPage() {
                     nameKey="protocol"
                     stroke="none"
                   >
-                    {summary.protocol_breakdown.map((_, idx) => (
+                    {summary.protocol_breakdown.map((entry, idx) => (
                       <Cell
                         key={idx}
-                        fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                        fill={protocolColor(entry.protocol)}
                       />
                     ))}
                   </Pie>
@@ -238,7 +262,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-3 space-y-2">
-                {summary.protocol_breakdown.map((item, idx) => (
+                {summary.protocol_breakdown.map((item) => (
                   <div
                     key={item.protocol}
                     className="flex items-center justify-between text-sm"
@@ -247,8 +271,7 @@ export default function DashboardPage() {
                       <div
                         className="w-3 h-3 rounded-sm"
                         style={{
-                          backgroundColor:
-                            PIE_COLORS[idx % PIE_COLORS.length],
+                          backgroundColor: protocolColor(item.protocol),
                         }}
                       />
                       <span className="text-gray-300 uppercase font-mono text-xs">
@@ -287,6 +310,9 @@ export default function DashboardPage() {
                     IP Address
                   </th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Location
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Events
                   </th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -301,13 +327,27 @@ export default function DashboardPage() {
                       key={attacker.ip}
                       className="hover:bg-[#1c1c28] transition-colors"
                     >
-                      <td className="px-5 py-3 font-mono text-sm text-amber-400">
-                        {attacker.ip}
+                      <td className="px-5 py-3 font-mono text-sm whitespace-nowrap">
+                        <Link
+                          href={`/attackers?ip=${encodeURIComponent(attacker.ip)}`}
+                          className="text-amber-400 hover:text-amber-300"
+                        >
+                          {attacker.ip}
+                        </Link>
                       </td>
-                      <td className="px-5 py-3 text-sm text-gray-300">
+                      <td className="px-5 py-3 text-sm text-gray-300 whitespace-nowrap">
+                        {attacker.country_code ? (
+                          <span title={[attacker.country, attacker.org].filter(Boolean).join(' — ')}>
+                            {countryFlag(attacker.country_code)} {attacker.country_code}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-300 whitespace-nowrap">
                         {formatNumber(attacker.count)}
                       </td>
-                      <td className="px-5 py-3 text-sm text-gray-500">
+                      <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
                         {formatRelativeTime(attacker.last_seen)}
                       </td>
                     </tr>
@@ -315,7 +355,7 @@ export default function DashboardPage() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={3}
+                      colSpan={4}
                       className="px-5 py-8 text-center text-sm text-gray-600"
                     >
                       No attacker data available

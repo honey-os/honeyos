@@ -15,6 +15,7 @@ const protocolConfig: Record<string, { bg: string; text: string }> = {
   telnet: { bg: 'bg-purple-500/15 border-purple-500/30', text: 'text-purple-400' },
   ftp: { bg: 'bg-cyan-500/15 border-cyan-500/30', text: 'text-cyan-400' },
   mysql: { bg: 'bg-orange-500/15 border-orange-500/30', text: 'text-orange-400' },
+  postgresql: { bg: 'bg-sky-500/15 border-sky-500/30', text: 'text-sky-400' },
   smb: { bg: 'bg-rose-500/15 border-rose-500/30', text: 'text-rose-400' },
   rdp: { bg: 'bg-indigo-500/15 border-indigo-500/30', text: 'text-indigo-400' },
   dns: { bg: 'bg-teal-500/15 border-teal-500/30', text: 'text-teal-400' },

@@ -4,24 +4,28 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Activity,
+  Users,
   Terminal,
-  Hexagon,
-  Shield,
   Bell,
   Globe,
   Settings,
   ChevronLeft,
-  ChevronRight,
   Server,
+  KeyRound,
+  LogOut,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
+import { authLogout } from '@/lib/api';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/events', label: 'Events', icon: Activity },
+  { href: '/attackers', label: 'Attackers', icon: Users },
+  { href: '/credentials', label: 'Credentials', icon: KeyRound },
   { href: '/sessions', label: 'Sessions', icon: Terminal },
   { href: '/honeypots', label: 'Honeypots', icon: Server },
   { href: '/alerts', label: 'Alerts', icon: Bell },
@@ -37,6 +41,7 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const setSelectedSession = useStore((s) => s.setSelectedSession);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
@@ -48,15 +53,37 @@ export default function AppShell({ children }: AppShellProps) {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-[#2a2a3a]">
-          <Link href="/" className="relative shrink-0">
-            <Hexagon className="w-8 h-8 text-amber-500" />
-            <Shield className="w-4 h-4 text-amber-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </Link>
+        <div className="flex items-center justify-between px-4 py-5 border-b border-[#2a2a3a]">
+          <div
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={!sidebarOpen ? toggleSidebar : undefined}
+            title={!sidebarOpen ? 'Expand sidebar' : undefined}
+          >
+            <Image
+              src="/images/logo-icon.png"
+              alt="HoneyOS"
+              width={32}
+              height={32}
+              className="shrink-0"
+            />
+            {sidebarOpen && (
+              <Image
+                src="/images/logo-text-white.png"
+                alt="HoneyOS"
+                width={110}
+                height={26}
+                className="shrink-0"
+              />
+            )}
+          </div>
           {sidebarOpen && (
-            <Link href="/" className="text-lg font-bold text-gradient whitespace-nowrap">
-              HoneyOS
-            </Link>
+            <button
+              onClick={toggleSidebar}
+              className="p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           )}
         </div>
 
@@ -70,6 +97,9 @@ export default function AppShell({ children }: AppShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  if (item.href === '/sessions') setSelectedSession(null);
+                }}
                 className={clsx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                   isActive
@@ -85,20 +115,18 @@ export default function AppShell({ children }: AppShellProps) {
           })}
         </nav>
 
-        {/* Collapse toggle */}
+        {/* Sign out */}
         <div className="border-t border-[#2a2a3a] p-2">
           <button
-            onClick={toggleSidebar}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors text-sm"
+            onClick={async () => {
+              await authLogout();
+              window.location.reload();
+            }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-[#1c1c28] transition-colors text-sm"
+            title={!sidebarOpen ? 'Sign Out' : undefined}
           >
-            {sidebarOpen ? (
-              <>
-                <ChevronLeft className="w-4 h-4" />
-                <span>Collapse</span>
-              </>
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
+            <LogOut className="w-4 h-4 shrink-0" />
+            {sidebarOpen && <span>Sign Out</span>}
           </button>
         </div>
       </aside>

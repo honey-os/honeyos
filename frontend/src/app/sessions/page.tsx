@@ -44,9 +44,10 @@ export default function SessionsPage() {
     sessionsLoading,
     sessionsError,
     fetchSessions,
+    selectedSession,
+    setSelectedSession,
   } = useStore();
 
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterProtocol, setFilterProtocol] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -259,7 +260,7 @@ export default function SessionsPage() {
           className="select-field text-sm"
         >
           <option value="">All protocols</option>
-          {['ssh', 'http', 'telnet', 'ftp', 'mysql', 'smb', 'rdp'].map((p) => (
+          {['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb', 'rdp'].map((p) => (
             <option key={p} value={p}>
               {p.toUpperCase()}
             </option>

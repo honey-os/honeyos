@@ -10,7 +10,7 @@ import logging
 import os
 import sys
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
 
@@ -50,7 +50,7 @@ def create_app(config_class=Config) -> Flask:
     # --- Extensions -------------------------------------------------------
     db.init_app(application)
     CORS(application, resources={r"/api/*": {"origins": "*"}})
-    socketio.init_app(application, cors_allowed_origins="*", async_mode="eventlet")
+    socketio.init_app(application, cors_allowed_origins="*", async_mode="threading")
 
     # --- Blueprints -------------------------------------------------------
     from api.events import events_bp
@@ -60,6 +60,9 @@ def create_app(config_class=Config) -> Flask:
     from api.network_scans import network_scans_bp
     from api.dashboard import dashboard_bp
     from api.config import config_bp
+    from api.attackers import attackers_bp
+    from api.credentials import credentials_bp
+    from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -68,6 +71,28 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(network_scans_bp)
     application.register_blueprint(dashboard_bp)
     application.register_blueprint(config_bp)
+    application.register_blueprint(attackers_bp)
+    application.register_blueprint(credentials_bp)
+    application.register_blueprint(auth_bp)
+
+    # --- Auth middleware --------------------------------------------------
+    AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
+                     "/api/auth/login", "/api/auth/logout"}
+
+    @application.before_request
+    def check_auth():
+        if request.method == "OPTIONS":
+            return None
+        if request.path in AUTH_ALLOWLIST:
+            return None
+        if not has_admin():
+            return None
+        cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+        if not is_authenticated(cookie_token):
+            return jsonify({
+                "error": "unauthorized",
+                "message": "Authentication required",
+            }), 401
 
     # --- Health check -----------------------------------------------------
     @application.route("/health", methods=["GET"])
@@ -88,6 +113,23 @@ def create_app(config_class=Config) -> Flask:
         db.create_all()
         _seed_defaults()
 
+    # --- Start honeypot listeners -----------------------------------------
+    from services.event_processor import EventProcessor
+    from services.session_recorder import SessionRecorder
+    from services.honeypot_manager import HoneypotManager
+
+    event_processor = EventProcessor()
+    session_recorder = SessionRecorder()
+    manager = HoneypotManager(
+        app=application,
+        event_processor=event_processor,
+        session_recorder=session_recorder,
+    )
+    application.honeypot_manager = manager
+
+    with application.app_context():
+        manager.start_all_enabled()
+
     return application
 
 
@@ -99,9 +141,9 @@ def _seed_defaults() -> None:
     """Populate default honeypot configs and system settings if the tables
     are empty (first run)."""
 
-    # Default honeypots
-    if Honeypot.query.count() == 0:
-        defaults = [
+    # Default honeypots -- seed missing protocols into existing installs
+    existing_protocols = {hp.protocol for hp in Honeypot.query.with_entities(Honeypot.protocol).all()}
+    defaults = [
             {
                 "name": "SSH Honeypot",
                 "protocol": "ssh",
@@ -114,6 +156,13 @@ def _seed_defaults() -> None:
                 "protocol": "http",
                 "port": Config.HTTP_HONEYPOT_PORT,
                 "description": "Fake web server with login pages and directory listings",
+                "config": {"server_header": "Apache/2.4.52 (Ubuntu)"},
+            },
+            {
+                "name": "HTTPS Honeypot",
+                "protocol": "https",
+                "port": Config.HTTPS_HONEYPOT_PORT,
+                "description": "Fake HTTPS server with TLS and login pages",
                 "config": {"server_header": "Apache/2.4.52 (Ubuntu)"},
             },
             {
@@ -137,21 +186,37 @@ def _seed_defaults() -> None:
                 "description": "Fake MySQL server capturing authentication and queries",
                 "config": {"version_string": "5.7.38-log"},
             },
+            {
+                "name": "PostgreSQL Honeypot",
+                "protocol": "postgresql",
+                "port": Config.POSTGRESQL_HONEYPOT_PORT,
+                "description": "Fake PostgreSQL server capturing authentication and queries",
+                "config": {"version_string": "14.5"},
+            },
+            {
+                "name": "DNS Honeypot",
+                "protocol": "dns",
+                "port": Config.DNS_HONEYPOT_PORT,
+                "description": "Fake DNS server logging reconnaissance and zone transfer attempts",
+                "config": {"domain": "corp.local"},
+            },
         ]
-        for hp_data in defaults:
-            hp = Honeypot(
-                id=generate_id(),
-                name=hp_data["name"],
-                protocol=hp_data["protocol"],
-                port=hp_data["port"],
-                enabled=True,
-                description=hp_data["description"],
-                config=json.dumps(hp_data["config"]),
-                total_interactions=0,
-            )
-            db.session.add(hp)
+    new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
+    for hp_data in new_honeypots:
+        hp = Honeypot(
+            id=generate_id(),
+            name=hp_data["name"],
+            protocol=hp_data["protocol"],
+            port=hp_data["port"],
+            enabled=True,
+            description=hp_data["description"],
+            config=json.dumps(hp_data["config"]),
+            total_interactions=0,
+        )
+        db.session.add(hp)
+    if new_honeypots:
         db.session.commit()
-        logger.info("Seeded %d default honeypots", len(defaults))
+        logger.info("Seeded %d default honeypots", len(new_honeypots))
 
     # Default system config entries
     if SystemConfig.query.count() == 0:
@@ -195,4 +260,5 @@ if __name__ == "__main__":
         port=Config.API_PORT,
         debug=Config.DEBUG,
         use_reloader=False,
+        allow_unsafe_werkzeug=True,
     )

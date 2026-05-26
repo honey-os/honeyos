@@ -28,7 +28,7 @@ class Config:
     PORT_RANGE_START = int(os.getenv("PORT_RANGE_START", "1"))
     PORT_RANGE_END = int(os.getenv("PORT_RANGE_END", "1024"))
     BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
-    API_PORT = int(os.getenv("API_PORT", "5000"))
+    API_PORT = int(os.getenv("API_PORT", "7778"))
 
     # --- SMTP / Email Alerts ---
     SMTP_HOST = os.getenv("SMTP_HOST", "")
@@ -53,9 +53,15 @@ class Config:
     # --- Honeypot Defaults ---
     SSH_HONEYPOT_PORT = int(os.getenv("SSH_HONEYPOT_PORT", "2222"))
     HTTP_HONEYPOT_PORT = int(os.getenv("HTTP_HONEYPOT_PORT", "8080"))
+    HTTPS_HONEYPOT_PORT = int(os.getenv("HTTPS_HONEYPOT_PORT", "8443"))
     TELNET_HONEYPOT_PORT = int(os.getenv("TELNET_HONEYPOT_PORT", "2323"))
     FTP_HONEYPOT_PORT = int(os.getenv("FTP_HONEYPOT_PORT", "2121"))
     MYSQL_HONEYPOT_PORT = int(os.getenv("MYSQL_HONEYPOT_PORT", "3307"))
+    POSTGRESQL_HONEYPOT_PORT = int(os.getenv("POSTGRESQL_HONEYPOT_PORT", "5433"))
+    DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
+
+    # --- Authentication ---
+    SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "168"))
 
     # --- Geolocation ---
-    GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "false").lower() in ("true", "1", "yes")
+    GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "true").lower() in ("true", "1", "yes")

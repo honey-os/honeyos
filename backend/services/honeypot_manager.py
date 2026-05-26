@@ -19,14 +19,15 @@ class HoneypotManager:
     protocol-specific listener class.
     """
 
-    # Map protocol names to their listener classes (lazily imported to
-    # avoid circular imports at module level).
     PROTOCOL_MAP: dict[str, str] = {
         "ssh": "services.protocols.ssh_honeypot.SSHHoneypot",
         "http": "services.protocols.http_honeypot.HTTPHoneypot",
+        "https": "services.protocols.https_honeypot.HTTPSHoneypot",
         "telnet": "services.protocols.telnet_honeypot.TelnetHoneypot",
         "ftp": "services.protocols.ftp_honeypot.FTPHoneypot",
         "mysql": "services.protocols.mysql_honeypot.MySQLHoneypot",
+        "postgresql": "services.protocols.postgresql_honeypot.PostgreSQLHoneypot",
+        "dns": "services.protocols.dns_honeypot.DNSHoneypot",
     }
 
     def __init__(self, app=None, event_processor=None, session_recorder=None):
@@ -135,9 +136,12 @@ class HoneypotManager:
         mapping = {
             "ssh": ("services.protocols.ssh_honeypot", "SSHHoneypot"),
             "http": ("services.protocols.http_honeypot", "HTTPHoneypot"),
+            "https": ("services.protocols.https_honeypot", "HTTPSHoneypot"),
             "telnet": ("services.protocols.telnet_honeypot", "TelnetHoneypot"),
             "ftp": ("services.protocols.ftp_honeypot", "FTPHoneypot"),
             "mysql": ("services.protocols.mysql_honeypot", "MySQLHoneypot"),
+            "postgresql": ("services.protocols.postgresql_honeypot", "PostgreSQLHoneypot"),
+            "dns": ("services.protocols.dns_honeypot", "DNSHoneypot"),
         }
         entry = mapping.get(protocol)
         if not entry:

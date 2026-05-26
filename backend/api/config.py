@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from models import Alert, Honeypot, SystemConfig, db
 from utils.helpers import generate_id
+from api.auth import AUTH_INTERNAL_KEYS
 
 config_bp = Blueprint("config", __name__)
 
@@ -17,10 +18,7 @@ config_bp = Blueprint("config", __name__)
 def get_all_config():
     """Return all system configuration entries."""
     configs = SystemConfig.query.order_by(SystemConfig.key).all()
-    return jsonify({
-        "config": [c.to_dict() for c in configs],
-        "total": len(configs),
-    })
+    return jsonify([c.to_dict() for c in configs if c.key not in AUTH_INTERNAL_KEYS])
 
 
 @config_bp.route("/api/config", methods=["PUT"])
@@ -35,6 +33,8 @@ def update_config():
 
     updated = []
     for key, value in data.items():
+        if key in AUTH_INTERNAL_KEYS:
+            continue
         config_entry = SystemConfig.query.get(key)
         if config_entry:
             config_entry.value = str(value) if not isinstance(value, str) else value
@@ -68,7 +68,7 @@ def export_config():
     export_data = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "version": "1.0",
-        "config": [c.to_dict() for c in configs],
+        "config": [c.to_dict() for c in configs if c.key not in AUTH_INTERNAL_KEYS],
         "honeypots": [h.to_dict() for h in honeypots],
         "alerts": [a.to_dict() for a in alerts],
     }
@@ -89,9 +89,24 @@ def import_config():
 
     # --- System config ---
     if "config" in data:
+        # Preserve auth keys across import
+        saved_auth = {
+            row.key: row
+            for row in SystemConfig.query.filter(
+                SystemConfig.key.in_(AUTH_INTERNAL_KEYS)
+            ).all()
+        }
         # Remove existing entries
         SystemConfig.query.delete()
+        # Re-add auth keys
+        for row in saved_auth.values():
+            db.session.add(SystemConfig(
+                key=row.key, value=row.value,
+                description=row.description, config_type=row.config_type,
+            ))
         for entry in data["config"]:
+            if entry.get("key") in AUTH_INTERNAL_KEYS:
+                continue
             sc = SystemConfig(
                 key=entry["key"],
                 value=entry.get("value", ""),

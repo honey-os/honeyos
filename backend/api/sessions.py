@@ -22,8 +22,9 @@ def list_sessions():
         protocol    (str)
         active_only (bool) default false
     """
-    limit = min(int(request.args.get("limit", 50)), 500)
-    offset = int(request.args.get("offset", 0))
+    per_page = min(int(request.args.get("per_page", request.args.get("limit", 50))), 500)
+    page = max(int(request.args.get("page", 1)), 1)
+    offset = (page - 1) * per_page
 
     query = Session.query
 
@@ -31,24 +32,30 @@ def list_sessions():
     if protocol:
         query = query.filter(Session.protocol == protocol)
 
+    status = request.args.get("status")
+    if status:
+        query = query.filter(Session.status == status)
+
     active_only = request.args.get("active_only", "false").lower() in ("true", "1", "yes")
-    if active_only:
+    if active_only and not status:
         query = query.filter(Session.status == "active")
 
     total = query.count()
+    pages = max((total + per_page - 1) // per_page, 1)
     sessions = (
         query
         .order_by(Session.start_time.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(per_page)
         .all()
     )
 
     return jsonify({
-        "sessions": [s.to_dict() for s in sessions],
+        "items": [s.to_dict() for s in sessions],
         "total": total,
-        "limit": limit,
-        "offset": offset,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
     })
 
 
