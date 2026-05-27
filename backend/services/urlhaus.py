@@ -1,19 +1,16 @@
 """
 URLhaus (abuse.ch) malware URL lookup service.
 
-Searches session IOCs (URLs, IPs, domains, hashes) against URLhaus
-to identify known malware distribution URLs.
+Searches session IOCs (URLs, hashes) against URLhaus to identify
+known malware distribution URLs.
 """
 
 import logging
-import re
 
 import requests
 
 from services.threatfox import (
     _FULL_URL_RE,
-    _IP_PORT_RE,
-    _IP_RE,
     _MD5_RE,
     _SHA256_RE,
 )
@@ -44,6 +41,11 @@ def _classify_ioc(ioc: str) -> tuple[str, str]:
     """Classify an IOC and return (endpoint_path, form_data_key).
 
     Returns ("", "") if the IOC type is not supported by URLhaus.
+
+    Only full URLs, hashes, and payloads are queried.  Bare IPs and
+    domains are *not* sent to the /host/ endpoint because that returns
+    every malicious URL ever seen on that host — far too noisy for a
+    per-session check.  ThreatFox handles bare-IP/domain lookups instead.
     """
     if _FULL_URL_RE.fullmatch(ioc):
         return "/url/", "url"
@@ -51,15 +53,6 @@ def _classify_ioc(ioc: str) -> tuple[str, str]:
         return "/payload/", "sha256_hash"
     if _MD5_RE.fullmatch(ioc):
         return "/payload/", "md5_hash"
-    if _IP_PORT_RE.fullmatch(ioc):
-        # Strip port — URLhaus host endpoint takes bare IP/domain
-        ip = ioc.split(":")[0]
-        return "/host/", ip  # special case: value is the IP, not the key name
-    if _IP_RE.fullmatch(ioc):
-        return "/host/", "host"
-    # Check if it looks like a domain (not a hash, not an IP)
-    if re.fullmatch(r"[a-zA-Z0-9._-]+\.[a-zA-Z]{2,}", ioc):
-        return "/host/", "host"
     return "", ""
 
 
@@ -72,54 +65,27 @@ class UrlhausService:
     def analyze_iocs(self, iocs: list[str]) -> list[dict]:
         """Search URLhaus for each IOC using the appropriate endpoint.
 
-        Categorizes IOCs and routes to the correct endpoint:
-        - Full URLs        -> POST /v1/url/     (form: url=<value>)
-        - Bare IPs/domains -> POST /v1/host/    (form: host=<value>)
-        - ip:port pairs    -> POST /v1/host/    (form: host=<ip part>)
-        - SHA256 hashes    -> POST /v1/payload/ (form: sha256_hash=<value>)
-        - MD5 hashes       -> POST /v1/payload/ (form: md5_hash=<value>)
+        Only precise lookups are performed:
+        - Full URLs    -> POST /v1/url/     (form: url=<value>)
+        - SHA256 hashes -> POST /v1/payload/ (form: sha256_hash=<value>)
+        - MD5 hashes   -> POST /v1/payload/ (form: md5_hash=<value>)
+
+        Bare IPs/domains are skipped — the /host/ endpoint returns every
+        URL ever seen on that host, which is too noisy for session-level
+        analysis.  ThreatFox handles those IOC types instead.
         """
         all_matches: list[dict] = []
-        searched_hosts: set[str] = set()
 
         for ioc in iocs:
             endpoint, form_key = _classify_ioc(ioc)
             if not endpoint:
                 continue
 
-            # Build the form data
-            if endpoint == "/host/":
-                if form_key != "host":
-                    # ip:port case — form_key is actually the bare IP
-                    host_value = form_key
-                    form_key = "host"
-                else:
-                    host_value = ioc
-
-                # Deduplicate host lookups
-                if host_value in searched_hosts:
-                    continue
-                searched_hosts.add(host_value)
-
-                form_data = {"host": host_value}
-            elif endpoint == "/url/":
-                form_data = {"url": ioc}
-            else:
-                # Payload endpoint
-                form_data = {form_key: ioc}
-
+            form_data = {form_key: ioc}
             matches = self._query(endpoint, form_data, ioc)
             all_matches.extend(matches)
 
-        # Deduplicate by IOC value — URL endpoint results (first) take
-        # priority over host endpoint results that return the same URL.
-        seen_iocs: set[str] = set()
-        unique: list[dict] = []
-        for m in all_matches:
-            if m["ioc"] not in seen_iocs:
-                seen_iocs.add(m["ioc"])
-                unique.append(m)
-        return unique
+        return all_matches
 
     def _query(self, endpoint: str, form_data: dict, original_ioc: str) -> list[dict]:
         """Execute a single URLhaus API query and normalize results."""
@@ -141,14 +107,12 @@ class UrlhausService:
 
         if query_status in ("no_results", "no_result"):
             return []
-        if query_status not in ("ok", "is_host"):
+        if query_status not in ("ok",):
             logger.info("URLhaus query_status=%s for %s", query_status, original_ioc)
             return []
 
         if endpoint == "/url/":
             return self._parse_url_response(data, original_ioc)
-        elif endpoint == "/host/":
-            return self._parse_host_response(data, original_ioc)
         else:
             return self._parse_payload_response(data, original_ioc)
 
@@ -181,34 +145,6 @@ class UrlhausService:
             "reference": data.get("urlhaus_reference"),
             "source": "urlhaus",
         }]
-
-    def _parse_host_response(self, data: dict, ioc: str) -> list[dict]:
-        """Parse host response — one match per malicious URL found for the host."""
-        urls = data.get("urls") or []
-        if not isinstance(urls, list):
-            return []
-
-        matches = []
-        for url_entry in urls:
-            threat = url_entry.get("threat") or ""
-            tags = url_entry.get("tags") or []
-            if isinstance(tags, str):
-                tags = [t.strip() for t in tags.split(",") if t.strip()]
-
-            malware = _malware_from_tags(tags) if tags else ""
-
-            matches.append({
-                "ioc": url_entry.get("url", ioc),
-                "threat_type": threat or "malware_download",
-                "malware": malware,
-                "confidence_level": 0,
-                "first_seen": url_entry.get("date_added", ""),
-                "tags": tags,
-                "reference": url_entry.get("urlhaus_reference"),
-                "source": "urlhaus",
-            })
-
-        return matches
 
     def _parse_payload_response(self, data: dict, ioc: str) -> list[dict]:
         """Parse payload response from URLhaus."""
