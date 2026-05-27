@@ -57,7 +57,7 @@ class ThreatFoxService:
             resp = requests.post(
                 _THREATFOX_API_URL,
                 json={"query": "search_ioc", "search_term": ioc},
-                headers={"API-KEY": self.api_key},
+                headers={"Auth-Key": self.api_key},
                 timeout=15,
             )
         except requests.RequestException:
