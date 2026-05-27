@@ -69,7 +69,9 @@ class ThreatFoxService:
             return []
 
         data = resp.json()
-        if data.get("query_status") != "ok":
+        query_status = data.get("query_status", "unknown")
+        if query_status != "ok":
+            logger.info("ThreatFox query_status=%s for IOC %s", query_status, ioc)
             return []
 
         raw_results = data.get("data", [])
@@ -95,12 +97,17 @@ class ThreatFoxService:
         Returns a structured result dict suitable for JSON storage.
         """
         iocs = self._extract_iocs(session)
+        logger.info("ThreatFox analyzing session %s — extracted %d IOCs: %s",
+                     session.id, len(iocs), iocs)
         all_matches: list[dict] = []
 
         for ioc in iocs:
             matches = self.search_ioc(ioc)
+            if matches:
+                logger.info("ThreatFox found %d match(es) for IOC %s", len(matches), ioc)
             all_matches.extend(matches)
 
+        logger.info("ThreatFox analysis complete — %d total matches", len(all_matches))
         return {
             "iocs_searched": iocs,
             "matches": all_matches,
