@@ -213,6 +213,74 @@ export interface CredentialsParams {
   limit?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Perimeter / Shodan
+// ---------------------------------------------------------------------------
+
+export interface DeclaredPort {
+  id: number;
+  port: number;
+  transport: string;
+  label: string;
+  source: "honeypot" | "user";
+  created_at: string;
+}
+
+export interface PerimeterScan {
+  id: string;
+  public_ip: string;
+  scan_source: string;
+  declared_snapshot: DeclaredPort[];
+  actual_ports: number[];
+  unexpected_ports: number[];
+  missing_ports: number[];
+  drift_detected: boolean;
+  timestamp: string;
+}
+
+export interface ShodanPort {
+  port: number;
+  transport: string;
+  service: string;
+  product: string;
+  version: string;
+  banner: string;
+}
+
+export interface ShodanSnapshot {
+  id: string;
+  ip: string;
+  ports_data: ShodanPort[];
+  tags: string[];
+  honeypot_flagged: boolean;
+  vulns: string[];
+  hostnames: string[];
+  org: string | null;
+  isp: string | null;
+  os_name: string | null;
+  shodan_updated: string | null;
+  timestamp: string;
+}
+
+export interface BannerComparison {
+  port: number;
+  protocol: string;
+  configured_banner: string | null;
+  shodan_banner: string | null;
+  match: boolean;
+}
+
+export interface PerimeterStatus {
+  public_ip: string | null;
+  shodan_configured: boolean;
+  drift_detected: boolean;
+  honeypot_flagged: boolean;
+  last_scan: string | null;
+  declared_count: number;
+  unexpected_count: number;
+  missing_count: number;
+}
+
 export interface ApiError {
   error: string;
   message: string;
@@ -562,4 +630,62 @@ export async function authChangePassword(
     }
     throw new Error(message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Perimeter
+// ---------------------------------------------------------------------------
+
+export async function getPerimeterStatus(): Promise<PerimeterStatus> {
+  return fetchApi<PerimeterStatus>('/perimeter/status');
+}
+
+export async function getDeclaredPorts(): Promise<{ items: DeclaredPort[] }> {
+  return fetchApi<{ items: DeclaredPort[] }>('/perimeter/declared-ports');
+}
+
+export async function addDeclaredPort(data: { port: number; transport?: string; label: string }): Promise<DeclaredPort> {
+  return fetchApi<DeclaredPort>('/perimeter/declared-ports', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function removeDeclaredPort(id: number): Promise<void> {
+  return fetchApi<void>(`/perimeter/declared-ports/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function syncDeclaredPorts(): Promise<{ items: DeclaredPort[] }> {
+  return fetchApi<{ items: DeclaredPort[] }>('/perimeter/declared-ports/sync', {
+    method: 'POST',
+  });
+}
+
+export async function getPerimeterScans(params: { page?: number; per_page?: number } = {}): Promise<PaginatedResponse<PerimeterScan>> {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return fetchApi<PaginatedResponse<PerimeterScan>>(`/perimeter/scans${query ? `?${query}` : ''}`);
+}
+
+export async function triggerPerimeterScan(): Promise<PerimeterScan> {
+  return fetchApi<PerimeterScan>('/perimeter/scan', { method: 'POST' });
+}
+
+export async function getShodanSnapshot(): Promise<ShodanSnapshot | null> {
+  return fetchApi<ShodanSnapshot | null>('/perimeter/shodan');
+}
+
+export async function refreshShodan(): Promise<ShodanSnapshot> {
+  return fetchApi<ShodanSnapshot>('/perimeter/shodan/refresh', { method: 'POST' });
+}
+
+export async function getBannerComparison(): Promise<{ items: BannerComparison[] }> {
+  return fetchApi<{ items: BannerComparison[] }>('/perimeter/banners');
 }

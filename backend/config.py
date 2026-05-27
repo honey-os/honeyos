@@ -108,3 +108,7 @@ class Config:
 
     # --- Threat Intelligence ---
     ABUSECH_API_KEY = os.getenv("ABUSECH_API_KEY", "")
+
+    # --- Perimeter / Shodan ---
+    SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
+    PUBLIC_IP = os.getenv("PUBLIC_IP", "")

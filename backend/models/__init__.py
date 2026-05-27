@@ -279,3 +279,100 @@ class IPGeoCache(db.Model):
             "org": self.org,
             "asn": self.asn,
         }
+
+
+# ---------------------------------------------------------------------------
+# DeclaredPort
+# ---------------------------------------------------------------------------
+
+class DeclaredPort(db.Model):
+    __tablename__ = "declared_ports"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    port = db.Column(db.Integer, nullable=False)
+    transport = db.Column(db.String(8), default="tcp")
+    label = db.Column(db.String(128), nullable=False)
+    source = db.Column(db.String(16), default="user")
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("port", "transport", name="uq_declared_port_transport"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "port": self.port,
+            "transport": self.transport,
+            "label": self.label,
+            "source": self.source,
+            "created_at": _iso_utc(self.created_at),
+        }
+
+
+# ---------------------------------------------------------------------------
+# PerimeterScan
+# ---------------------------------------------------------------------------
+
+class PerimeterScan(db.Model):
+    __tablename__ = "perimeter_scans"
+
+    id = db.Column(db.Text, primary_key=True)
+    public_ip = db.Column(db.String(45))
+    scan_source = db.Column(db.String(16))
+    declared_snapshot = db.Column(db.Text)  # JSON
+    actual_ports = db.Column(db.Text)       # JSON
+    unexpected_ports = db.Column(db.Text)   # JSON
+    missing_ports = db.Column(db.Text)      # JSON
+    drift_detected = db.Column(db.Boolean, default=False)
+    timestamp = db.Column(db.DateTime, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "public_ip": self.public_ip,
+            "scan_source": self.scan_source,
+            "declared_snapshot": _json_col_to_python(self.declared_snapshot),
+            "actual_ports": _json_col_to_python(self.actual_ports),
+            "unexpected_ports": _json_col_to_python(self.unexpected_ports),
+            "missing_ports": _json_col_to_python(self.missing_ports),
+            "drift_detected": self.drift_detected,
+            "timestamp": _iso_utc(self.timestamp),
+        }
+
+
+# ---------------------------------------------------------------------------
+# ShodanSnapshot
+# ---------------------------------------------------------------------------
+
+class ShodanSnapshot(db.Model):
+    __tablename__ = "shodan_snapshots"
+
+    id = db.Column(db.Text, primary_key=True)
+    ip = db.Column(db.String(45), nullable=False, index=True)
+    ports_data = db.Column(db.Text)      # JSON
+    tags = db.Column(db.Text)            # JSON
+    honeypot_flagged = db.Column(db.Boolean, default=False)
+    vulns = db.Column(db.Text)           # JSON
+    hostnames = db.Column(db.Text)       # JSON
+    org = db.Column(db.String(256))
+    isp = db.Column(db.String(256))
+    os_name = db.Column(db.String(128))
+    shodan_updated = db.Column(db.String(64))
+    timestamp = db.Column(db.DateTime, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ip": self.ip,
+            "ports_data": _json_col_to_python(self.ports_data),
+            "tags": _json_col_to_python(self.tags),
+            "honeypot_flagged": self.honeypot_flagged,
+            "vulns": _json_col_to_python(self.vulns),
+            "hostnames": _json_col_to_python(self.hostnames),
+            "org": self.org,
+            "isp": self.isp,
+            "os_name": self.os_name,
+            "shodan_updated": self.shodan_updated,
+            "timestamp": _iso_utc(self.timestamp),
+        }

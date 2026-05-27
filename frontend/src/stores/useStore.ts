@@ -10,6 +10,9 @@ import {
   type TimelinePoint,
   type NetworkScan,
   type SettingsResponse,
+  type PerimeterStatus,
+  type DeclaredPort,
+  type ShodanSnapshot,
   getEvents,
   getSessions,
   getHoneypots,
@@ -20,6 +23,9 @@ import {
   getDashboardTimeline,
   getNetworkScans,
   getSettings,
+  getPerimeterStatus,
+  getDeclaredPorts,
+  getShodanSnapshot,
 } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +102,17 @@ interface HoneyStore {
   settingsLoading: boolean;
   settingsError: string | null;
   fetchSettings: () => Promise<void>;
+
+  // Perimeter
+  perimeterStatus: PerimeterStatus | null;
+  perimeterStatusLoading: boolean;
+  declaredPorts: DeclaredPort[];
+  declaredPortsLoading: boolean;
+  shodanSnapshot: ShodanSnapshot | null;
+  shodanLoading: boolean;
+  fetchPerimeterStatus: () => Promise<void>;
+  fetchDeclaredPorts: () => Promise<void>;
+  fetchShodanSnapshot: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +315,41 @@ export const useStore = create<HoneyStore>((set) => ({
         settingsLoading: false,
         settingsError: err instanceof Error ? err.message : 'Failed to fetch settings',
       });
+    }
+  },
+
+  // Perimeter
+  perimeterStatus: null,
+  perimeterStatusLoading: false,
+  declaredPorts: [],
+  declaredPortsLoading: false,
+  shodanSnapshot: null,
+  shodanLoading: false,
+  fetchPerimeterStatus: async () => {
+    set({ perimeterStatusLoading: true });
+    try {
+      const data = await getPerimeterStatus();
+      set({ perimeterStatus: data, perimeterStatusLoading: false });
+    } catch {
+      set({ perimeterStatusLoading: false });
+    }
+  },
+  fetchDeclaredPorts: async () => {
+    set({ declaredPortsLoading: true });
+    try {
+      const data = await getDeclaredPorts();
+      set({ declaredPorts: data.items || [], declaredPortsLoading: false });
+    } catch {
+      set({ declaredPortsLoading: false });
+    }
+  },
+  fetchShodanSnapshot: async () => {
+    set({ shodanLoading: true });
+    try {
+      const data = await getShodanSnapshot();
+      set({ shodanSnapshot: data, shodanLoading: false });
+    } catch {
+      set({ shodanLoading: false });
     }
   },
 }));

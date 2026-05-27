@@ -64,6 +64,7 @@ def create_app(config_class=Config) -> Flask:
     from api.credentials import credentials_bp
     from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
     from api.throttle import throttle_bp
+    from api.perimeter import perimeter_bp
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -76,6 +77,7 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(credentials_bp)
     application.register_blueprint(auth_bp)
     application.register_blueprint(throttle_bp)
+    application.register_blueprint(perimeter_bp)
 
     # --- Auth middleware --------------------------------------------------
     AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
@@ -150,6 +152,7 @@ def create_app(config_class=Config) -> Flask:
     from services.honeypot_manager import HoneypotManager
     from services.alert_service import AlertService
     from services.connection_throttle import ConnectionThrottler
+    from services.perimeter import PerimeterService
 
     alert_service = AlertService(config=config_class)
     connection_throttler = ConnectionThrottler(app=application)
@@ -167,7 +170,11 @@ def create_app(config_class=Config) -> Flask:
     application.honeypot_manager = manager
     application.connection_throttler = connection_throttler
 
+    perimeter_service = PerimeterService(app=application)
+    application.perimeter_service = perimeter_service
+
     with application.app_context():
+        perimeter_service.sync_honeypot_ports()
         manager.start_all_enabled()
 
     return application
