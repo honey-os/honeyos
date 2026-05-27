@@ -154,21 +154,24 @@ class FTPHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
         session_id = None
         username = ""
         # Pending PASV listener (socket, port) or None
         pasv_sock: socket.socket | None = None
         # Pending PORT target (host, port) or None
         active_addr: tuple[str, int] | None = None
+        app_ctx = self.app.app_context() if self.app else None
+        if app_ctx:
+            app_ctx.push()
         try:
             client_sock.settimeout(120)
             client_sock.sendall(self.BANNER.encode())
 
             # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "ftp")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "ftp")
+                session_id = sess.id
 
             authenticated = False
             tls_active = False
@@ -192,11 +195,10 @@ class FTPHoneypot:
                 logger.debug("FTP %s from %s: %s", cmd, addr[0], line)
 
                 # Record command
-                if self.session_recorder and session_id and self.app:
-                    with self.app.app_context():
-                        self.session_recorder.record_command(
-                            session_id, line, datetime.now(timezone.utc)
-                        )
+                if self.session_recorder and session_id:
+                    self.session_recorder.record_command(
+                        session_id, line, datetime.now(timezone.utc)
+                    )
 
                 # --- FTP command handling --------------------------------
 
@@ -210,18 +212,17 @@ class FTPHoneypot:
                     client_sock.sendall(b"230 Login successful\r\n")
                     logger.info("FTP login  user=%s  pass=%s  from=%s", username, password, addr[0])
 
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "authentication",
-                                "protocol": "ftp",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "high",
-                                "session_id": session_id,
-                                "details": {"username": username, "password": password},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "authentication",
+                            "protocol": "ftp",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "high",
+                            "session_id": session_id,
+                            "details": {"username": username, "password": password},
+                        })
 
                 elif cmd == "SYST":
                     client_sock.sendall(b"215 UNIX Type: L8\r\n")
@@ -342,18 +343,17 @@ class FTPHoneypot:
                     else:
                         client_sock.sendall(b"425 Can't open data connection\r\n")
 
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "directory_listing",
-                                "protocol": "ftp",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "low",
-                                "session_id": session_id,
-                                "details": {"command": line},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "directory_listing",
+                            "protocol": "ftp",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "low",
+                            "session_id": session_id,
+                            "details": {"command": line},
+                        })
 
                 elif cmd in ("RETR", "STOR", "DELE", "MKD", "RMD"):
                     # File-transfer or modification attempt
@@ -370,25 +370,23 @@ class FTPHoneypot:
                         client_sock.sendall(b"550 Permission denied\r\n")
                         severity = "medium"
 
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "file_operation",
-                                "protocol": "ftp",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": severity,
-                                "session_id": session_id,
-                                "details": {"command": cmd, "argument": arg},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "file_operation",
+                            "protocol": "ftp",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": severity,
+                            "session_id": session_id,
+                            "details": {"command": cmd, "argument": arg},
+                        })
 
-                    if self.session_recorder and session_id and self.app:
+                    if self.session_recorder and session_id:
                         direction = "download" if cmd == "RETR" else "upload"
-                        with self.app.app_context():
-                            self.session_recorder.record_file_transfer(
-                                session_id, arg, direction
-                            )
+                        self.session_recorder.record_file_transfer(
+                            session_id, arg, direction
+                        )
 
                 elif cmd == "QUIT":
                     client_sock.sendall(b"221 Goodbye\r\n")
@@ -408,10 +406,12 @@ class FTPHoneypot:
                     pasv_sock.close()
                 except OSError:
                     pass
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
             try:
                 client_sock.close()
             except OSError:
                 pass
+            if app_ctx:
+                _db.session.remove()
+                app_ctx.pop()

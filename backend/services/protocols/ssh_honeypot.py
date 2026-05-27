@@ -164,8 +164,12 @@ class SSHHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
         transport = None
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             transport = paramiko.Transport(client_sock)
             transport.add_server_key(_HOST_KEY)
@@ -179,10 +183,9 @@ class SSHHoneypot:
                 return
 
             # Start a session record
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "ssh")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "ssh")
+                session_id = sess.id
 
             # Send banner
             channel.send(f"Welcome to {self.FAKE_BANNER}\r\n")
@@ -202,11 +205,10 @@ class SSHHoneypot:
                     char = chr(byte)
 
                     # Record keystroke
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_keystroke(
-                                session_id, char, datetime.now(timezone.utc)
-                            )
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_keystroke(
+                            session_id, char, datetime.now(timezone.utc)
+                        )
 
                     if char in ("\r", "\n"):
                         channel.send("\r\n")
@@ -232,39 +234,39 @@ class SSHHoneypot:
         except Exception:
             logger.exception("SSH handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
             if transport:
                 try:
                     transport.close()
                 except Exception:
                     pass
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
 
     def _execute_fake_command(self, channel, command: str, addr: tuple, session_id: str | None) -> None:
         """Process a command and send a fake response."""
         logger.info("SSH command from %s: %s", addr[0], command)
 
         # Record the command
-        if self.session_recorder and session_id and self.app:
-            with self.app.app_context():
-                self.session_recorder.record_command(
-                    session_id, command, datetime.now(timezone.utc)
-                )
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id, command, datetime.now(timezone.utc)
+            )
 
         # Log as event
-        if self.event_processor and self.app:
-            with self.app.app_context():
-                self.event_processor.process_event({
-                    "event_type": "command",
-                    "protocol": "ssh",
-                    "source_ip": addr[0],
-                    "source_port": addr[1],
-                    "destination_port": self.port,
-                    "severity": "medium",
-                    "session_id": session_id,
-                    "details": {"command": command},
-                })
+        if self.event_processor:
+            self.event_processor.process_event({
+                "event_type": "command",
+                "protocol": "ssh",
+                "source_ip": addr[0],
+                "source_port": addr[1],
+                "destination_port": self.port,
+                "severity": "medium",
+                "session_id": session_id,
+                "details": {"command": command},
+            })
 
         if command in ("exit", "quit", "logout"):
             channel.send("logout\r\n")

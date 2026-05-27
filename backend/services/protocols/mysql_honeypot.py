@@ -366,8 +366,13 @@ class MySQLHoneypot:
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple,
                        conn_id: int) -> None:
+        from models import db as _db
+
         session_id = None
         clean_exit = False
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(60)
 
@@ -387,32 +392,30 @@ class MySQLHoneypot:
             logger.info("MySQL auth  user=%s  db=%s  from=%s", username, database, addr[0])
 
             # Get or reuse session (before event so we can link the auth event)
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess, _ = self.session_recorder.get_or_start_session(addr[0], "mysql")
-                    session_id = sess.id
-                    self.session_recorder.record_command(
-                        session_id,
-                        f"AUTH user={username} db={database}",
-                        datetime.now(timezone.utc),
-                    )
+            if self.session_recorder:
+                sess, _ = self.session_recorder.get_or_start_session(addr[0], "mysql")
+                session_id = sess.id
+                self.session_recorder.record_command(
+                    session_id,
+                    f"AUTH user={username} db={database}",
+                    datetime.now(timezone.utc),
+                )
 
             # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "mysql",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "session_id": session_id,
-                        "details": {
-                            "username": username,
-                            "database": database,
-                        },
-                    })
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "mysql",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "session_id": session_id,
+                    "details": {
+                        "username": username,
+                        "database": database,
+                    },
+                })
 
             # Per-connection server status (starts with autocommit on,
             # matching the greeting packet we already sent).
@@ -444,24 +447,22 @@ class MySQLHoneypot:
                     query = cmd_data.strip()
                     logger.info("MySQL query from %s: %s", addr[0], query)
 
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_command(
-                                session_id, query, datetime.now(timezone.utc)
-                            )
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_command(
+                            session_id, query, datetime.now(timezone.utc)
+                        )
 
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "query",
-                                "protocol": "mysql",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "medium",
-                                "session_id": session_id,
-                                "details": {"query": query},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "query",
+                            "protocol": "mysql",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "medium",
+                            "session_id": session_id,
+                            "details": {"query": query},
+                        })
 
                     # Track SET AUTOCOMMIT so the status flags in the
                     # OK response reflect the new state -- bots check this.
@@ -503,9 +504,11 @@ class MySQLHoneypot:
             # Only end session on clean exit (COM_QUIT / EOF).  Scanners
             # that reset the connection leave the session active so the
             # next connection from the same IP reuses it.
-            if clean_exit and session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if clean_exit and session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
             try:
                 client_sock.close()
             except OSError:

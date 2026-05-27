@@ -279,7 +279,11 @@ class PostgreSQLHoneypot:
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple,
                        conn_id: int) -> None:
+        from models import db as _db
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(60)
 
@@ -318,27 +322,25 @@ class PostgreSQLHoneypot:
                 password = result[1].rstrip(b"\x00").decode("utf-8", errors="replace")
 
             # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "postgresql",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "details": {
-                            "username": username,
-                            "database": database,
-                            "password": password,
-                        },
-                    })
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "postgresql",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "details": {
+                        "username": username,
+                        "database": database,
+                        "password": password,
+                    },
+                })
 
             # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "postgresql")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "postgresql")
+                session_id = sess.id
 
             # Send AuthenticationOk
             client_sock.sendall(_make_msg(AUTH_REQUEST, struct.pack("!I", AUTH_OK)))
@@ -380,24 +382,22 @@ class PostgreSQLHoneypot:
                     query = payload.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
                     logger.info("PostgreSQL query from %s: %s", addr[0], query)
 
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_command(
-                                session_id, query, datetime.now(timezone.utc)
-                            )
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_command(
+                            session_id, query, datetime.now(timezone.utc)
+                        )
 
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "query",
-                                "protocol": "postgresql",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "medium",
-                                "session_id": session_id,
-                                "details": {"query": query},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "query",
+                            "protocol": "postgresql",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "medium",
+                            "session_id": session_id,
+                            "details": {"query": query},
+                        })
 
                     # Respond with the right message shape for the
                     # statement type, then signal ReadyForQuery so the
@@ -416,10 +416,12 @@ class PostgreSQLHoneypot:
         except Exception:
             logger.exception("PostgreSQL handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
             try:
                 client_sock.close()
             except OSError:
                 pass
+            if ctx:
+                _db.session.remove()
+                ctx.pop()

@@ -176,7 +176,12 @@ class TelnetHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
+
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(120)
 
@@ -188,23 +193,21 @@ class TelnetHoneypot:
             password = self._readline(client_sock, prompt="Password: ", echo=False)
 
             # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "telnet",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "details": {"username": username, "password": password},
-                    })
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "telnet",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "details": {"username": username, "password": password},
+                })
 
             # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "telnet")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "telnet")
+                session_id = sess.id
 
             client_sock.sendall(b"\r\nLogin successful.\r\n")
             prompt = f"{self.FAKE_HOSTNAME}> ".encode()
@@ -226,24 +229,22 @@ class TelnetHoneypot:
                     continue
 
                 # Record the raw line
-                if self.session_recorder and session_id and self.app:
-                    with self.app.app_context():
-                        self.session_recorder.record_command(
-                            session_id, cmd, datetime.now(timezone.utc)
-                        )
+                if self.session_recorder and session_id:
+                    self.session_recorder.record_command(
+                        session_id, cmd, datetime.now(timezone.utc)
+                    )
 
-                if self.event_processor and self.app:
-                    with self.app.app_context():
-                        self.event_processor.process_event({
-                            "event_type": "command",
-                            "protocol": "telnet",
-                            "source_ip": addr[0],
-                            "source_port": addr[1],
-                            "destination_port": self.port,
-                            "severity": "medium",
-                            "session_id": session_id,
-                            "details": {"command": cmd},
-                        })
+                if self.event_processor:
+                    self.event_processor.process_event({
+                        "event_type": "command",
+                        "protocol": "telnet",
+                        "source_ip": addr[0],
+                        "source_port": addr[1],
+                        "destination_port": self.port,
+                        "severity": "medium",
+                        "session_id": session_id,
+                        "details": {"command": cmd},
+                    })
 
                 if cmd in ("exit", "quit", "logout"):
                     client_sock.sendall(b"Goodbye.\r\n")
@@ -259,9 +260,11 @@ class TelnetHoneypot:
         except Exception:
             logger.exception("Telnet handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
             try:
                 client_sock.close()
             except OSError:
