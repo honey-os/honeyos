@@ -18,9 +18,14 @@ _THREATFOX_API_URL = "https://threatfox-api.abuse.ch/api/v1/"
 
 # Regex patterns for IOC extraction from command text
 _IP_RE = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
+_IP_PORT_RE = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)\b")
 _MD5_RE = re.compile(r"\b([a-f0-9]{32})\b", re.IGNORECASE)
 _SHA256_RE = re.compile(r"\b([a-f0-9]{64})\b", re.IGNORECASE)
-_URL_RE = re.compile(
+# Capture full URLs (including IP-based ones like http://1.2.3.4:8080/path)
+_FULL_URL_RE = re.compile(
+    r"(https?://[^\s;|&\"'`]+)",
+)
+_DOMAIN_URL_RE = re.compile(
     r"(?:https?://)"                      # scheme
     r"([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})"   # domain
     r"(?:[/\w.,@?^=%&:;~+#-]*)?",         # path/query
@@ -134,7 +139,15 @@ class ThreatFoxService:
                 if not text:
                     continue
 
-                # IPs (skip common private ranges and the session's own IP)
+                # Full URLs first (ThreatFox indexes these directly)
+                for url in _FULL_URL_RE.findall(text):
+                    _add(url)
+
+                # ip:port pairs (ThreatFox C2 format)
+                for ip_port in _IP_PORT_RE.findall(text):
+                    _add(ip_port)
+
+                # Bare IPs
                 for ip_match in _IP_RE.findall(text):
                     _add(ip_match)
 
@@ -149,7 +162,7 @@ class ThreatFoxService:
                     _add(domain)
 
                 # Domains from full URLs
-                for domain in _URL_RE.findall(text):
+                for domain in _DOMAIN_URL_RE.findall(text):
                     _add(domain)
 
         return iocs
