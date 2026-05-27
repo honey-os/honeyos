@@ -257,6 +257,8 @@ class TelnetHoneypot:
                     client_sock.sendall((response + "\r\n").encode())
                 client_sock.sendall(prompt)
 
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            logger.debug("Telnet connection lost for %s", addr[0])
         except Exception:
             logger.exception("Telnet handler error for %s", addr)
         finally:

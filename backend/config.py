@@ -23,6 +23,13 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///honeyos.db")
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # SQLite connections are cheap file handles — use NullPool to avoid the
+    # QueuePool size limit that causes timeouts under heavy bot traffic.
+    if DATABASE_URL.startswith("sqlite"):
+        from sqlalchemy.pool import NullPool
+        SQLALCHEMY_ENGINE_OPTIONS: dict = {"poolclass": NullPool}
+    else:
+        SQLALCHEMY_ENGINE_OPTIONS: dict = {}
 
     # --- Network ---
     NETWORK_INTERFACE = os.getenv("NETWORK_INTERFACE", "eth0")
