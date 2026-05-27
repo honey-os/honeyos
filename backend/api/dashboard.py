@@ -29,14 +29,16 @@ def summary():
     hours = max(1, min(hours, 720))
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    base_q = Event.query.filter(Event.timestamp >= since)
-
-    total_events = base_q.count()
-
-    # Connections per second (events in the last 60 seconds)
     rate_since = datetime.now(timezone.utc) - timedelta(seconds=60)
-    rate_count = Event.query.filter(Event.timestamp >= rate_since).count()
-    connections_per_second = round(rate_count / 60, 1)
+
+    # Single scan for total_events + connections_per_second
+    counts = db.session.query(
+        db.func.count(Event.id),
+        db.func.sum(db.case((Event.timestamp >= rate_since, 1), else_=0)),
+    ).filter(Event.timestamp >= since).first()
+
+    total_events = counts[0] or 0
+    connections_per_second = round((counts[1] or 0) / 60, 1)
     active_sessions = Session.query.filter_by(status="active").count()
     active_honeypots = Honeypot.query.filter_by(enabled=True).count()
 
@@ -134,32 +136,28 @@ def timeline():
     total_buckets = (hours * 60) // bucket_minutes
     start = current_bucket - timedelta(minutes=bucket_minutes * (total_buckets - 1))
 
-    events = (
-        Event.query
-        .filter(Event.timestamp >= start)
-        .order_by(Event.timestamp.asc())
-        .all()
-    )
-
-    # Bucket events into 10-minute slots
+    # Pre-fill empty buckets
     buckets: dict[str, int] = {}
     for i in range(total_buckets):
         bucket_time = start + timedelta(minutes=bucket_minutes * i)
         key = bucket_time.strftime("%Y-%m-%dT%H:%M:00Z")
         buckets[key] = 0
 
-    for event in events:
-        ts = event.timestamp
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        floored = ts.replace(
-            minute=(ts.minute // bucket_minutes) * bucket_minutes,
-            second=0,
-            microsecond=0,
-        )
-        key = floored.strftime("%Y-%m-%dT%H:%M:00Z")
-        if key in buckets:
-            buckets[key] += 1
+    # Aggregate in SQL — avoids loading every event row into Python
+    bucket_sql = db.text(
+        "SELECT "
+        "  strftime('%Y-%m-%dT%H:', timestamp) || "
+        "  printf('%02d:00Z', (CAST(strftime('%M', timestamp) AS INTEGER) / :bm) * :bm) "
+        "    AS bucket, "
+        "  COUNT(*) AS cnt "
+        "FROM events "
+        "WHERE timestamp >= :start "
+        "GROUP BY bucket"
+    )
+    rows = db.session.execute(bucket_sql, {"bm": bucket_minutes, "start": start}).fetchall()
+    for bucket_key, cnt in rows:
+        if bucket_key in buckets:
+            buckets[bucket_key] = cnt
 
     timeline_data = [{"timestamp": k, "count": v} for k, v in buckets.items()]
 

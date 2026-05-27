@@ -29,7 +29,7 @@ class Config:
         from sqlalchemy.pool import NullPool
         SQLALCHEMY_ENGINE_OPTIONS: dict = {
             "poolclass": NullPool,
-            "connect_args": {"timeout": 30},
+            "connect_args": {"timeout": 10},
         }
     else:
         SQLALCHEMY_ENGINE_OPTIONS: dict = {}
