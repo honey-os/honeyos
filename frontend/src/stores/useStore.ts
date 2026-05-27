@@ -63,8 +63,6 @@ interface HoneyStore {
   sessionsPages: number;
   sessionsLoading: boolean;
   sessionsError: string | null;
-  selectedSession: Session | null;
-  setSelectedSession: (session: Session | null) => void;
   fetchSessions: (params?: Record<string, unknown>) => Promise<void>;
 
   // Honeypots
@@ -186,8 +184,6 @@ export const useStore = create<HoneyStore>((set) => ({
   sessionsPages: 1,
   sessionsLoading: false,
   sessionsError: null,
-  selectedSession: null,
-  setSelectedSession: (session) => set({ selectedSession: session }),
   fetchSessions: async (params = {}) => {
     set({ sessionsLoading: true, sessionsError: null });
     try {
