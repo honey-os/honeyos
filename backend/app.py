@@ -94,6 +94,22 @@ def create_app(config_class=Config) -> Flask:
                 "message": "Authentication required",
             }), 401
 
+    # --- Read-only guard --------------------------------------------------
+    READ_ONLY_ALLOWLIST = {"/api/auth/setup", "/api/auth/login", "/api/auth/logout"}
+
+    @application.before_request
+    def check_read_only():
+        if not Config.READ_ONLY:
+            return None
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        if request.path in READ_ONLY_ALLOWLIST:
+            return None
+        return jsonify({
+            "error": "read_only",
+            "message": "This instance is in read-only mode",
+        }), 403
+
     # --- Health check -----------------------------------------------------
     @application.route("/health", methods=["GET"])
     def health():

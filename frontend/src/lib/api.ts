@@ -196,6 +196,7 @@ export interface ApiError {
 export interface AuthStatus {
   has_admin: boolean;
   authenticated: boolean;
+  read_only: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,25 +363,6 @@ export async function getHoneypots(): Promise<Honeypot[]> {
   return fetchApi<Honeypot[]>('/honeypots');
 }
 
-export async function createHoneypot(data: Partial<Honeypot>): Promise<Honeypot> {
-  return fetchApi<Honeypot>('/honeypots', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateHoneypot(id: string, data: Partial<Honeypot>): Promise<Honeypot> {
-  return fetchApi<Honeypot>(`/honeypots/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function deleteHoneypot(id: string): Promise<void> {
-  await fetchApi<void>(`/honeypots/${id}`, {
-    method: 'DELETE',
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Alerts

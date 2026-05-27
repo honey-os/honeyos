@@ -1,12 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   Server,
-  X,
-  Power,
-  PowerOff,
-  Settings,
   Terminal,
   Globe,
   Database,
@@ -16,9 +12,8 @@ import {
   Wifi,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
-import { updateHoneypot, deleteHoneypot } from '@/lib/api';
 import type { Honeypot } from '@/lib/api';
-import { formatDate, formatRelativeTime, formatNumber } from '@/utils/formatters';
+import { formatRelativeTime, formatNumber } from '@/utils/formatters';
 import clsx from 'clsx';
 
 const protocolIcons: Record<string, React.ElementType> = {
@@ -53,84 +48,9 @@ export default function HoneypotsPage() {
     fetchHoneypots,
   } = useStore();
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingHoneypot, setEditingHoneypot] = useState<Honeypot | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    protocol: 'ssh',
-    port: 2222,
-    description: '',
-    enabled: true,
-  });
-  const [saving, setSaving] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-
   useEffect(() => {
     fetchHoneypots();
   }, [fetchHoneypots]);
-
-  const handleToggle = async (honeypot: Honeypot) => {
-    setTogglingId(honeypot.id);
-    try {
-      await updateHoneypot(honeypot.id, { enabled: !honeypot.enabled });
-      await fetchHoneypots();
-    } catch (err) {
-      console.error('Failed to toggle honeypot:', err);
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  const handleDelete = async (honeypot: Honeypot) => {
-    if (!confirm(`Delete honeypot "${honeypot.name}"? This cannot be undone.`)) {
-      return;
-    }
-    try {
-      await deleteHoneypot(honeypot.id);
-      await fetchHoneypots();
-    } catch (err) {
-      console.error('Failed to delete honeypot:', err);
-    }
-  };
-
-  const openEditModal = (honeypot: Honeypot) => {
-    setEditingHoneypot(honeypot);
-    setFormData({
-      name: honeypot.name,
-      protocol: honeypot.protocol,
-      port: honeypot.port,
-      description: honeypot.description || '',
-      enabled: honeypot.enabled,
-    });
-    setShowAddModal(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      if (editingHoneypot) {
-        await updateHoneypot(editingHoneypot.id, formData);
-      }
-      await fetchHoneypots();
-      setShowAddModal(false);
-    } catch (err) {
-      console.error('Failed to save honeypot:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const defaultPorts: Record<string, number> = {
-    ssh: 2222,
-    http: 8080,
-    telnet: 2323,
-    ftp: 2121,
-    mysql: 3307,
-    smb: 4450,
-    rdp: 3390,
-    dns: 5353,
-  };
 
   return (
     <div className="space-y-6">
@@ -188,31 +108,14 @@ export default function HoneypotsPage() {
                 )}
               >
                 {/* Status indicator */}
-                <div className="absolute top-4 right-4 flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggle(honeypot)}
-                    disabled={togglingId === honeypot.id}
+                <div className="absolute top-4 right-4">
+                  <span
                     className={clsx(
-                      'p-1.5 rounded-md transition-colors',
-                      honeypot.enabled
-                        ? 'text-green-400 hover:bg-green-500/10'
-                        : 'text-gray-600 hover:bg-gray-500/10'
+                      'inline-block w-2.5 h-2.5 rounded-full',
+                      honeypot.enabled ? 'bg-green-400' : 'bg-gray-600'
                     )}
-                    title={honeypot.enabled ? 'Disable' : 'Enable'}
-                  >
-                    {honeypot.enabled ? (
-                      <Power className="w-4 h-4" />
-                    ) : (
-                      <PowerOff className="w-4 h-4" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => openEditModal(honeypot)}
-                    className="p-1.5 rounded-md text-gray-600 hover:text-gray-300 hover:bg-gray-500/10 transition-colors"
-                    title="Edit"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
+                    title={honeypot.enabled ? 'Active' : 'Disabled'}
+                  />
                 </div>
 
                 {/* Protocol icon & name */}
@@ -277,141 +180,6 @@ export default function HoneypotsPage() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Add/Edit modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="card max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-100">
-                Edit Honeypot
-              </h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label-text">Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="input-field w-full"
-                  placeholder="SSH Honeypot"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label-text">Protocol</label>
-                  <select
-                    value={formData.protocol}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        protocol: e.target.value,
-                        port:
-                          defaultPorts[e.target.value] || formData.port,
-                      })
-                    }
-                    className="select-field w-full"
-                  >
-                    {Object.keys(protocolIcons).map((p) => (
-                      <option key={p} value={p}>
-                        {p.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-text">Port</label>
-                  <input
-                    type="number"
-                    value={formData.port}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        port: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="input-field w-full"
-                    min={1}
-                    max={65535}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label-text">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  className="input-field w-full"
-                  rows={3}
-                  placeholder="Optional description..."
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.enabled}
-                    onChange={(e) =>
-                      setFormData({ ...formData, enabled: e.target.checked })
-                    }
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:bg-amber-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
-                </label>
-                <span className="text-sm text-gray-300">
-                  Enable immediately
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : 'Update'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="btn-secondary text-sm"
-                >
-                  Cancel
-                </button>
-                {editingHoneypot && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleDelete(editingHoneypot);
-                      setShowAddModal(false);
-                    }}
-                    className="btn-danger text-sm ml-auto"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
         </div>
       )}
     </div>
