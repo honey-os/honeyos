@@ -2,13 +2,25 @@
 Sessions API blueprint.
 """
 
+import json
+
 from flask import Blueprint, jsonify, request
 
+from config import Config
 from models import Session, db
 from services.session_recorder import SessionRecorder
+from services.threatfox import ThreatFoxService
 from utils.helpers import parse_json_field
 
 sessions_bp = Blueprint("sessions", __name__)
+
+
+@sessions_bp.route("/api/features", methods=["GET"])
+def get_features():
+    """Return feature flags based on available configuration."""
+    return jsonify({
+        "threatfox": bool(Config.ABUSECH_API_KEY),
+    })
 
 
 @sessions_bp.route("/api/sessions", methods=["GET"])
@@ -84,3 +96,22 @@ def replay_session(session_id: str):
         return jsonify({"error": "Session not found"}), 404
 
     return jsonify(replay)
+
+
+@sessions_bp.route("/api/sessions/<session_id>/identify-malware", methods=["POST"])
+def identify_malware(session_id: str):
+    """Query ThreatFox for IOCs extracted from the session."""
+    session = Session.query.get(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    if not Config.ABUSECH_API_KEY:
+        return jsonify({"error": "ThreatFox API key not configured"}), 503
+
+    service = ThreatFoxService(Config.ABUSECH_API_KEY)
+    result = service.analyze_session(session)
+
+    session.threat_intel = json.dumps(result)
+    db.session.commit()
+
+    return jsonify(result)

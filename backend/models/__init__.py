@@ -100,6 +100,7 @@ class Session(db.Model):
     commands = db.Column(db.Text)  # JSON
     file_transfers = db.Column(db.Text)  # JSON
     status = db.Column(db.String(16), default="active", index=True)
+    threat_intel = db.Column(db.Text)  # JSON
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +115,7 @@ class Session(db.Model):
             "commands": _json_col_to_python(self.commands),
             "file_transfers": _json_col_to_python(self.file_transfers),
             "status": self.status,
+            "threat_intel": _json_col_to_python(self.threat_intel),
         }
 
 

@@ -8,13 +8,15 @@ import {
   ArrowLeft,
   Clock,
   Hash,
+  Bug,
+  Shield,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import SessionPlayer from '@/components/shared/SessionPlayer';
 import { formatDate, formatDuration, formatRelativeTime } from '@/utils/formatters';
 import { useUrlFilters } from '@/utils/useUrlFilters';
-import { getSession } from '@/lib/api';
+import { getSession, getFeatures, identifyMalware } from '@/lib/api';
 import type { Session } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -51,6 +53,8 @@ export default function SessionsPage() {
 
   const { getParam, setParam, clearParams } = useUrlFilters();
   const [detailLoading, setDetailLoading] = useState(false);
+  const [threatfoxAvailable, setThreatfoxAvailable] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
 
   const filterProtocol = getParam('protocol');
   const filterStatus = getParam('status');
@@ -71,6 +75,12 @@ export default function SessionsPage() {
     loadSessions(1);
   }, [loadSessions]);
 
+  useEffect(() => {
+    getFeatures()
+      .then((f) => setThreatfoxAvailable(f.threatfox))
+      .catch(() => {});
+  }, []);
+
   const handleViewSession = async (session: Session) => {
     setDetailLoading(true);
     try {
@@ -83,28 +93,57 @@ export default function SessionsPage() {
     }
   };
 
+  const handleIdentifyMalware = async () => {
+    if (!selectedSession) return;
+    setIdentifying(true);
+    try {
+      const result = await identifyMalware(selectedSession.id);
+      setSelectedSession({ ...selectedSession, threat_intel: result });
+    } catch {
+      // silently fail — user sees no result
+    } finally {
+      setIdentifying(false);
+    }
+  };
+
   // ---- Session detail view ----
   if (selectedSession) {
     const sc = statusConfig[selectedSession.status] || statusConfig.completed;
 
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setSelectedSession(null)}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to sessions
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-100">
-              Session Detail
-            </h1>
-            <p className="text-sm text-gray-500 font-mono mt-1">
-              {selectedSession.id}
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSelectedSession(null)}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to sessions
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-100">
+                Session Detail
+              </h1>
+              <p className="text-sm text-gray-500 font-mono mt-1">
+                {selectedSession.id}
+              </p>
+            </div>
           </div>
+          {threatfoxAvailable && (
+            <button
+              onClick={handleIdentifyMalware}
+              disabled={identifying}
+              className="btn-secondary flex items-center gap-2 text-sm disabled:opacity-50"
+            >
+              {identifying ? (
+                <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              ) : (
+                <Bug className="w-4 h-4" />
+              )}
+              {selectedSession.threat_intel ? 'Re-analyze' : 'Identify Malware'}
+            </button>
+          )}
         </div>
 
         {/* Session info cards */}
@@ -240,6 +279,103 @@ export default function SessionsPage() {
               </div>
             </div>
           )}
+
+        {/* Threat Intelligence */}
+        {selectedSession.threat_intel && (
+          <div className="card">
+            <div className="px-5 py-4 border-b border-[#2a2a3a]">
+              <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-500" />
+                Threat Intelligence
+              </h3>
+            </div>
+            {selectedSession.threat_intel.matches.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#2a2a3a]">
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        IOC
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Malware
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Threat Type
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Confidence
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        First Seen
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Tags
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#2a2a3a]/50">
+                    {selectedSession.threat_intel.matches.map((m, idx) => (
+                      <tr key={idx} className="hover:bg-[#1c1c28]">
+                        <td className="px-5 py-3 text-sm font-mono text-amber-400">
+                          {m.reference ? (
+                            <a
+                              href={m.reference}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              {m.ioc}
+                            </a>
+                          ) : (
+                            m.ioc
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-red-400 font-medium">
+                          {m.malware}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-400">
+                          {m.threat_type}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-300">
+                          {m.confidence_level}%
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-400">
+                          {m.first_seen}
+                        </td>
+                        <td className="px-5 py-3 text-sm">
+                          <div className="flex flex-wrap gap-1">
+                            {m.tags.map((tag, ti) => (
+                              <span
+                                key={ti}
+                                className="px-1.5 py-0.5 text-xs rounded bg-gray-700/50 text-gray-400"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="px-5 py-8 text-center text-sm text-gray-500">
+                No known threats found for{' '}
+                {selectedSession.threat_intel.iocs_searched.length} IOC
+                {selectedSession.threat_intel.iocs_searched.length !== 1
+                  ? 's'
+                  : ''}{' '}
+                searched
+              </div>
+            )}
+            <div className="px-5 py-3 border-t border-[#2a2a3a] text-xs text-gray-600">
+              Analyzed {formatDate(selectedSession.threat_intel.analyzed_at)} via
+              ThreatFox (abuse.ch)
+            </div>
+          </div>
+        )}
       </div>
     );
   }

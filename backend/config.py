@@ -90,3 +90,6 @@ class Config:
 
     # --- Geolocation ---
     GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    # --- Threat Intelligence ---
+    ABUSECH_API_KEY = os.getenv("ABUSECH_API_KEY", "")

@@ -28,6 +28,22 @@ export interface Event {
   updated_at: string | null;
 }
 
+export interface ThreatIntelMatch {
+  ioc: string;
+  threat_type: string;
+  malware: string;
+  confidence_level: number;
+  first_seen: string;
+  tags: string[];
+  reference: string | null;
+}
+
+export interface ThreatIntel {
+  iocs_searched: string[];
+  matches: ThreatIntelMatch[];
+  analyzed_at: string;
+}
+
 export interface Session {
   id: string;
   source_ip: string;
@@ -40,6 +56,7 @@ export interface Session {
   commands: Array<{ timestamp: string; command: string; output?: string }> | null;
   file_transfers: Array<{ filename: string; direction: string; size: number }> | null;
   status: string;
+  threat_intel: ThreatIntel | null;
 }
 
 export interface Honeypot {
@@ -353,6 +370,16 @@ export async function getSession(id: string): Promise<Session> {
 
 export async function getSessionReplay(id: string): Promise<{ commands: Session['commands'] }> {
   return fetchApi<{ commands: Session['commands'] }>(`/sessions/${id}/replay`);
+}
+
+export async function getFeatures(): Promise<{ threatfox: boolean }> {
+  return fetchApi<{ threatfox: boolean }>('/features');
+}
+
+export async function identifyMalware(sessionId: string): Promise<ThreatIntel> {
+  return fetchApi<ThreatIntel>(`/sessions/${sessionId}/identify-malware`, {
+    method: 'POST',
+  });
 }
 
 // ---------------------------------------------------------------------------
