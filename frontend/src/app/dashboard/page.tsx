@@ -257,9 +257,10 @@ export default function DashboardPage() {
                   type="category"
                   dataKey="protocol"
                   width={64}
-                  tick={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace', textTransform: 'uppercase' } as React.CSSProperties}
+                  tick={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
                   tickLine={false}
                   axisLine={false}
+                  tickFormatter={(v: string) => v.toUpperCase()}
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.04)' }}
