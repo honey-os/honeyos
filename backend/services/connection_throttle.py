@@ -1,10 +1,16 @@
 """
 ConnectionThrottler -- per-IP, per-protocol event counting with automatic
-time-based blocking.
+time-based blocking, plus concurrent connection limiting.
 
-After THROTTLE_EVENT_THRESHOLD events from a single IP on a single protocol,
-new connections are blocked for THROTTLE_BLOCK_SECONDS.  When the block
-expires the counter resets and the IP gets a fresh budget.
+Two independent mechanisms:
+
+1. **Event throttle**: After THROTTLE_EVENT_THRESHOLD events from a single IP
+   on a single protocol, block that (IP, protocol) pair for
+   THROTTLE_BLOCK_SECONDS.
+
+2. **Connection limit**: If an IP holds >= MAX_CONNECTIONS_PER_IP concurrent
+   connections (across all protocols), refuse new connections and block the
+   IP on all active protocols for THROTTLE_BLOCK_SECONDS.
 """
 
 import logging
@@ -25,6 +31,12 @@ class ConnectionThrottler:
         self._counts: dict[tuple[str, str], int] = {}
         # (ip, protocol) -> monotonic timestamp when the block expires
         self._blocked_until: dict[tuple[str, str], float] = {}
+        # ip -> number of active (in-flight) connections
+        self._active: dict[str, int] = {}
+
+    # -----------------------------------------------------------------
+    # Event-based throttle
+    # -----------------------------------------------------------------
 
     def record_event(self, ip: str, protocol: str) -> None:
         """Increment the event counter; trigger a block at the threshold."""
@@ -67,6 +79,50 @@ class ConnectionThrottler:
 
             return True
 
+    # -----------------------------------------------------------------
+    # Concurrent connection limiting
+    # -----------------------------------------------------------------
+
+    def track_connect(self, ip: str, protocol: str) -> bool:
+        """Register a new connection.  Returns True if allowed, False if
+        the IP has reached MAX_CONNECTIONS_PER_IP and must be refused.
+
+        When the limit is hit the IP is blocked on *protocol* for
+        THROTTLE_BLOCK_SECONDS (same duration as the event throttle).
+        """
+        limit = Config.MAX_CONNECTIONS_PER_IP
+        with self._lock:
+            current = self._active.get(ip, 0)
+            if current >= limit:
+                # Trigger a time-based block on this protocol
+                key = (ip, protocol)
+                if key not in self._blocked_until:
+                    duration = Config.THROTTLE_BLOCK_SECONDS
+                    self._blocked_until[key] = time.monotonic() + duration
+                    self._counts.pop(key, None)
+                    logger.warning(
+                        "Connection limit reached: %s has %d active "
+                        "connections — blocked %s for %ds",
+                        ip, current, protocol, duration,
+                    )
+                return False
+
+            self._active[ip] = current + 1
+            return True
+
+    def track_disconnect(self, ip: str) -> None:
+        """Unregister a connection when it closes."""
+        with self._lock:
+            current = self._active.get(ip, 0)
+            if current <= 1:
+                self._active.pop(ip, None)
+            else:
+                self._active[ip] = current - 1
+
+    # -----------------------------------------------------------------
+    # Query
+    # -----------------------------------------------------------------
+
     def get_all_blocked(self) -> list[dict]:
         """Return all currently active blocks (pruning any that have expired).
 
@@ -94,3 +150,8 @@ class ConnectionThrottler:
                 self._counts.pop(key, None)
 
         return result
+
+    def get_active_connections(self) -> dict[str, int]:
+        """Return a snapshot of active connection counts per IP."""
+        with self._lock:
+            return dict(self._active)

@@ -94,7 +94,10 @@ class SMBHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
-                if self.connection_throttler and self.connection_throttler.is_blocked(addr[0], "smb"):
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "smb")
+                    or not self.connection_throttler.track_connect(addr[0], "smb")
+                ):
                     client.close()
                     continue
                 t = threading.Thread(
@@ -169,6 +172,8 @@ class SMBHoneypot:
         except Exception:
             logger.exception("SMB handler error for %s", addr)
         finally:
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
             if ctx["session_id"] and self.session_recorder:
                 self.session_recorder.end_session(ctx["session_id"])
             try:

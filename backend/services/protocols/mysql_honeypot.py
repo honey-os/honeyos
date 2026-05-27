@@ -339,7 +339,10 @@ class MySQLHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
-                if self.connection_throttler and self.connection_throttler.is_blocked(addr[0], "mysql"):
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "mysql")
+                    or not self.connection_throttler.track_connect(addr[0], "mysql")
+                ):
                     client.close()
                     continue
                 self._conn_counter += 1
@@ -505,6 +508,8 @@ class MySQLHoneypot:
         except Exception:
             logger.exception("MySQL handler error for %s", addr)
         finally:
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
             # Only end session on clean exit (COM_QUIT / EOF).  Scanners
             # that reset the connection leave the session active so the
             # next connection from the same IP reuses it.

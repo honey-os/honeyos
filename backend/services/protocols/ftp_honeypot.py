@@ -76,7 +76,10 @@ class FTPHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
-                if self.connection_throttler and self.connection_throttler.is_blocked(addr[0], "ftp"):
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "ftp")
+                    or not self.connection_throttler.track_connect(addr[0], "ftp")
+                ):
                     client.close()
                     continue
                 t = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
@@ -407,6 +410,8 @@ class FTPHoneypot:
         except Exception:
             logger.exception("FTP handler error for %s", addr)
         finally:
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
             if pasv_sock:
                 try:
                     pasv_sock.close()

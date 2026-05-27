@@ -143,7 +143,10 @@ class SSHHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
-                if self.connection_throttler and self.connection_throttler.is_blocked(addr[0], "ssh"):
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "ssh")
+                    or not self.connection_throttler.track_connect(addr[0], "ssh")
+                ):
                     client.close()
                     continue
                 t = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
@@ -240,6 +243,8 @@ class SSHHoneypot:
         except Exception:
             logger.exception("SSH handler error for %s", addr)
         finally:
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
             if session_id and self.session_recorder:
                 self.session_recorder.end_session(session_id)
             if transport:
