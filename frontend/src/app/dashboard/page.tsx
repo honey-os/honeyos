@@ -259,7 +259,7 @@ export default function DashboardPage() {
                 <YAxis
                   type="category"
                   dataKey="protocol"
-                  width={64}
+                  width={84}
                   tick={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
                   tickLine={false}
                   axisLine={false}
