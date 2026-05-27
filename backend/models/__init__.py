@@ -233,6 +233,25 @@ class SystemConfig(db.Model):
 # IPGeoCache
 # ---------------------------------------------------------------------------
 
+class ThrottleBlock(db.Model):
+    __tablename__ = "throttle_blocks"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    ip = db.Column(db.String(45), nullable=False, index=True)
+    protocol = db.Column(db.String(32), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    reason = db.Column(db.String(32), default="event_threshold")
+
+    __table_args__ = (
+        db.UniqueConstraint("ip", "protocol", name="uq_throttle_ip_protocol"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# IPGeoCache
+# ---------------------------------------------------------------------------
+
 class IPGeoCache(db.Model):
     __tablename__ = "ip_geo_cache"
 

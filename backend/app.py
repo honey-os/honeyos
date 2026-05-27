@@ -152,7 +152,7 @@ def create_app(config_class=Config) -> Flask:
     from services.connection_throttle import ConnectionThrottler
 
     alert_service = AlertService(config=config_class)
-    connection_throttler = ConnectionThrottler()
+    connection_throttler = ConnectionThrottler(app=application)
     event_processor = EventProcessor(
         alert_service=alert_service,
         connection_throttler=connection_throttler,

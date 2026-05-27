@@ -11,11 +11,16 @@ Two independent mechanisms:
 2. **Connection limit**: If an IP holds >= MAX_CONNECTIONS_PER_IP concurrent
    connections (across all protocols), refuse new connections and block the
    IP on all active protocols for THROTTLE_BLOCK_SECONDS.
+
+Blocks are persisted to the ``throttle_blocks`` SQLite table so they survive
+backend restarts.  The in-memory dict remains the hot-path for is_blocked()
+checks (no DB queries on every connection).
 """
 
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 from config import Config
 
@@ -23,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionThrottler:
-    """Thread-safe in-memory connection throttler."""
+    """Thread-safe in-memory connection throttler with DB persistence."""
 
-    def __init__(self) -> None:
+    def __init__(self, app=None) -> None:
         self._lock = threading.Lock()
         # (ip, protocol) -> event count
         self._counts: dict[tuple[str, str], int] = {}
@@ -33,6 +38,83 @@ class ConnectionThrottler:
         self._blocked_until: dict[tuple[str, str], float] = {}
         # ip -> number of active (in-flight) connections
         self._active: dict[str, int] = {}
+        self._app = app
+        if app is not None:
+            self._load_from_db()
+
+    # -----------------------------------------------------------------
+    # DB persistence helpers
+    # -----------------------------------------------------------------
+
+    def _load_from_db(self) -> None:
+        """On startup, restore active blocks from the database."""
+        with self._app.app_context():
+            from models import ThrottleBlock, db
+
+            now_utc = datetime.now(timezone.utc)
+            now_mono = time.monotonic()
+            blocks = ThrottleBlock.query.filter(
+                ThrottleBlock.expires_at > now_utc
+            ).all()
+            for b in blocks:
+                remaining = (b.expires_at - now_utc).total_seconds()
+                self._blocked_until[(b.ip, b.protocol)] = now_mono + remaining
+            # Clean up expired rows
+            ThrottleBlock.query.filter(
+                ThrottleBlock.expires_at <= now_utc
+            ).delete()
+            db.session.commit()
+            if blocks:
+                logger.info(
+                    "Loaded %d active throttle blocks from database", len(blocks)
+                )
+
+    def _persist_block(self, ip: str, protocol: str, duration: int) -> None:
+        """Upsert a throttle block row in the database."""
+        if self._app is None:
+            return
+        try:
+            with self._app.app_context():
+                from models import ThrottleBlock, db
+
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=duration)
+                existing = ThrottleBlock.query.filter_by(
+                    ip=ip, protocol=protocol
+                ).first()
+                if existing:
+                    existing.expires_at = expires_at
+                else:
+                    db.session.add(
+                        ThrottleBlock(
+                            ip=ip, protocol=protocol, expires_at=expires_at
+                        )
+                    )
+                db.session.commit()
+        except Exception:
+            logger.debug(
+                "Failed to persist throttle block for %s/%s",
+                ip,
+                protocol,
+                exc_info=True,
+            )
+
+    def _remove_block(self, ip: str, protocol: str) -> None:
+        """Delete an expired throttle block row from the database."""
+        if self._app is None:
+            return
+        try:
+            with self._app.app_context():
+                from models import ThrottleBlock, db
+
+                ThrottleBlock.query.filter_by(ip=ip, protocol=protocol).delete()
+                db.session.commit()
+        except Exception:
+            logger.debug(
+                "Failed to remove throttle block for %s/%s",
+                ip,
+                protocol,
+                exc_info=True,
+            )
 
     # -----------------------------------------------------------------
     # Event-based throttle
@@ -41,6 +123,9 @@ class ConnectionThrottler:
     def record_event(self, ip: str, protocol: str) -> None:
         """Increment the event counter; trigger a block at the threshold."""
         key = (ip, protocol)
+        persist = False
+        duration = 0
+
         with self._lock:
             # If currently blocked, nothing to count
             if key in self._blocked_until:
@@ -53,15 +138,21 @@ class ConnectionThrottler:
                 duration = Config.THROTTLE_BLOCK_SECONDS
                 self._blocked_until[key] = time.monotonic() + duration
                 self._counts.pop(key, None)
+                persist = True
                 logger.warning(
                     "Throttle triggered: %s on %s after %d events — "
                     "blocked for %ds",
                     ip, protocol, count, duration,
                 )
 
+        if persist:
+            self._persist_block(ip, protocol, duration)
+
     def is_blocked(self, ip: str, protocol: str) -> bool:
         """Return True if the IP is currently blocked on this protocol."""
         key = (ip, protocol)
+        expired = False
+
         with self._lock:
             expires = self._blocked_until.get(key)
             if expires is None:
@@ -71,13 +162,17 @@ class ConnectionThrottler:
                 # Block expired — clean up and grant a fresh budget
                 del self._blocked_until[key]
                 self._counts.pop(key, None)
+                expired = True
                 logger.info(
                     "Throttle expired: %s on %s — connections allowed again",
                     ip, protocol,
                 )
-                return False
 
-            return True
+        if expired:
+            self._remove_block(ip, protocol)
+            return False
+
+        return True
 
     # -----------------------------------------------------------------
     # Concurrent connection limiting
@@ -91,6 +186,9 @@ class ConnectionThrottler:
         THROTTLE_BLOCK_SECONDS (same duration as the event throttle).
         """
         limit = Config.MAX_CONNECTIONS_PER_IP
+        persist = False
+        duration = 0
+
         with self._lock:
             current = self._active.get(ip, 0)
             if current >= limit:
@@ -100,6 +198,7 @@ class ConnectionThrottler:
                     duration = Config.THROTTLE_BLOCK_SECONDS
                     self._blocked_until[key] = time.monotonic() + duration
                     self._counts.pop(key, None)
+                    persist = True
                     logger.warning(
                         "Connection limit reached: %s has %d active "
                         "connections — blocked %s for %ds",
@@ -108,7 +207,11 @@ class ConnectionThrottler:
                 return False
 
             self._active[ip] = current + 1
-            return True
+
+        if persist:
+            self._persist_block(ip, protocol, duration)
+
+        return True
 
     def track_disconnect(self, ip: str) -> None:
         """Unregister a connection when it closes."""
@@ -148,6 +251,9 @@ class ConnectionThrottler:
             for key in expired_keys:
                 del self._blocked_until[key]
                 self._counts.pop(key, None)
+
+        for ip, protocol in expired_keys:
+            self._remove_block(ip, protocol)
 
         return result
 
