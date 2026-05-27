@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   Filter,
@@ -14,6 +13,7 @@ import { useStore } from '@/stores/useStore';
 import SeverityBadge from '@/components/ui/SeverityBadge';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatDate, formatRelativeTime, truncateText } from '@/utils/formatters';
+import { useUrlFilters } from '@/utils/useUrlFilters';
 import { getEvent } from '@/lib/api';
 import type { Event } from '@/lib/api';
 import clsx from 'clsx';
@@ -41,26 +41,31 @@ export default function EventsPage() {
     fetchEvents,
   } = useStore();
 
-  const [filters, setFilters] = useState({
-    event_type: '',
-    protocol: '',
-    severity: '',
-    start_date: '',
-    end_date: '',
-    per_page: 25,
-  });
-
-  const searchParams = useSearchParams();
+  const { searchParams, getParam, setParam, clearParams } = useUrlFilters();
   const linkedEventId = searchParams.get('event');
   const [expandedEvent, setExpandedEvent] = useState<string | null>(linkedEventId);
   const [linkedEvent, setLinkedEvent] = useState<Event | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
+  const filterEventType = getParam('event_type');
+  const filterProtocol = getParam('protocol');
+  const filterSeverity = getParam('severity');
+  const filterStartDate = getParam('start_date');
+  const filterEndDate = getParam('end_date');
+
   const loadEvents = useCallback(
     (page: number = 1) => {
-      fetchEvents({ ...filters, page });
+      fetchEvents({
+        page,
+        per_page: 25,
+        event_type: filterEventType || undefined,
+        protocol: filterProtocol || undefined,
+        severity: filterSeverity || undefined,
+        start_date: filterStartDate || undefined,
+        end_date: filterEndDate || undefined,
+      });
     },
-    [fetchEvents, filters]
+    [fetchEvents, filterEventType, filterProtocol, filterSeverity, filterStartDate, filterEndDate]
   );
 
   useEffect(() => {
@@ -79,21 +84,14 @@ export default function EventsPage() {
   }, [linkedEventId]);
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    setParam(key, value);
   };
 
   const clearFilters = () => {
-    setFilters({
-      event_type: '',
-      protocol: '',
-      severity: '',
-      start_date: '',
-      end_date: '',
-      per_page: 25,
-    });
+    clearParams('event');
   };
 
-  const hasActiveFilters = filters.event_type || filters.protocol || filters.severity || filters.start_date || filters.end_date;
+  const hasActiveFilters = filterEventType || filterProtocol || filterSeverity || filterStartDate || filterEndDate;
 
   const handleExport = () => {
     const csv = [
@@ -170,7 +168,7 @@ export default function EventsPage() {
             <div>
               <label className="label-text">Event Type</label>
               <select
-                value={filters.event_type}
+                value={filterEventType}
                 onChange={(e) => handleFilterChange('event_type', e.target.value)}
                 className="select-field w-full"
               >
@@ -185,7 +183,7 @@ export default function EventsPage() {
             <div>
               <label className="label-text">Protocol</label>
               <select
-                value={filters.protocol}
+                value={filterProtocol}
                 onChange={(e) => handleFilterChange('protocol', e.target.value)}
                 className="select-field w-full"
               >
@@ -200,7 +198,7 @@ export default function EventsPage() {
             <div>
               <label className="label-text">Severity</label>
               <select
-                value={filters.severity}
+                value={filterSeverity}
                 onChange={(e) => handleFilterChange('severity', e.target.value)}
                 className="select-field w-full"
               >
@@ -216,7 +214,7 @@ export default function EventsPage() {
               <label className="label-text">Start Date</label>
               <input
                 type="date"
-                value={filters.start_date}
+                value={filterStartDate}
                 onChange={(e) => handleFilterChange('start_date', e.target.value)}
                 className="input-field w-full"
               />
@@ -225,7 +223,7 @@ export default function EventsPage() {
               <label className="label-text">End Date</label>
               <input
                 type="date"
-                value={filters.end_date}
+                value={filterEndDate}
                 onChange={(e) => handleFilterChange('end_date', e.target.value)}
                 className="input-field w-full"
               />

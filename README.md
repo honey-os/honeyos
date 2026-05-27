@@ -32,7 +32,7 @@ make setup    # creates .env from template
 make prod     # builds and starts everything
 ```
 
-Open `http://localhost:7777` in your browser.
+Open `https://localhost:7777` in your browser (accept the self-signed certificate warning).
 
 ### Raspberry Pi
 
@@ -40,7 +40,7 @@ Open `http://localhost:7777` in your browser.
 curl -sSL https://raw.githubusercontent.com/your-repo/honeyos/main/bin/setup-pi.sh | sudo bash
 ```
 
-Access at `http://honeyos.local:7777` after setup completes.
+Access at `https://honeyos.local:7777` after setup completes (accept the self-signed certificate warning).
 
 ## Architecture
 
@@ -127,6 +127,8 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
 | `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
+| `TLS_CERT` | `internal` | TLS certificate: `internal` (self-signed), a file path, or a domain for Let's Encrypt |
+| `TLS_KEY` | *(empty)* | TLS private key file path (used with custom certs only) |
 
 ## Default Honeypot Ports
 
@@ -198,6 +200,43 @@ npm run dev
 - **MSPs**: Add honeypot monitoring to client networks
 - **Security research**: Study attacker behavior and techniques
 
+## TLS / HTTPS
+
+The dashboard is served over HTTPS on port 7777 with a self-signed certificate by default. A Caddy reverse proxy handles TLS termination automatically.
+
+### Custom Certificates
+
+Place your cert and key in the data directory and set env vars in `.env`:
+
+```
+TLS_CERT=/data/certs/honeyos.pem
+TLS_KEY=/data/certs/honeyos.key
+```
+
+Restart HoneyOS to apply: `docker compose up -d`
+
+### Automatic Let's Encrypt
+
+If your server has a public domain and ports 80/443 available for ACME challenges, set:
+
+```
+TLS_CERT=honeyos.example.com
+```
+
+Caddy will automatically provision and renew a certificate.
+
+### Plain HTTP (no TLS)
+
+To disable TLS entirely, set in `.env`:
+
+```
+TLS_CERT=off
+```
+
+### Development Mode
+
+`make dev` bypasses Caddy entirely and serves plain HTTP on ports 7777/7778 directly.
+
 ## Troubleshooting
 
 ### Port 53 conflict (DNS honeypot)
@@ -237,4 +276,4 @@ sudo systemctl restart systemd-resolved
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+AGPL — see [LICENSE](LICENSE) for details.

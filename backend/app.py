@@ -23,7 +23,7 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from config import Config
-from models import Alert, Honeypot, SystemConfig, db
+from models import Honeypot, db
 from utils.helpers import generate_id
 
 # ---------------------------------------------------------------------------
@@ -94,6 +94,22 @@ def create_app(config_class=Config) -> Flask:
                 "message": "Authentication required",
             }), 401
 
+    # --- Read-only guard --------------------------------------------------
+    READ_ONLY_ALLOWLIST = {"/api/auth/setup", "/api/auth/login", "/api/auth/logout"}
+
+    @application.before_request
+    def check_read_only():
+        if not Config.READ_ONLY:
+            return None
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        if request.path in READ_ONLY_ALLOWLIST:
+            return None
+        return jsonify({
+            "error": "read_only",
+            "message": "This instance is in read-only mode",
+        }), 403
+
     # --- Health check -----------------------------------------------------
     @application.route("/health", methods=["GET"])
     def health():
@@ -117,8 +133,10 @@ def create_app(config_class=Config) -> Flask:
     from services.event_processor import EventProcessor
     from services.session_recorder import SessionRecorder
     from services.honeypot_manager import HoneypotManager
+    from services.alert_service import AlertService
 
-    event_processor = EventProcessor()
+    alert_service = AlertService(config=config_class)
+    event_processor = EventProcessor(alert_service=alert_service)
     session_recorder = SessionRecorder()
     manager = HoneypotManager(
         app=application,
@@ -198,7 +216,14 @@ def _seed_defaults() -> None:
                 "protocol": "dns",
                 "port": Config.DNS_HONEYPOT_PORT,
                 "description": "Fake DNS server logging reconnaissance and zone transfer attempts",
-                "config": {"domain": "corp.local"},
+                "config": {"domain": "corp.local", "version": "dnsmasq-2.90"},
+            },
+            {
+                "name": "SMB Honeypot",
+                "protocol": "smb",
+                "port": Config.SMB_HONEYPOT_PORT,
+                "description": "Fake SMB/CIFS file server capturing authentication and share access attempts",
+                "config": {"server_name": "FILESERVER", "domain": "WORKGROUP"},
             },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
@@ -208,7 +233,7 @@ def _seed_defaults() -> None:
             name=hp_data["name"],
             protocol=hp_data["protocol"],
             port=hp_data["port"],
-            enabled=True,
+            enabled=Config.HONEYPOT_ENABLED.get(hp_data["protocol"], True),
             description=hp_data["description"],
             config=json.dumps(hp_data["config"]),
             total_interactions=0,
@@ -217,29 +242,6 @@ def _seed_defaults() -> None:
     if new_honeypots:
         db.session.commit()
         logger.info("Seeded %d default honeypots", len(new_honeypots))
-
-    # Default system config entries
-    if SystemConfig.query.count() == 0:
-        settings = [
-            ("retention_days", str(Config.RETENTION_DAYS), "Days to retain events", "int"),
-            ("alert_cooldown_seconds", str(Config.ALERT_COOLDOWN_SECONDS),
-             "Minimum seconds between repeated alerts", "int"),
-            ("log_level", Config.LOG_LEVEL, "Application log level", "string"),
-            ("network_interface", Config.NETWORK_INTERFACE,
-             "Primary network interface for scanning", "string"),
-            ("geoip_enabled", str(Config.GEOIP_ENABLED).lower(),
-             "Enable GeoIP lookups for source IPs", "bool"),
-        ]
-        for key, value, description, config_type in settings:
-            sc = SystemConfig(
-                key=key,
-                value=value,
-                description=description,
-                config_type=config_type,
-            )
-            db.session.add(sc)
-        db.session.commit()
-        logger.info("Seeded %d default config entries", len(settings))
 
 
 # ---------------------------------------------------------------------------

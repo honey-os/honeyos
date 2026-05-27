@@ -9,8 +9,6 @@ import logging
 import os
 import socket
 import ssl
-import subprocess
-import tempfile
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -23,47 +21,7 @@ from services.protocols.http_honeypot import (
     _NOT_FOUND,
     _LOGIN_RESPONSE,
 )
-
-# Persistent cert directory inside the data volume
-_CERT_DIR = os.environ.get("HONEYOS_DATA_DIR", "/data")
-_CERT_FILE = os.path.join(_CERT_DIR, "honeyos-selfsigned.pem")
-_KEY_FILE = os.path.join(_CERT_DIR, "honeyos-selfsigned.key")
-
-
-def _ensure_self_signed_cert() -> tuple[str, str]:
-    """Generate a self-signed certificate if one doesn't already exist.
-    Returns (cert_path, key_path)."""
-    if os.path.isfile(_CERT_FILE) and os.path.isfile(_KEY_FILE):
-        return _CERT_FILE, _KEY_FILE
-
-    # Try the persistent data directory first, fall back to a temp dir
-    cert_dir = _CERT_DIR
-    cert_path = _CERT_FILE
-    key_path = _KEY_FILE
-    try:
-        os.makedirs(cert_dir, exist_ok=True)
-    except OSError:
-        cert_dir = tempfile.mkdtemp(prefix="honeyos-certs-")
-        cert_path = os.path.join(cert_dir, "honeyos-selfsigned.pem")
-        key_path = os.path.join(cert_dir, "honeyos-selfsigned.key")
-
-    logger.info("Generating self-signed TLS certificate for HTTPS honeypot")
-    try:
-        subprocess.run(
-            [
-                "openssl", "req", "-x509", "-newkey", "rsa:2048",
-                "-keyout", key_path, "-out", cert_path,
-                "-days", "3650", "-nodes",
-                "-subj", "/CN=localhost",
-            ],
-            check=True,
-            capture_output=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        logger.error("Failed to generate TLS cert: %s", exc)
-        raise
-
-    return cert_path, key_path
+from utils.tls import ensure_self_signed_cert
 
 
 class HTTPSHoneypot:
@@ -136,7 +94,7 @@ class HTTPSHoneypot:
                 self.wfile.write(content)
 
         try:
-            cert_path, key_path = _ensure_self_signed_cert()
+            cert_path, key_path = ensure_self_signed_cert()
 
             self._server = HTTPServer(("0.0.0.0", self.port), Handler)
 

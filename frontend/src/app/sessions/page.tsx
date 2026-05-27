@@ -13,6 +13,7 @@ import { useStore } from '@/stores/useStore';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import SessionPlayer from '@/components/shared/SessionPlayer';
 import { formatDate, formatDuration, formatRelativeTime } from '@/utils/formatters';
+import { useUrlFilters } from '@/utils/useUrlFilters';
 import { getSession } from '@/lib/api';
 import type { Session } from '@/lib/api';
 import clsx from 'clsx';
@@ -48,9 +49,11 @@ export default function SessionsPage() {
     setSelectedSession,
   } = useStore();
 
+  const { getParam, setParam, clearParams } = useUrlFilters();
   const [detailLoading, setDetailLoading] = useState(false);
-  const [filterProtocol, setFilterProtocol] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+
+  const filterProtocol = getParam('protocol');
+  const filterStatus = getParam('status');
 
   const loadSessions = useCallback(
     (page: number = 1) => {
@@ -256,11 +259,11 @@ export default function SessionsPage() {
       <div className="flex items-center gap-3">
         <select
           value={filterProtocol}
-          onChange={(e) => setFilterProtocol(e.target.value)}
+          onChange={(e) => setParam('protocol', e.target.value)}
           className="select-field text-sm"
         >
           <option value="">All protocols</option>
-          {['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb', 'rdp'].map((p) => (
+          {['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb'].map((p) => (
             <option key={p} value={p}>
               {p.toUpperCase()}
             </option>
@@ -268,7 +271,7 @@ export default function SessionsPage() {
         </select>
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={(e) => setParam('status', e.target.value)}
           className="select-field text-sm"
         >
           <option value="">All statuses</option>

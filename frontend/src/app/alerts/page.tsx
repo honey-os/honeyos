@@ -39,12 +39,29 @@ const alertTypeLabels: Record<string, string> = {
   sms: 'SMS',
 };
 
+interface AlertConditions {
+  protocol?: string;
+  severity?: string[];
+  event_type?: string;
+}
+
 interface AlertFormData {
   name: string;
   alert_type: string;
   enabled: boolean;
   config: Record<string, string>;
+  conditions: AlertConditions;
 }
+
+const protocolOptions = [
+  '', 'ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb',
+];
+
+const severityOptions = ['low', 'medium', 'high', 'critical'];
+
+const eventTypeOptions = [
+  '', 'connection', 'authentication', 'command', 'file_transfer', 'share_access', 'query', 'http_request', 'dns_query',
+];
 
 const configFieldsByType: Record<string, { key: string; label: string; placeholder: string; type?: string }[]> = {
   email: [
@@ -74,6 +91,7 @@ export default function AlertsPage() {
     alert_type: 'email',
     enabled: true,
     config: {},
+    conditions: {},
   });
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -121,15 +139,21 @@ export default function AlertsPage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const conditions: Record<string, unknown> = {};
+      if (formData.conditions.protocol) conditions.protocol = formData.conditions.protocol;
+      if (formData.conditions.severity && formData.conditions.severity.length > 0) conditions.severity = formData.conditions.severity;
+      if (formData.conditions.event_type) conditions.event_type = formData.conditions.event_type;
+
       await createAlert({
         name: formData.name,
         alert_type: formData.alert_type,
         enabled: formData.enabled,
         config: formData.config,
+        conditions,
       });
       await fetchAlerts();
       setShowAddModal(false);
-      setFormData({ name: '', alert_type: 'email', enabled: true, config: {} });
+      setFormData({ name: '', alert_type: 'email', enabled: true, config: {}, conditions: {} });
     } catch (err) {
       console.error('Failed to create alert:', err);
     } finally {
@@ -253,6 +277,52 @@ export default function AlertsPage() {
                             ))}
                         </div>
                       )}
+
+                      {/* Conditions badges */}
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {(() => {
+                          const cond = (alert.conditions || {}) as Record<string, unknown>;
+                          const hasConditions = Object.keys(cond).length > 0;
+                          if (!hasConditions) {
+                            return (
+                              <span className="text-xs text-gray-600">
+                                Matches: All events
+                              </span>
+                            );
+                          }
+                          const badges: React.ReactNode[] = [];
+                          if (cond.protocol) {
+                            badges.push(
+                              <span key="proto" className="px-2 py-0.5 rounded text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                Protocol: {String(cond.protocol).toUpperCase()}
+                              </span>
+                            );
+                          }
+                          if (cond.severity) {
+                            const sevs = Array.isArray(cond.severity) ? cond.severity : [cond.severity];
+                            badges.push(
+                              <span key="sev" className="px-2 py-0.5 rounded text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                                Severity: {sevs.join(', ')}
+                              </span>
+                            );
+                          }
+                          if (cond.event_type) {
+                            badges.push(
+                              <span key="evt" className="px-2 py-0.5 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                Event: {String(cond.event_type).replace(/_/g, ' ')}
+                              </span>
+                            );
+                          }
+                          if (cond.source_ip) {
+                            badges.push(
+                              <span key="ip" className="px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-400 border border-green-500/20">
+                                IP: {String(cond.source_ip)}
+                              </span>
+                            );
+                          }
+                          return badges;
+                        })()}
+                      </div>
 
                       {/* Test result */}
                       {tr && (
@@ -390,6 +460,101 @@ export default function AlertsPage() {
                   />
                 </div>
               ))}
+
+              {/* Conditions */}
+              <div className="border-t border-[#2a2a3a] pt-4">
+                <p className="text-sm font-medium text-gray-300 mb-3">
+                  Conditions
+                  <span className="ml-2 text-xs text-gray-600 font-normal">
+                    Leave defaults to match all events
+                  </span>
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="label-text">Protocol</label>
+                    <select
+                      value={formData.conditions.protocol || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          conditions: { ...formData.conditions, protocol: e.target.value || undefined },
+                        })
+                      }
+                      className="input-field w-full"
+                    >
+                      <option value="">All protocols</option>
+                      {protocolOptions.filter(Boolean).map((p) => (
+                        <option key={p} value={p}>
+                          {p.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="label-text">Severity</label>
+                    <div className="flex flex-wrap gap-2">
+                      {severityOptions.map((sev) => {
+                        const selected = formData.conditions.severity?.includes(sev) ?? false;
+                        return (
+                          <button
+                            key={sev}
+                            type="button"
+                            onClick={() => {
+                              const current = formData.conditions.severity || [];
+                              const next = selected
+                                ? current.filter((s) => s !== sev)
+                                : [...current, sev];
+                              setFormData({
+                                ...formData,
+                                conditions: {
+                                  ...formData.conditions,
+                                  severity: next.length > 0 ? next : undefined,
+                                },
+                              });
+                            }}
+                            className={clsx(
+                              'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                              selected
+                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                                : 'border-[#2a2a3a] text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28]'
+                            )}
+                          >
+                            {sev}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {formData.conditions.severity?.length
+                        ? `Matching: ${formData.conditions.severity.join(', ')}`
+                        : 'Matching all severities'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="label-text">Event Type</label>
+                    <select
+                      value={formData.conditions.event_type || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          conditions: { ...formData.conditions, event_type: e.target.value || undefined },
+                        })
+                      }
+                      className="input-field w-full"
+                    >
+                      <option value="">All events</option>
+                      {eventTypeOptions.filter(Boolean).map((et) => (
+                        <option key={et} value={et}>
+                          {et.replace(/_/g, ' ')}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               <div className="flex items-center gap-3">
                 <label className="relative inline-flex items-center cursor-pointer">

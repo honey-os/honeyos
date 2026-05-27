@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import {
   Users,
   Filter,
@@ -18,11 +17,12 @@ import { useStore } from '@/stores/useStore';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import SeverityBadge from '@/components/ui/SeverityBadge';
 import { formatDate, formatRelativeTime, formatNumber } from '@/utils/formatters';
+import { useUrlFilters } from '@/utils/useUrlFilters';
 import { getAttackerEvents } from '@/lib/api';
 import type { Event, Attacker } from '@/lib/api';
 import clsx from 'clsx';
 
-const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns'];
+const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb'];
 
 export default function AttackersPage() {
   const {
@@ -35,24 +35,27 @@ export default function AttackersPage() {
     fetchAttackers,
   } = useStore();
 
-  const [filters, setFilters] = useState({
-    protocol: '',
-    search: '',
-    sort_by: 'last_seen',
-    per_page: 25,
-  });
-
-  const searchParams = useSearchParams();
+  const { searchParams, getParam, setParam, clearParams } = useUrlFilters();
   const [showFilters, setShowFilters] = useState(true);
   const [expandedIP, setExpandedIP] = useState<string | null>(
     searchParams.get('ip')
   );
 
+  const filterProtocol = getParam('protocol');
+  const filterSearch = getParam('search');
+  const filterSortBy = getParam('sort_by') || 'last_seen';
+
   const loadAttackers = useCallback(
     (page: number = 1) => {
-      fetchAttackers({ ...filters, page });
+      fetchAttackers({
+        page,
+        per_page: 25,
+        protocol: filterProtocol || undefined,
+        search: filterSearch || undefined,
+        sort_by: filterSortBy,
+      });
     },
-    [fetchAttackers, filters]
+    [fetchAttackers, filterProtocol, filterSearch, filterSortBy]
   );
 
   useEffect(() => {
@@ -60,19 +63,14 @@ export default function AttackersPage() {
   }, [loadAttackers]);
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    setParam(key, value);
   };
 
   const clearFilters = () => {
-    setFilters({
-      protocol: '',
-      search: '',
-      sort_by: 'last_seen',
-      per_page: 25,
-    });
+    clearParams('ip');
   };
 
-  const hasActiveFilters = filters.protocol || filters.search;
+  const hasActiveFilters = filterProtocol || filterSearch;
 
   const handleExport = () => {
     const csv = [
@@ -151,7 +149,7 @@ export default function AttackersPage() {
             <div>
               <label className="label-text">Protocol</label>
               <select
-                value={filters.protocol}
+                value={filterProtocol}
                 onChange={(e) => handleFilterChange('protocol', e.target.value)}
                 className="select-field w-full"
               >
@@ -169,7 +167,7 @@ export default function AttackersPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
                   type="text"
-                  value={filters.search}
+                  value={filterSearch}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                   placeholder="Filter by IP address..."
                   className="input-field w-full pl-9"
@@ -179,7 +177,7 @@ export default function AttackersPage() {
             <div>
               <label className="label-text">Sort By</label>
               <select
-                value={filters.sort_by}
+                value={filterSortBy}
                 onChange={(e) => handleFilterChange('sort_by', e.target.value)}
                 className="select-field w-full"
               >

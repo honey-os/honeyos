@@ -11,14 +11,15 @@ import {
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
   Cell,
+  LabelList,
 } from 'recharts';
 import MetricsCard from '@/components/ui/MetricsCard';
 import SeverityBadge from '@/components/ui/SeverityBadge';
@@ -130,18 +131,24 @@ export default function DashboardPage() {
           value={formatNumber(summary?.total_events)}
           iconColor="text-amber-500"
         />
-        <MetricsCard
-          icon={Radio}
-          label="Active Sessions"
-          value={formatNumber(summary?.active_sessions)}
-          iconColor="text-blue-500"
-        />
-        <MetricsCard
-          icon={Server}
-          label="Active Honeypots"
-          value={formatNumber(summary?.active_honeypots)}
-          iconColor="text-green-500"
-        />
+        <Link href="/sessions?status=active">
+          <MetricsCard
+            icon={Radio}
+            label="Active Sessions"
+            value={formatNumber(summary?.active_sessions)}
+            iconColor="text-blue-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
+        <Link href="/honeypots">
+          <MetricsCard
+            icon={Server}
+            label="Active Honeypots"
+            value={formatNumber(summary?.active_honeypots)}
+            iconColor="text-green-500"
+            className="cursor-pointer hover:border-amber-500/30"
+          />
+        </Link>
         <Link href="/threat-level">
           <MetricsCard
             icon={AlertTriangle}
@@ -163,9 +170,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Timeline chart & Protocol breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Timeline */}
-        <div className="lg:col-span-2 card p-5">
+        <div className="lg:col-span-3 card p-5">
           <h3 className="text-sm font-semibold text-gray-200 mb-4">
             Event Timeline (last {timelineHours}h)
           </h3>
@@ -209,6 +216,8 @@ export default function DashboardPage() {
                     color: '#e2e8f0',
                     fontSize: '12px',
                   }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  itemStyle={{ color: '#e2e8f0' }}
                   labelFormatter={(val: string) => formatDate(val, 'MMM d, HH:mm')}
                 />
                 <Area
@@ -225,66 +234,64 @@ export default function DashboardPage() {
         </div>
 
         {/* Protocol breakdown */}
-        <div className="card p-5">
+        <div className="lg:col-span-2 card p-5">
           <h3 className="text-sm font-semibold text-gray-200 mb-4">
             Protocol Breakdown
           </h3>
           {summary?.protocol_breakdown && summary.protocol_breakdown.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={summary.protocol_breakdown}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
+            <ResponsiveContainer width="100%" height={summary.protocol_breakdown.length * 32 + 24}>
+              <BarChart
+                data={summary.protocol_breakdown}
+                layout="vertical"
+                margin={{ top: 0, right: 60, bottom: 0, left: 0 }}
+                barCategoryGap="20%"
+              >
+                <XAxis
+                  type="number"
+                  scale="log"
+                  domain={[1, 'auto']}
+                  allowDataOverflow
+                  tick={{ fill: '#6b7280', fontSize: 11, fontFamily: 'monospace' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => formatNumber(v)}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="protocol"
+                  width={84}
+                  tick={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: string) => v.toUpperCase()}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  contentStyle={{
+                    backgroundColor: '#16161f',
+                    border: '1px solid #2a2a3a',
+                    borderRadius: '8px',
+                    color: '#e2e8f0',
+                    fontSize: '12px',
+                  }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                  formatter={(value: number) => [formatNumber(value), 'Events']}
+                  labelFormatter={(label: string) => label.toUpperCase()}
+                />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {summary.protocol_breakdown.map((entry, idx) => (
+                    <Cell key={idx} fill={protocolColor(entry.protocol)} />
+                  ))}
+                  <LabelList
                     dataKey="count"
-                    nameKey="protocol"
-                    stroke="none"
-                  >
-                    {summary.protocol_breakdown.map((entry, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={protocolColor(entry.protocol)}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#16161f',
-                      border: '1px solid #2a2a3a',
-                      borderRadius: '8px',
-                      color: '#e2e8f0',
-                      fontSize: '12px',
-                    }}
+                    position="right"
+                    formatter={(v: number) => formatNumber(v)}
+                    style={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
                   />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="mt-3 space-y-2">
-                {summary.protocol_breakdown.map((item) => (
-                  <div
-                    key={item.protocol}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-sm"
-                        style={{
-                          backgroundColor: protocolColor(item.protocol),
-                        }}
-                      />
-                      <span className="text-gray-300 uppercase font-mono text-xs">
-                        {item.protocol}
-                      </span>
-                    </div>
-                    <span className="text-gray-400 font-mono text-xs">
-                      {formatNumber(item.count)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           ) : (
             <div className="h-64 flex items-center justify-center text-gray-600 text-sm">
               No protocol data

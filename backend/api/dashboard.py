@@ -18,11 +18,20 @@ def summary():
     """
     Return a high-level dashboard summary.
 
+    Query params:
+        hours  (int) default 24 -- time window for event-based metrics
+
     Response:
         total_events, active_sessions, active_honeypots, threat_level,
         top_attackers, protocol_breakdown, recent_events
     """
-    total_events = Event.query.count()
+    hours = int(request.args.get("hours", 24))
+    hours = max(1, min(hours, 720))
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    base_q = Event.query.filter(Event.timestamp >= since)
+
+    total_events = base_q.count()
     active_sessions = Session.query.filter_by(status="active").count()
     active_honeypots = Honeypot.query.filter_by(enabled=True).count()
 
@@ -33,6 +42,7 @@ def summary():
             db.func.count(Event.id).label("count"),
             db.func.max(Event.timestamp).label("last_seen"),
         )
+        .filter(Event.timestamp >= since)
         .group_by(Event.source_ip)
         .order_by(db.text("count DESC"))
         .limit(10)
@@ -62,6 +72,7 @@ def summary():
     # Protocol breakdown as array of { protocol, count }
     protocol_q = (
         db.session.query(Event.protocol, db.func.count(Event.id).label("count"))
+        .filter(Event.timestamp >= since)
         .group_by(Event.protocol)
         .all()
     )

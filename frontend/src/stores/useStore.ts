@@ -9,7 +9,7 @@ import {
   type DashboardSummary,
   type TimelinePoint,
   type NetworkScan,
-  type SystemConfigItem,
+  type SettingsResponse,
   getEvents,
   getSessions,
   getHoneypots,
@@ -19,7 +19,7 @@ import {
   getDashboardSummary,
   getDashboardTimeline,
   getNetworkScans,
-  getConfig,
+  getSettings,
 } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -93,11 +93,11 @@ interface HoneyStore {
   networkScansError: string | null;
   fetchNetworkScans: (params?: Record<string, unknown>) => Promise<void>;
 
-  // Config
-  config: SystemConfigItem[];
-  configLoading: boolean;
-  configError: string | null;
-  fetchConfig: () => Promise<void>;
+  // Settings
+  settings: SettingsResponse | null;
+  settingsLoading: boolean;
+  settingsError: string | null;
+  fetchSettings: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +250,7 @@ export const useStore = create<HoneyStore>((set) => ({
     set({ dashboardLoading: true, dashboardError: null });
     try {
       const [summary, timeline] = await Promise.all([
-        getDashboardSummary(),
+        getDashboardSummary(timelineHours),
         getDashboardTimeline(timelineHours),
       ]);
       set({
@@ -288,19 +288,19 @@ export const useStore = create<HoneyStore>((set) => ({
     }
   },
 
-  // Config
-  config: [],
-  configLoading: false,
-  configError: null,
-  fetchConfig: async () => {
-    set({ configLoading: true, configError: null });
+  // Settings
+  settings: null,
+  settingsLoading: false,
+  settingsError: null,
+  fetchSettings: async () => {
+    set({ settingsLoading: true, settingsError: null });
     try {
-      const data = await getConfig();
-      set({ config: Array.isArray(data) ? data : [], configLoading: false });
+      const data = await getSettings();
+      set({ settings: data, settingsLoading: false });
     } catch (err) {
       set({
-        configLoading: false,
-        configError: err instanceof Error ? err.message : 'Failed to fetch config',
+        settingsLoading: false,
+        settingsError: err instanceof Error ? err.message : 'Failed to fetch settings',
       });
     }
   },

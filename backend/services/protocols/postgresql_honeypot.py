@@ -79,6 +79,56 @@ def _make_empty_result(tag: str = "SELECT 0") -> bytes:
     return row_desc + cmd_complete
 
 
+# Map of statement-leading keywords to their CommandComplete tag.
+# These are statements that do NOT return a result set — the correct
+# response is just CommandComplete(<tag>) + ReadyForQuery.
+_COMMAND_TAGS: dict[str, str] = {
+    "SET":       "SET",
+    "RESET":     "RESET",
+    "BEGIN":     "BEGIN",
+    "START":     "START TRANSACTION",
+    "COMMIT":    "COMMIT",
+    "END":       "COMMIT",
+    "ROLLBACK":  "ROLLBACK",
+    "ABORT":     "ROLLBACK",
+    "DISCARD":   "DISCARD ALL",
+    "CLOSE":     "CLOSE CURSOR",
+    "DEALLOCATE": "DEALLOCATE",
+    "UNLISTEN":  "UNLISTEN",
+    "LISTEN":    "LISTEN",
+    "NOTIFY":    "NOTIFY",
+    "CREATE":    "CREATE TABLE",
+    "ALTER":     "ALTER TABLE",
+    "DROP":      "DROP TABLE",
+    "INSERT":    "INSERT 0 0",
+    "UPDATE":    "UPDATE 0",
+    "DELETE":    "DELETE 0",
+    "GRANT":     "GRANT",
+    "REVOKE":    "REVOKE",
+    "COPY":      "COPY 0",
+    "TRUNCATE":  "TRUNCATE TABLE",
+    "COMMENT":   "COMMENT",
+    "DO":        "DO",
+    "VACUUM":    "VACUUM",
+    "ANALYZE":   "ANALYZE",
+}
+
+
+def _query_response(query: str) -> bytes:
+    """Build the correct pre-ReadyForQuery response for *query*.
+
+    Statements that return rows (SELECT, SHOW, EXPLAIN, …) get an empty
+    result set.  Everything else gets a bare CommandComplete with the
+    appropriate tag — no RowDescription.
+    """
+    keyword = query.split(None, 1)[0].upper().rstrip(";") if query else ""
+    tag = _COMMAND_TAGS.get(keyword)
+    if tag is not None:
+        return _make_command_complete(tag)
+    # Default: treat as a row-returning statement.
+    return _make_empty_result()
+
+
 def _read_message(sock: socket.socket) -> tuple[str, bytes] | None:
     """Read a single tagged PostgreSQL message. Returns (tag, payload) or None."""
     tag_byte = b""
@@ -349,9 +399,11 @@ class PostgreSQLHoneypot:
                                 "details": {"query": query},
                             })
 
-                    # Return an empty result set
+                    # Respond with the right message shape for the
+                    # statement type, then signal ReadyForQuery so the
+                    # client knows it can send the next command.
                     client_sock.sendall(
-                        _make_empty_result() + _make_ready_for_query()
+                        _query_response(query) + _make_ready_for_query()
                     )
 
                 else:

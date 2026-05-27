@@ -113,10 +113,12 @@ def is_authenticated(cookie_token: str | None) -> bool:
 def auth_status():
     """Public. Returns whether an admin exists and whether the caller is
     authenticated."""
+    from config import Config
     cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
     return jsonify({
         "has_admin": has_admin(),
         "authenticated": is_authenticated(cookie_token),
+        "read_only": Config.READ_ONLY,
     })
 
 
