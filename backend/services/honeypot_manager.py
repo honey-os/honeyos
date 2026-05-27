@@ -31,10 +31,12 @@ class HoneypotManager:
         "smb": "services.protocols.smb_honeypot.SMBHoneypot",
     }
 
-    def __init__(self, app=None, event_processor=None, session_recorder=None):
+    def __init__(self, app=None, event_processor=None, session_recorder=None,
+                 connection_throttler=None):
         self.app = app
         self.event_processor = event_processor
         self.session_recorder = session_recorder
+        self.connection_throttler = connection_throttler
         # honeypot_id -> {"thread": Thread, "instance": listener, "running": bool}
         self._running: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()
@@ -69,6 +71,7 @@ class HoneypotManager:
             event_processor=self.event_processor,
             session_recorder=self.session_recorder,
             app=self.app,
+            connection_throttler=self.connection_throttler,
         )
 
         thread = threading.Thread(

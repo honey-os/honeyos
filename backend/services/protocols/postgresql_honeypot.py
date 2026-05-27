@@ -221,12 +221,13 @@ class PostgreSQLHoneypot:
     """Fake PostgreSQL server that captures authentication and query attempts."""
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
         self._conn_counter = 0
@@ -251,6 +252,9 @@ class PostgreSQLHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and self.connection_throttler.is_blocked(addr[0], "postgresql"):
+                    client.close()
+                    continue
                 self._conn_counter += 1
                 t = threading.Thread(
                     target=self._handle_client,

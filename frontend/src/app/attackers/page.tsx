@@ -12,6 +12,7 @@ import {
   ChevronUp,
   X,
   Search,
+  ShieldBan,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
@@ -254,7 +255,18 @@ export default function AttackersPage() {
                         }
                       >
                         <td className="px-4 py-3 text-sm font-mono text-amber-400">
-                          {attacker.ip}
+                          <div className="flex items-center gap-2">
+                            {attacker.ip}
+                            {attacker.throttled && attacker.throttled.length > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30"
+                                title={`Blocked on: ${attacker.throttled.map((t) => t.protocol.toUpperCase()).join(', ')}`}
+                              >
+                                <ShieldBan className="w-3 h-3" />
+                                Blocked
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
                           {attacker.country ? (
@@ -412,6 +424,24 @@ function AttackerDetails({ attacker }: { attacker: Attacker }) {
               ))}
             </div>
           </div>
+          {attacker.throttled && attacker.throttled.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-red-400 uppercase tracking-wider flex items-center gap-1">
+                <ShieldBan className="w-3 h-3" />
+                Throttled
+              </span>
+              <div className="mt-1 space-y-1">
+                {attacker.throttled.map((t) => (
+                  <div key={t.protocol} className="flex items-center gap-2 text-sm">
+                    <ProtocolBadge protocol={t.protocol} />
+                    <span className="text-gray-500">
+                      blocked for {formatThrottleExpiry(t.expires_in)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -478,4 +508,16 @@ function DetailRow({
       </p>
     </div>
   );
+}
+
+function formatThrottleExpiry(seconds: number): string {
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  if (seconds >= 60) {
+    return `${Math.floor(seconds / 60)}m`;
+  }
+  return `${seconds}s`;
 }

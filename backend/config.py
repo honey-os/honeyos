@@ -61,6 +61,10 @@ class Config:
     # --- Rate Limiting ---
     ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
 
+    # --- Connection Throttling ---
+    THROTTLE_EVENT_THRESHOLD = int(os.getenv("THROTTLE_EVENT_THRESHOLD", "5000"))
+    THROTTLE_BLOCK_SECONDS = int(os.getenv("THROTTLE_BLOCK_SECONDS", "3600"))
+
     # --- Honeypot Defaults ---
     SSH_HONEYPOT_PORT = int(os.getenv("SSH_HONEYPOT_PORT", "2222"))
     HTTP_HONEYPOT_PORT = int(os.getenv("HTTP_HONEYPOT_PORT", "8080"))

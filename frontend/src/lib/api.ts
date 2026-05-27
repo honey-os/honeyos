@@ -145,6 +145,11 @@ export interface SettingsResponse {
   system: SettingsSystem;
 }
 
+export interface ThrottleEntry {
+  protocol: string;
+  expires_in: number;
+}
+
 export interface Attacker {
   ip: string;
   event_count: number;
@@ -158,6 +163,7 @@ export interface Attacker {
   isp: string | null;
   lat: number | null;
   lon: number | null;
+  throttled: ThrottleEntry[];
 }
 
 export interface AttackerParams {

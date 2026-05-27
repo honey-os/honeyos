@@ -188,7 +188,8 @@ class DNSHoneypot:
     """
 
     def __init__(self, port: int, config: dict | None = None,
-                 event_processor=None, session_recorder=None, app=None):
+                 event_processor=None, session_recorder=None, app=None,
+                 connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor

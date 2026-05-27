@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class EventProcessor:
     """Central event ingestion pipeline."""
 
-    def __init__(self, alert_service=None):
+    def __init__(self, alert_service=None, connection_throttler=None):
         self.alert_service = alert_service
+        self.connection_throttler = connection_throttler
         self.geoip_service = GeoIPService()
 
     # -----------------------------------------------------------------
@@ -84,6 +85,10 @@ class EventProcessor:
             db.session.rollback()
             logger.exception("Failed to persist event %s", event.id)
             raise
+
+        # Record for connection throttling (after successful commit)
+        if self.connection_throttler:
+            self.connection_throttler.record_event(event.source_ip, event.protocol)
 
         logger.info(
             "Event %s persisted  type=%s  src=%s  port=%s",

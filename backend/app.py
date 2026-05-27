@@ -63,6 +63,7 @@ def create_app(config_class=Config) -> Flask:
     from api.attackers import attackers_bp
     from api.credentials import credentials_bp
     from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
+    from api.throttle import throttle_bp
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -74,6 +75,7 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(attackers_bp)
     application.register_blueprint(credentials_bp)
     application.register_blueprint(auth_bp)
+    application.register_blueprint(throttle_bp)
 
     # --- Auth middleware --------------------------------------------------
     AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
@@ -147,16 +149,23 @@ def create_app(config_class=Config) -> Flask:
     from services.session_recorder import SessionRecorder
     from services.honeypot_manager import HoneypotManager
     from services.alert_service import AlertService
+    from services.connection_throttle import ConnectionThrottler
 
     alert_service = AlertService(config=config_class)
-    event_processor = EventProcessor(alert_service=alert_service)
+    connection_throttler = ConnectionThrottler()
+    event_processor = EventProcessor(
+        alert_service=alert_service,
+        connection_throttler=connection_throttler,
+    )
     session_recorder = SessionRecorder()
     manager = HoneypotManager(
         app=application,
         event_processor=event_processor,
         session_recorder=session_recorder,
+        connection_throttler=connection_throttler,
     )
     application.honeypot_manager = manager
+    application.connection_throttler = connection_throttler
 
     with application.app_context():
         manager.start_all_enabled()

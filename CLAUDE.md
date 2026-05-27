@@ -62,6 +62,13 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - MySQL: 3307
 - PostgreSQL: 5433
 
+## Testing & Validation
+- **Backend syntax check**: `cd backend && python -c "import ast; ast.parse(open('FILE').read())"`
+- **Backend tests**: `cd backend && python -m pytest tests/ -v`
+- **Frontend**: No local `node_modules` — everything runs in Docker. Use `make dev` to build/test.
+- **Frontend type-check in Docker**: `docker compose exec frontend npx tsc --noEmit`
+- **Frontend lint in Docker**: `docker compose exec frontend npm run lint`
+
 ## Code Conventions
 - Python: type hints, snake_case, docstrings for public functions
 - TypeScript: strict mode, interfaces for API responses
