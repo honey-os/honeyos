@@ -106,6 +106,154 @@ def _build_error_packet(seq: int, code: int, message: str) -> bytes:
     return header + payload
 
 
+# ---------------------------------------------------------------------------
+# Result-set helpers  (text protocol)
+# ---------------------------------------------------------------------------
+
+def _lenenc_int(n: int) -> bytes:
+    """Encode *n* as a MySQL length-encoded integer."""
+    if n < 251:
+        return bytes([n])
+    if n < 0x10000:
+        return b"\xfc" + struct.pack("<H", n)
+    if n < 0x1000000:
+        return b"\xfd" + struct.pack("<I", n)[:3]
+    return b"\xfe" + struct.pack("<Q", n)
+
+
+def _lenenc_str(s: str) -> bytes:
+    """Encode *s* as a MySQL length-encoded string."""
+    raw = s.encode("utf-8")
+    return _lenenc_int(len(raw)) + raw
+
+
+def _build_eof_packet(seq: int, status_flags: int) -> bytes:
+    """Build a MySQL EOF packet (0xFE marker)."""
+    payload = b"\xfe\x00\x00" + struct.pack("<H", status_flags)
+    header = struct.pack("<I", len(payload))[:3] + bytes([seq])
+    return header + payload
+
+
+def _build_resultset(seq: int, columns: list[str], rows: list[list[str]],
+                     status_flags: int) -> bytes:
+    """Build a complete MySQL COM_QUERY text-protocol result set.
+
+    Packet sequence: column-count → column-defs → EOF → rows → EOF.
+    """
+    parts: list[bytes] = []
+
+    def _pkt(s: int, payload: bytes) -> bytes:
+        return struct.pack("<I", len(payload))[:3] + bytes([s]) + payload
+
+    # Column count
+    parts.append(_pkt(seq, _lenenc_int(len(columns))))
+    seq += 1
+
+    # Column definitions
+    for name in columns:
+        col = (
+            _lenenc_str("def")          # catalog
+            + _lenenc_str("")           # schema
+            + _lenenc_str("")           # virtual table
+            + _lenenc_str("")           # physical table
+            + _lenenc_str(name)         # column name
+            + _lenenc_str(name)         # org column name
+            + b"\x0c"                   # fixed-length fields length
+            + struct.pack("<H", 33)     # charset  utf8_general_ci
+            + struct.pack("<I", 256)    # column display width
+            + bytes([253])              # type  VAR_STRING
+            + struct.pack("<H", 0)      # flags
+            + bytes([0])                # decimals
+            + b"\x00\x00"              # filler
+        )
+        parts.append(_pkt(seq, col))
+        seq += 1
+
+    # EOF after column definitions
+    parts.append(_build_eof_packet(seq, status_flags))
+    seq += 1
+
+    # Row data
+    for row in rows:
+        parts.append(_pkt(seq, b"".join(_lenenc_str(v) for v in row)))
+        seq += 1
+
+    # EOF after rows
+    parts.append(_build_eof_packet(seq, status_flags))
+    return b"".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Query → result-set dispatcher
+# ---------------------------------------------------------------------------
+
+_RE_SELECT_VAR = re.compile(
+    r"^SELECT\s+@@(?:global\.|session\.)?(\w+)", re.IGNORECASE,
+)
+_RE_SELECT_DATABASE = re.compile(
+    r"^SELECT\s+DATABASE\s*\(\s*\)", re.IGNORECASE,
+)
+
+# System-variable values a real MySQL 5.7 would return.
+_SYSTEM_VARIABLES: dict[str, str] = {
+    "version": "5.7.38-log",
+    "version_comment": "MySQL Community Server (GPL)",
+    "version_compile_os": "Linux",
+    "max_allowed_packet": "67108864",
+    "character_set_server": "utf8",
+    "collation_server": "utf8_general_ci",
+    "interactive_timeout": "28800",
+    "wait_timeout": "28800",
+    "net_write_timeout": "60",
+    "max_connections": "151",
+    "lower_case_table_names": "0",
+    "hostname": "mysql-server",
+}
+
+
+def _query_resultset(query: str, seq: int, status_flags: int,
+                     database: str) -> bytes | None:
+    """Return wire bytes for queries that expect a tabular result, else *None*.
+
+    Handles the handful of probe queries bots and clients issue right after
+    authenticating.  Everything else falls through to the caller's OK packet.
+    """
+    upper = query.upper().strip().rstrip(";").strip()
+
+    # SHOW DATABASES / SHOW SCHEMAS
+    if upper in ("SHOW DATABASES", "SHOW SCHEMAS"):
+        return _build_resultset(seq, ["Database"], [
+            ["information_schema"],
+            ["mysql"],
+            ["performance_schema"],
+            ["sys"],
+        ], status_flags)
+
+    # SHOW TABLES  (return empty set -- no real tables to expose)
+    if upper.startswith("SHOW TABLES"):
+        col = "Tables_in_" + (database or "mysql")
+        return _build_resultset(seq, [col], [], status_flags)
+
+    # SELECT @@variable  (@@global.var / @@session.var / @@var)
+    m = _RE_SELECT_VAR.match(query)
+    if m:
+        var = m.group(1).lower()
+        if var == "autocommit":
+            val = "ON" if (status_flags & _SERVER_STATUS_AUTOCOMMIT) else "OFF"
+        else:
+            val = _SYSTEM_VARIABLES.get(var, "")
+        # Use the original token as the column alias, like a real server.
+        col = query.split()[1].rstrip(";")
+        return _build_resultset(seq, [col], [[val]], status_flags)
+
+    # SELECT DATABASE()
+    if _RE_SELECT_DATABASE.match(query):
+        return _build_resultset(seq, ["DATABASE()"],
+                                [[database or ""]], status_flags)
+
+    return None
+
+
 def _read_packet(sock: socket.socket) -> tuple[int, bytes] | None:
     """Read one MySQL packet.  Returns (sequence_id, payload) or None."""
     header = b""
@@ -315,7 +463,15 @@ class MySQLHoneypot:
                         else:
                             status_flags &= ~_SERVER_STATUS_AUTOCOMMIT
 
-                    client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
+                    # Queries that expect a tabular result set (SHOW, SELECT)
+                    # get a proper column/row response; everything else gets OK.
+                    resultset = _query_resultset(
+                        query, seq + 1, status_flags, database,
+                    )
+                    if resultset is not None:
+                        client_sock.sendall(resultset)
+                    else:
+                        client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
 
                 elif cmd_type == 0x02:  # COM_INIT_DB
                     client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
