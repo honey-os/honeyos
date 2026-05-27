@@ -61,6 +61,29 @@ class Config:
     DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
     SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
 
+    # --- Honeypot Enable/Disable ---
+    SSH_HONEYPOT_ENABLED = os.getenv("SSH_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    HTTP_HONEYPOT_ENABLED = os.getenv("HTTP_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    HTTPS_HONEYPOT_ENABLED = os.getenv("HTTPS_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    TELNET_HONEYPOT_ENABLED = os.getenv("TELNET_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    FTP_HONEYPOT_ENABLED = os.getenv("FTP_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    MYSQL_HONEYPOT_ENABLED = os.getenv("MYSQL_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    POSTGRESQL_HONEYPOT_ENABLED = os.getenv("POSTGRESQL_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    DNS_HONEYPOT_ENABLED = os.getenv("DNS_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    SMB_HONEYPOT_ENABLED = os.getenv("SMB_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    HONEYPOT_ENABLED: dict[str, bool] = {
+        "ssh": SSH_HONEYPOT_ENABLED,
+        "http": HTTP_HONEYPOT_ENABLED,
+        "https": HTTPS_HONEYPOT_ENABLED,
+        "telnet": TELNET_HONEYPOT_ENABLED,
+        "ftp": FTP_HONEYPOT_ENABLED,
+        "mysql": MYSQL_HONEYPOT_ENABLED,
+        "postgresql": POSTGRESQL_HONEYPOT_ENABLED,
+        "dns": DNS_HONEYPOT_ENABLED,
+        "smb": SMB_HONEYPOT_ENABLED,
+    }
+
     # --- Authentication ---
     SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "168"))
 

@@ -217,7 +217,7 @@ def _seed_defaults() -> None:
             name=hp_data["name"],
             protocol=hp_data["protocol"],
             port=hp_data["port"],
-            enabled=True,
+            enabled=Config.HONEYPOT_ENABLED.get(hp_data["protocol"], True),
             description=hp_data["description"],
             config=json.dumps(hp_data["config"]),
             total_interactions=0,

@@ -120,8 +120,13 @@ class HoneypotManager:
 
     def start_all_enabled(self) -> None:
         """Query the database for enabled honeypots and start them all."""
+        from config import Config
+
         honeypots = Honeypot.query.filter_by(enabled=True).all()
         for hp in honeypots:
+            if not Config.HONEYPOT_ENABLED.get(hp.protocol.lower(), True):
+                logger.info("Honeypot %s (%s) disabled by environment", hp.id, hp.protocol)
+                continue
             try:
                 self.start_honeypot(hp.to_dict())
             except Exception:
