@@ -27,7 +27,10 @@ class Config:
     # QueuePool size limit that causes timeouts under heavy bot traffic.
     if DATABASE_URL.startswith("sqlite"):
         from sqlalchemy.pool import NullPool
-        SQLALCHEMY_ENGINE_OPTIONS: dict = {"poolclass": NullPool}
+        SQLALCHEMY_ENGINE_OPTIONS: dict = {
+            "poolclass": NullPool,
+            "connect_args": {"timeout": 30},
+        }
     else:
         SQLALCHEMY_ENGINE_OPTIONS: dict = {}
 

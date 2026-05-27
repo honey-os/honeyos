@@ -78,7 +78,12 @@ class EventProcessor:
             honeypot.total_interactions = (honeypot.total_interactions or 0) + 1
             honeypot.last_activity = event.timestamp
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to persist event %s", event.id)
+            raise
 
         logger.info(
             "Event %s persisted  type=%s  src=%s  port=%s",

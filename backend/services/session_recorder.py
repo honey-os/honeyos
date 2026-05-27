@@ -63,7 +63,12 @@ class SessionRecorder:
             file_transfers=json.dumps([]),
         )
         db.session.add(session)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to start session for %s/%s", source_ip, protocol)
+            raise
         logger.info("Session %s started  ip=%s  proto=%s", session.id, source_ip, protocol)
         return session
 
@@ -73,27 +78,39 @@ class SessionRecorder:
         If the session recorded zero commands it is deleted instead —
         bare connections without meaningful interaction are noise.
         """
-        session = Session.query.get(session_id)
+        try:
+            session = Session.query.get(session_id)
+        except Exception:
+            db.session.rollback()
+            logger.exception("end_session: failed to query session %s", session_id)
+            return None
+
         if session is None:
             logger.warning("end_session called for unknown id %s", session_id)
             return None
 
-        if (session.commands_count or 0) == 0:
-            db.session.delete(session)
+        try:
+            if (session.commands_count or 0) == 0:
+                db.session.delete(session)
+                db.session.commit()
+                logger.debug("Session %s discarded (0 commands)", session_id)
+                return None
+
+            now = datetime.now(timezone.utc)
+            session.end_time = now
+            session.status = "completed"
+
+            start = session.start_time
+            if start and start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            session.duration_seconds = (now - start).total_seconds() if start else 0
+
             db.session.commit()
-            logger.debug("Session %s discarded (0 commands)", session_id)
+        except Exception:
+            db.session.rollback()
+            logger.exception("end_session: failed to finalize session %s", session_id)
             return None
 
-        now = datetime.now(timezone.utc)
-        session.end_time = now
-        session.status = "completed"
-
-        start = session.start_time
-        if start and start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
-        session.duration_seconds = (now - start).total_seconds() if start else 0
-
-        db.session.commit()
         logger.info("Session %s ended  duration=%.1fs", session_id, session.duration_seconds)
         return session
 
@@ -103,53 +120,68 @@ class SessionRecorder:
 
     def record_keystroke(self, session_id: str, keystroke: str, timestamp: datetime | None = None) -> bool:
         """Append a keystroke entry to the session's keystrokes JSON array."""
-        session = Session.query.get(session_id)
-        if session is None:
-            return False
+        try:
+            session = Session.query.get(session_id)
+            if session is None:
+                return False
 
-        ts = timestamp or datetime.now(timezone.utc)
-        keystrokes = parse_json_field(session.keystrokes) or []
-        keystrokes.append({
-            "key": keystroke,
-            "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
-        })
-        session.keystrokes = json.dumps(keystrokes)
-        db.session.commit()
-        return True
+            ts = timestamp or datetime.now(timezone.utc)
+            keystrokes = parse_json_field(session.keystrokes) or []
+            keystrokes.append({
+                "key": keystroke,
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
+            })
+            session.keystrokes = json.dumps(keystrokes)
+            db.session.commit()
+            return True
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to record keystroke for session %s", session_id)
+            return False
 
     def record_command(self, session_id: str, command: str, timestamp: datetime | None = None) -> bool:
         """Append a command entry and bump the counter."""
-        session = Session.query.get(session_id)
-        if session is None:
-            return False
+        try:
+            session = Session.query.get(session_id)
+            if session is None:
+                return False
 
-        ts = timestamp or datetime.now(timezone.utc)
-        commands = parse_json_field(session.commands) or []
-        commands.append({
-            "command": command,
-            "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
-        })
-        session.commands = json.dumps(commands)
-        session.commands_count = len(commands)
-        db.session.commit()
-        return True
+            ts = timestamp or datetime.now(timezone.utc)
+            commands = parse_json_field(session.commands) or []
+            commands.append({
+                "command": command,
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
+            })
+            session.commands = json.dumps(commands)
+            session.commands_count = len(commands)
+            db.session.commit()
+            return True
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to record command for session %s", session_id)
+            return False
 
     def record_file_transfer(self, session_id: str, filename: str, direction: str, size: int = 0) -> bool:
         """Record a file transfer attempt."""
-        session = Session.query.get(session_id)
-        if session is None:
-            return False
+        try:
+            session = Session.query.get(session_id)
+            if session is None:
+                return False
 
-        transfers = parse_json_field(session.file_transfers) or []
-        transfers.append({
-            "filename": filename,
-            "direction": direction,
-            "size": size,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
-        session.file_transfers = json.dumps(transfers)
-        db.session.commit()
-        return True
+            transfers = parse_json_field(session.file_transfers) or []
+            transfers.append({
+                "filename": filename,
+                "direction": direction,
+                "size": size,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            session.file_transfers = json.dumps(transfers)
+            db.session.commit()
+            return True
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to record file transfer for session %s", session_id)
+            return False
 
     # ------------------------------------------------------------------
     # Replay
