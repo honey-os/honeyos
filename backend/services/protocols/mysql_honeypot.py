@@ -8,6 +8,7 @@ simple clients and scanners.
 
 import logging
 import os
+import re
 import socket
 import struct
 import threading
@@ -61,9 +62,33 @@ def _build_greeting_packet(connection_id: int) -> bytes:
     return header + payload
 
 
-def _build_ok_packet(seq: int) -> bytes:
-    """Build a simple OK packet."""
-    payload = b"\x00\x00\x00\x02\x00\x00\x00"
+# Server status flag bits
+_SERVER_STATUS_AUTOCOMMIT = 0x0002
+
+# Pattern to detect SET AUTOCOMMIT = 0|1|ON|OFF
+_RE_SET_AUTOCOMMIT = re.compile(
+    r"^\s*SET\s+AUTOCOMMIT\s*=\s*(?P<val>0|1|ON|OFF)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _build_ok_packet(seq: int, status_flags: int = _SERVER_STATUS_AUTOCOMMIT) -> bytes:
+    """Build a MySQL OK packet.
+
+    Wire format (after the 4-byte header):
+        1 byte   0x00          OK indicator
+        lenenc   affected_rows (0)
+        lenenc   last_insert_id (0)
+        2 bytes  status_flags  (little-endian)
+        2 bytes  warnings      (0)
+    """
+    payload = (
+        b"\x00"                                 # OK indicator
+        + b"\x00"                               # affected_rows = 0 (lenenc)
+        + b"\x00"                               # last_insert_id = 0 (lenenc)
+        + struct.pack("<H", status_flags)       # server status flags
+        + b"\x00\x00"                           # warnings = 0
+    )
     header = struct.pack("<I", len(payload))[:3] + bytes([seq])
     return header + payload
 
@@ -234,8 +259,12 @@ class MySQLHoneypot:
                     sess = self.session_recorder.start_session(addr[0], "mysql")
                     session_id = sess.id
 
+            # Per-connection server status (starts with autocommit on,
+            # matching the greeting packet we already sent).
+            status_flags = _SERVER_STATUS_AUTOCOMMIT
+
             # Send OK to let the client continue
-            client_sock.sendall(_build_ok_packet(seq + 1))
+            client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
 
             # Command phase
             while not self._stop_event.is_set():
@@ -276,14 +305,23 @@ class MySQLHoneypot:
                                 "details": {"query": query},
                             })
 
-                    # Respond with an empty result set (OK packet)
-                    client_sock.sendall(_build_ok_packet(seq + 1))
+                    # Track SET AUTOCOMMIT so the status flags in the
+                    # OK response reflect the new state -- bots check this.
+                    m = _RE_SET_AUTOCOMMIT.match(query)
+                    if m:
+                        val = m.group("val").upper()
+                        if val in ("1", "ON"):
+                            status_flags |= _SERVER_STATUS_AUTOCOMMIT
+                        else:
+                            status_flags &= ~_SERVER_STATUS_AUTOCOMMIT
+
+                    client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
 
                 elif cmd_type == 0x02:  # COM_INIT_DB
-                    client_sock.sendall(_build_ok_packet(seq + 1))
+                    client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
 
                 elif cmd_type == 0x0E:  # COM_PING
-                    client_sock.sendall(_build_ok_packet(seq + 1))
+                    client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
 
                 else:
                     # Unknown command -- send error
