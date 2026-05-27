@@ -38,6 +38,67 @@ _DOMAIN_CMD_RE = re.compile(
 )
 
 
+def extract_iocs(session) -> list[str]:
+    """Pull unique IOCs from a session's source IP and commands."""
+    iocs: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: str) -> None:
+        v = value.strip()
+        if v and v not in seen:
+            seen.add(v)
+            iocs.append(v)
+
+    # Always include the source IP
+    _add(session.source_ip)
+
+    # Parse commands text
+    commands_raw = session.commands
+    if isinstance(commands_raw, str):
+        try:
+            commands_raw = json.loads(commands_raw)
+        except (json.JSONDecodeError, TypeError):
+            commands_raw = None
+
+    if isinstance(commands_raw, list):
+        for entry in commands_raw:
+            text = ""
+            if isinstance(entry, dict):
+                text = entry.get("command", "")
+            elif isinstance(entry, str):
+                text = entry
+            if not text:
+                continue
+
+            # Full URLs first (ThreatFox indexes these directly)
+            for url in _FULL_URL_RE.findall(text):
+                _add(url)
+
+            # ip:port pairs (ThreatFox C2 format)
+            for ip_port in _IP_PORT_RE.findall(text):
+                _add(ip_port)
+
+            # Bare IPs
+            for ip_match in _IP_RE.findall(text):
+                _add(ip_match)
+
+            # Hashes
+            for h in _SHA256_RE.findall(text):
+                _add(h)
+            for h in _MD5_RE.findall(text):
+                _add(h)
+
+            # Domains from wget/curl/nc commands
+            for domain in _DOMAIN_CMD_RE.findall(text):
+                _add(domain)
+
+            # Domains from full URLs
+            for domain in _DOMAIN_URL_RE.findall(text):
+                _add(domain)
+
+    return iocs
+
+
 class ThreatFoxService:
     """Query ThreatFox for known IOCs found in honeypot sessions."""
 
@@ -88,6 +149,7 @@ class ThreatFoxService:
                 "first_seen": entry.get("first_seen", ""),
                 "tags": entry.get("tags") or [],
                 "reference": entry.get("reference"),
+                "source": "threatfox",
             })
         return matches
 
@@ -96,7 +158,7 @@ class ThreatFoxService:
 
         Returns a structured result dict suitable for JSON storage.
         """
-        iocs = self._extract_iocs(session)
+        iocs = extract_iocs(session)
         logger.info("ThreatFox analyzing session %s — extracted %d IOCs: %s",
                      session.id, len(iocs), iocs)
         all_matches: list[dict] = []
@@ -113,63 +175,3 @@ class ThreatFoxService:
             "matches": all_matches,
             "analyzed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
-
-    def _extract_iocs(self, session) -> list[str]:
-        """Pull unique IOCs from a session's source IP and commands."""
-        iocs: list[str] = []
-        seen: set[str] = set()
-
-        def _add(value: str) -> None:
-            v = value.strip()
-            if v and v not in seen:
-                seen.add(v)
-                iocs.append(v)
-
-        # Always include the source IP
-        _add(session.source_ip)
-
-        # Parse commands text
-        commands_raw = session.commands
-        if isinstance(commands_raw, str):
-            try:
-                commands_raw = json.loads(commands_raw)
-            except (json.JSONDecodeError, TypeError):
-                commands_raw = None
-
-        if isinstance(commands_raw, list):
-            for entry in commands_raw:
-                text = ""
-                if isinstance(entry, dict):
-                    text = entry.get("command", "")
-                elif isinstance(entry, str):
-                    text = entry
-                if not text:
-                    continue
-
-                # Full URLs first (ThreatFox indexes these directly)
-                for url in _FULL_URL_RE.findall(text):
-                    _add(url)
-
-                # ip:port pairs (ThreatFox C2 format)
-                for ip_port in _IP_PORT_RE.findall(text):
-                    _add(ip_port)
-
-                # Bare IPs
-                for ip_match in _IP_RE.findall(text):
-                    _add(ip_match)
-
-                # Hashes
-                for h in _SHA256_RE.findall(text):
-                    _add(h)
-                for h in _MD5_RE.findall(text):
-                    _add(h)
-
-                # Domains from wget/curl/nc commands
-                for domain in _DOMAIN_CMD_RE.findall(text):
-                    _add(domain)
-
-                # Domains from full URLs
-                for domain in _DOMAIN_URL_RE.findall(text):
-                    _add(domain)
-
-        return iocs

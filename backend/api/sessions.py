@@ -3,13 +3,15 @@ Sessions API blueprint.
 """
 
 import json
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
 from config import Config
 from models import Session, db
 from services.session_recorder import SessionRecorder
-from services.threatfox import ThreatFoxService
+from services.threatfox import ThreatFoxService, extract_iocs
+from services.urlhaus import UrlhausService
 from utils.helpers import parse_json_field
 
 sessions_bp = Blueprint("sessions", __name__)
@@ -100,16 +102,29 @@ def replay_session(session_id: str):
 
 @sessions_bp.route("/api/sessions/<session_id>/identify-malware", methods=["POST"])
 def identify_malware(session_id: str):
-    """Query ThreatFox for IOCs extracted from the session."""
+    """Query ThreatFox and URLhaus for IOCs extracted from the session."""
     session = Session.query.get(session_id)
     if not session:
         return jsonify({"error": "Session not found"}), 404
 
     if not Config.ABUSECH_API_KEY:
-        return jsonify({"error": "ThreatFox API key not configured"}), 503
+        return jsonify({"error": "abuse.ch API key not configured"}), 503
 
-    service = ThreatFoxService(Config.ABUSECH_API_KEY)
-    result = service.analyze_session(session)
+    iocs = extract_iocs(session)
+
+    threatfox = ThreatFoxService(Config.ABUSECH_API_KEY)
+    urlhaus = UrlhausService(Config.ABUSECH_API_KEY)
+
+    all_matches: list[dict] = []
+    for ioc in iocs:
+        all_matches.extend(threatfox.search_ioc(ioc))
+    all_matches.extend(urlhaus.analyze_iocs(iocs))
+
+    result = {
+        "iocs_searched": iocs,
+        "matches": all_matches,
+        "analyzed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
 
     session.threat_intel = json.dumps(result)
     db.session.commit()

@@ -36,6 +36,7 @@ export interface ThreatIntelMatch {
   first_seen: string;
   tags: string[];
   reference: string | null;
+  source: string;
 }
 
 export interface ThreatIntel {

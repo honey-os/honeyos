@@ -298,6 +298,9 @@ export default function SessionsPage() {
                         IOC
                       </th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Source
+                      </th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Malware
                       </th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -331,6 +334,18 @@ export default function SessionsPage() {
                             m.ioc
                           )}
                         </td>
+                        <td className="px-5 py-3 text-sm">
+                          <span
+                            className={clsx(
+                              'inline-flex px-2 py-0.5 rounded-full text-xs font-medium',
+                              m.source === 'urlhaus'
+                                ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            )}
+                          >
+                            {m.source === 'urlhaus' ? 'URLhaus' : 'ThreatFox'}
+                          </span>
+                        </td>
                         <td className="px-5 py-3 text-sm text-red-400 font-medium">
                           {m.malware}
                         </td>
@@ -338,7 +353,7 @@ export default function SessionsPage() {
                           {m.threat_type}
                         </td>
                         <td className="px-5 py-3 text-sm text-gray-300">
-                          {m.confidence_level}%
+                          {m.confidence_level > 0 ? `${m.confidence_level}%` : '\u2014'}
                         </td>
                         <td className="px-5 py-3 text-sm text-gray-400">
                           {m.first_seen}
@@ -372,7 +387,7 @@ export default function SessionsPage() {
             )}
             <div className="px-5 py-3 border-t border-[#2a2a3a] text-xs text-gray-600">
               Analyzed {formatDate(selectedSession.threat_intel.analyzed_at)} via
-              ThreatFox (abuse.ch)
+              abuse.ch (ThreatFox + URLhaus)
             </div>
           </div>
         )}
