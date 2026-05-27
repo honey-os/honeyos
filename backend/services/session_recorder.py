@@ -4,7 +4,7 @@ SessionRecorder -- manages interactive session lifecycle and replay data.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from models import Session, db
 from utils.helpers import generate_id, parse_json_field
@@ -18,6 +18,36 @@ class SessionRecorder:
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
+
+    def get_or_start_session(
+        self, source_ip: str, protocol: str, max_idle_seconds: float = 300,
+    ) -> tuple[Session, bool]:
+        """Return an existing active session or create a new one.
+
+        Returns ``(session, created)`` where *created* is True when a fresh
+        session was started.  Active sessions older than *max_idle_seconds*
+        are considered stale and will be ended before a new one is created.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_idle_seconds)
+        session = (
+            Session.query.filter(
+                Session.source_ip == source_ip,
+                Session.protocol == protocol,
+                Session.status == "active",
+            )
+            .order_by(Session.start_time.desc())
+            .first()
+        )
+        if session:
+            start = session.start_time
+            if start and start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if start and start >= cutoff:
+                return session, False
+            # Stale — close it out and fall through to create a new one
+            self.end_session(session.id)
+
+        return self.start_session(source_ip, protocol), True
 
     def start_session(self, source_ip: str, protocol: str) -> Session:
         """Create and persist a new active session."""

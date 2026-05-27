@@ -367,6 +367,7 @@ class MySQLHoneypot:
     def _handle_client(self, client_sock: socket.socket, addr: tuple,
                        conn_id: int) -> None:
         session_id = None
+        clean_exit = False
         try:
             client_sock.settimeout(60)
 
@@ -385,6 +386,17 @@ class MySQLHoneypot:
 
             logger.info("MySQL auth  user=%s  db=%s  from=%s", username, database, addr[0])
 
+            # Get or reuse session (before event so we can link the auth event)
+            if self.session_recorder and self.app:
+                with self.app.app_context():
+                    sess, _ = self.session_recorder.get_or_start_session(addr[0], "mysql")
+                    session_id = sess.id
+                    self.session_recorder.record_command(
+                        session_id,
+                        f"AUTH user={username} db={database}",
+                        datetime.now(timezone.utc),
+                    )
+
             # Log credential attempt
             if self.event_processor and self.app:
                 with self.app.app_context():
@@ -395,17 +407,12 @@ class MySQLHoneypot:
                         "source_port": addr[1],
                         "destination_port": self.port,
                         "severity": "high",
+                        "session_id": session_id,
                         "details": {
                             "username": username,
                             "database": database,
                         },
                     })
-
-            # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "mysql")
-                    session_id = sess.id
 
             # Per-connection server status (starts with autocommit on,
             # matching the greeting packet we already sent).
@@ -418,16 +425,19 @@ class MySQLHoneypot:
             while not self._stop_event.is_set():
                 result = _read_packet(client_sock)
                 if result is None:
+                    clean_exit = True
                     break
                 seq, payload = result
 
                 if not payload:
+                    clean_exit = True
                     break
 
                 cmd_type = payload[0]
                 cmd_data = payload[1:].decode("utf-8", errors="replace")
 
                 if cmd_type == 0x01:  # COM_QUIT
+                    clean_exit = True
                     break
 
                 if cmd_type == 0x03:  # COM_QUERY
@@ -485,10 +495,15 @@ class MySQLHoneypot:
                         _build_error_packet(seq + 1, 1047, "Unknown command")
                     )
 
+        except ConnectionResetError:
+            logger.debug("MySQL connection reset by %s (expected for scanners)", addr[0])
         except Exception:
             logger.exception("MySQL handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
+            # Only end session on clean exit (COM_QUIT / EOF).  Scanners
+            # that reset the connection leave the session active so the
+            # next connection from the same IP reuses it.
+            if clean_exit and session_id and self.session_recorder and self.app:
                 with self.app.app_context():
                     self.session_recorder.end_session(session_id)
             try:
