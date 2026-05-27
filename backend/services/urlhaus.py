@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://urlhaus-api.abuse.ch/v1"
 
+# Tags that describe architecture/format rather than malware families.
+# Used to skip past them when selecting a malware name from the tags list.
+_NON_MALWARE_TAGS = frozenset({
+    "32-bit", "64-bit", "arm", "arm5", "arm6", "arm7",
+    "mips", "mipsel", "x86", "x86_64", "aarch64",
+    "elf", "exe", "dll", "doc", "apk", "jar",
+    "js", "vbs", "ps1", "bat", "sh", "py", "php",
+})
+
+
+def _malware_from_tags(tags: list[str]) -> str:
+    """Return the first tag that looks like a malware family name."""
+    for tag in tags:
+        if tag.lower() not in _NON_MALWARE_TAGS:
+            return tag
+    return tags[0] if tags else ""
+
 
 def _classify_ioc(ioc: str) -> tuple[str, str]:
     """Classify an IOC and return (endpoint_path, form_data_key).
@@ -94,7 +111,15 @@ class UrlhausService:
             matches = self._query(endpoint, form_data, ioc)
             all_matches.extend(matches)
 
-        return all_matches
+        # Deduplicate by IOC value — URL endpoint results (first) take
+        # priority over host endpoint results that return the same URL.
+        seen_iocs: set[str] = set()
+        unique: list[dict] = []
+        for m in all_matches:
+            if m["ioc"] not in seen_iocs:
+                seen_iocs.add(m["ioc"])
+                unique.append(m)
+        return unique
 
     def _query(self, endpoint: str, form_data: dict, original_ioc: str) -> list[dict]:
         """Execute a single URLhaus API query and normalize results."""
@@ -144,7 +169,7 @@ class UrlhausService:
                     malware = sig
                     break
         if not malware and tags:
-            malware = tags[0]
+            malware = _malware_from_tags(tags)
 
         return [{
             "ioc": ioc,
@@ -170,9 +195,7 @@ class UrlhausService:
             if isinstance(tags, str):
                 tags = [t.strip() for t in tags.split(",") if t.strip()]
 
-            malware = ""
-            if tags:
-                malware = tags[0]
+            malware = _malware_from_tags(tags) if tags else ""
 
             matches.append({
                 "ioc": url_entry.get("url", ioc),
