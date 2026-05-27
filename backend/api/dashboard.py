@@ -32,6 +32,11 @@ def summary():
     base_q = Event.query.filter(Event.timestamp >= since)
 
     total_events = base_q.count()
+
+    # Connections per second (events in the last 60 seconds)
+    rate_since = datetime.now(timezone.utc) - timedelta(seconds=60)
+    rate_count = Event.query.filter(Event.timestamp >= rate_since).count()
+    connections_per_second = round(rate_count / 60, 1)
     active_sessions = Session.query.filter_by(status="active").count()
     active_honeypots = Honeypot.query.filter_by(enabled=True).count()
 
@@ -94,6 +99,7 @@ def summary():
     threat_info = processor.get_threat_level()
 
     return jsonify({
+        "connections_per_second": connections_per_second,
         "total_events": total_events,
         "active_sessions": active_sessions,
         "active_honeypots": active_honeypots,

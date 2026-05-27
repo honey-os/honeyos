@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Zap,
   Activity,
   Radio,
   Server,
@@ -124,7 +125,13 @@ export default function DashboardPage() {
       )}
 
       {/* Metrics cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <MetricsCard
+          icon={Zap}
+          label="Conn/sec"
+          value={summary?.connections_per_second?.toFixed(1) ?? '0'}
+          iconColor="text-purple-500"
+        />
         <MetricsCard
           icon={Activity}
           label="Total Events"

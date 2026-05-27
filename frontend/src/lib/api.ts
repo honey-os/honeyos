@@ -104,6 +104,7 @@ export interface ThreatLevel {
 }
 
 export interface DashboardSummary {
+  connections_per_second: number;
   total_events: number;
   active_sessions: number;
   active_honeypots: number;
@@ -495,8 +496,14 @@ export async function authSetup(password: string): Promise<void> {
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Setup failed');
+    let message = 'Setup failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
 }
 
@@ -509,8 +516,14 @@ export async function authLogin(password: string): Promise<void> {
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Login failed');
+    let message = 'Login failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
 }
 
@@ -534,7 +547,13 @@ export async function authChangePassword(
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Password change failed');
+    let message = 'Password change failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
 }
