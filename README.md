@@ -276,4 +276,4 @@ sudo systemctl restart systemd-resolved
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+AGPL — see [LICENSE](LICENSE) for details.

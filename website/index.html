@@ -130,6 +130,8 @@
       border-color: rgba(245, 158, 11, 0.3);
     }
   </style>
+  <script>window.statsmatic=window.statsmatic||function(){(statsmatic.q=statsmatic.q||[]).push(arguments)};</script>
+  <script defer data-site="sm_kx4uqm97n4zh" src="https://cdn.statsmatic.io/sm.js"></script>
 </head>
 <body class="bg-[#0a0a0f] text-gray-200 font-sans antialiased">
   <div class="min-h-screen bg-grid relative">
@@ -330,13 +332,13 @@
               <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">HTTP</span></td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-300">80</td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8080</td>
-              <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Apache</td>
             </tr>
             <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
               <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">HTTPS</span></td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-300">443</td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">8443</td>
-              <td class="px-6 py-3.5 text-sm text-gray-400">Apache admin portal (TLS)</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Apache (TLS)</td>
             </tr>
             <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
               <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">Telnet</span></td>
@@ -356,11 +358,29 @@
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">3307</td>
               <td class="px-6 py-3.5 text-sm text-gray-400">MySQL 8.0 database</td>
             </tr>
-            <tr class="hover:bg-[#1c1c28]/50 transition-colors">
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
               <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">PostgreSQL</span></td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-300">5432</td>
               <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">5433</td>
               <td class="px-6 py-3.5 text-sm text-gray-400">PostgreSQL 14.5 database</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">SMB</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">445</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">4450</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Windows file share</td>
+            </tr>
+            <tr class="border-b border-[#2a2a3a]/50 hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">RDP</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">3389</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">3390</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">Windows remote desktop</td>
+            </tr>
+            <tr class="hover:bg-[#1c1c28]/50 transition-colors">
+              <td class="px-6 py-3.5"><span class="font-mono text-sm font-medium text-amber-400">DNS</span></td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-300">53</td>
+              <td class="px-6 py-3.5 font-mono text-sm text-gray-500 hidden sm:table-cell">5354</td>
+              <td class="px-6 py-3.5 text-sm text-gray-400">DNS resolver</td>
             </tr>
           </tbody>
         </table>
@@ -423,31 +443,6 @@
       </div>
     </section>
 
-    <!-- Use Cases -->
-    <section class="relative z-10 max-w-6xl mx-auto px-6 py-24">
-      <div class="text-center mb-12">
-        <h2 class="text-3xl font-bold text-gray-100 mb-3">Built for</h2>
-      </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
-        <div class="card p-5 text-center">
-          <h3 class="text-sm font-semibold text-amber-400 mb-1">Home Labs</h3>
-          <p class="text-xs text-gray-500 leading-relaxed">Detect compromised IoT devices and malware</p>
-        </div>
-        <div class="card p-5 text-center">
-          <h3 class="text-sm font-semibold text-amber-400 mb-1">Small Business</h3>
-          <p class="text-xs text-gray-500 leading-relaxed">Internal threat detection without enterprise costs</p>
-        </div>
-        <div class="card p-5 text-center">
-          <h3 class="text-sm font-semibold text-amber-400 mb-1">Schools</h3>
-          <p class="text-xs text-gray-500 leading-relaxed">Catch unauthorized network activity</p>
-        </div>
-        <div class="card p-5 text-center">
-          <h3 class="text-sm font-semibold text-amber-400 mb-1">MSPs</h3>
-          <p class="text-xs text-gray-500 leading-relaxed">Add honeypot monitoring to client networks</p>
-        </div>
-      </div>
-    </section>
-
     <!-- CTA -->
     <section class="relative z-10 max-w-6xl mx-auto px-6 pb-24">
       <div class="card p-12 text-center glow-amber" style="border-color: rgba(245, 158, 11, 0.2);">
@@ -478,7 +473,7 @@
         </div>
         <div class="flex items-center gap-6 text-sm text-gray-600">
           <a href="https://github.com/honey-os/honeyos" target="_blank" rel="noopener noreferrer" class="hover:text-gray-400 transition-colors">GitHub</a>
-          <span>MIT License</span>
+          <span>AGPL License</span>
         </div>
       </div>
     </footer>
