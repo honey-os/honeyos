@@ -19,6 +19,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from 'recharts';
 import MetricsCard from '@/components/ui/MetricsCard';
 import SeverityBadge from '@/components/ui/SeverityBadge';
@@ -169,9 +170,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Timeline chart & Protocol breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Timeline */}
-        <div className="lg:col-span-2 card p-5">
+        <div className="lg:col-span-3 card p-5">
           <h3 className="text-sm font-semibold text-gray-200 mb-4">
             Event Timeline (last {timelineHours}h)
           </h3>
@@ -215,6 +216,8 @@ export default function DashboardPage() {
                     color: '#e2e8f0',
                     fontSize: '12px',
                   }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  itemStyle={{ color: '#e2e8f0' }}
                   labelFormatter={(val: string) => formatDate(val, 'MMM d, HH:mm')}
                 />
                 <Area
@@ -231,7 +234,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Protocol breakdown */}
-        <div className="card p-5">
+        <div className="lg:col-span-2 card p-5">
           <h3 className="text-sm font-semibold text-gray-200 mb-4">
             Protocol Breakdown
           </h3>
@@ -240,7 +243,7 @@ export default function DashboardPage() {
               <BarChart
                 data={summary.protocol_breakdown}
                 layout="vertical"
-                margin={{ top: 0, right: 4, bottom: 0, left: 0 }}
+                margin={{ top: 0, right: 60, bottom: 0, left: 0 }}
                 barCategoryGap="20%"
               >
                 <XAxis
@@ -271,6 +274,8 @@ export default function DashboardPage() {
                     color: '#e2e8f0',
                     fontSize: '12px',
                   }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  itemStyle={{ color: '#e2e8f0' }}
                   formatter={(value: number) => [formatNumber(value), 'Events']}
                   labelFormatter={(label: string) => label.toUpperCase()}
                 />
@@ -278,6 +283,12 @@ export default function DashboardPage() {
                   {summary.protocol_breakdown.map((entry, idx) => (
                     <Cell key={idx} fill={protocolColor(entry.protocol)} />
                   ))}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(v: number) => formatNumber(v)}
+                    style={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
