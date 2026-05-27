@@ -47,26 +47,73 @@ class ConnectionThrottler:
     # -----------------------------------------------------------------
 
     def _load_from_db(self) -> None:
-        """On startup, restore active blocks from the database."""
+        """On startup, restore active blocks from the database and create
+        blocks for any (IP, protocol) pairs whose recent event volume already
+        exceeds the threshold."""
         with self._app.app_context():
-            from models import ThrottleBlock, db
+            from models import Event, ThrottleBlock, db
 
             now_utc = datetime.now(timezone.utc)
             now_mono = time.monotonic()
+
+            # --- 1. Restore persisted blocks that haven't expired ----------
             blocks = ThrottleBlock.query.filter(
                 ThrottleBlock.expires_at > now_utc
             ).all()
             for b in blocks:
                 remaining = (b.expires_at - now_utc).total_seconds()
                 self._blocked_until[(b.ip, b.protocol)] = now_mono + remaining
+
             # Clean up expired rows
             ThrottleBlock.query.filter(
                 ThrottleBlock.expires_at <= now_utc
             ).delete()
             db.session.commit()
+
             if blocks:
                 logger.info(
-                    "Loaded %d active throttle blocks from database", len(blocks)
+                    "Restored %d active throttle blocks from database",
+                    len(blocks),
+                )
+
+            # --- 2. Scan recent events for IPs already over threshold ------
+            # This catches attackers whose blocks were lost before DB
+            # persistence was in place (e.g. first deployment, or blocks
+            # created by the old in-memory-only code).
+            threshold = Config.THROTTLE_EVENT_THRESHOLD
+            duration = Config.THROTTLE_BLOCK_SECONDS
+            cutoff = now_utc - timedelta(seconds=duration)
+
+            high_volume = (
+                db.session.query(
+                    Event.source_ip,
+                    Event.protocol,
+                    db.func.count(Event.id),
+                )
+                .filter(Event.timestamp >= cutoff)
+                .group_by(Event.source_ip, Event.protocol)
+                .having(db.func.count(Event.id) >= threshold)
+                .all()
+            )
+
+            new_blocks = 0
+            for ip, protocol, _count in high_volume:
+                key = (ip, protocol)
+                if key not in self._blocked_until:
+                    self._blocked_until[key] = now_mono + duration
+                    expires_at = now_utc + timedelta(seconds=duration)
+                    db.session.add(
+                        ThrottleBlock(
+                            ip=ip, protocol=protocol, expires_at=expires_at
+                        )
+                    )
+                    new_blocks += 1
+
+            if new_blocks:
+                db.session.commit()
+                logger.info(
+                    "Created %d throttle blocks from recent event history",
+                    new_blocks,
                 )
 
     def _persist_block(self, ip: str, protocol: str, duration: int) -> None:
@@ -188,6 +235,7 @@ class ConnectionThrottler:
         limit = Config.MAX_CONNECTIONS_PER_IP
         persist = False
         duration = 0
+        allowed = True
 
         with self._lock:
             current = self._active.get(ip, 0)
@@ -204,14 +252,14 @@ class ConnectionThrottler:
                         "connections — blocked %s for %ds",
                         ip, current, protocol, duration,
                     )
-                return False
-
-            self._active[ip] = current + 1
+                allowed = False
+            else:
+                self._active[ip] = current + 1
 
         if persist:
             self._persist_block(ip, protocol, duration)
 
-        return True
+        return allowed
 
     def track_disconnect(self, ip: str) -> None:
         """Unregister a connection when it closes."""

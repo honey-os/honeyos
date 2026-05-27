@@ -4,7 +4,7 @@ Events API blueprint.
 
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from models import Event, db
 from services.event_processor import EventProcessor
@@ -89,7 +89,9 @@ def create_event():
     """Create a new event."""
     data = request.get_json(force=True)
 
-    processor = EventProcessor()
+    processor = EventProcessor(
+        connection_throttler=getattr(current_app, "connection_throttler", None),
+    )
     event = processor.process_event(data)
 
     return jsonify(event.to_dict()), 201
