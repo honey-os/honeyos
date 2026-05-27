@@ -231,6 +231,8 @@ class SSHHoneypot:
                         command_buffer += char
                         channel.send(char)
 
+        except (paramiko.SSHException, EOFError, ConnectionResetError, BrokenPipeError, OSError):
+            logger.debug("SSH connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("SSH handler error for %s", addr)
         finally:

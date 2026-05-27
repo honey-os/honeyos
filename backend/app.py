@@ -49,19 +49,6 @@ def create_app(config_class=Config) -> Flask:
 
     # --- Extensions -------------------------------------------------------
     db.init_app(application)
-
-    # Enable WAL mode for SQLite — allows concurrent reads during writes
-    # and dramatically reduces "database is locked" under heavy bot traffic.
-    if config_class.DATABASE_URL.startswith("sqlite"):
-        from sqlalchemy import event as sa_event
-
-        @sa_event.listens_for(db.engine, "connect")
-        def _set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA synchronous=NORMAL")
-            cursor.close()
-
     CORS(application, resources={r"/api/*": {"origins": "*"}})
     socketio.init_app(application, cors_allowed_origins="*", async_mode="threading")
 
@@ -139,6 +126,18 @@ def create_app(config_class=Config) -> Flask:
 
     # --- Database initialisation ------------------------------------------
     with application.app_context():
+        # Enable WAL mode for SQLite — allows concurrent reads during writes
+        # and dramatically reduces "database is locked" under heavy bot traffic.
+        if config_class.DATABASE_URL.startswith("sqlite"):
+            from sqlalchemy import event as sa_event
+
+            @sa_event.listens_for(db.engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
+
         db.create_all()
         _run_migrations()
         _seed_defaults()

@@ -398,6 +398,8 @@ class FTPHoneypot:
                 else:
                     client_sock.sendall(f"502 Command not implemented: {cmd}\r\n".encode())
 
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("FTP connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("FTP handler error for %s", addr)
         finally:

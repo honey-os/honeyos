@@ -496,8 +496,8 @@ class MySQLHoneypot:
                         _build_error_packet(seq + 1, 1047, "Unknown command")
                     )
 
-        except ConnectionResetError:
-            logger.debug("MySQL connection reset by %s (expected for scanners)", addr[0])
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("MySQL connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("MySQL handler error for %s", addr)
         finally:

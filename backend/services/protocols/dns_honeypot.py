@@ -551,8 +551,8 @@ class DNSHoneypot:
                 tcp_response = struct.pack("!H", len(response)) + response
                 client_sock.sendall(tcp_response)
 
-        except (ConnectionResetError, BrokenPipeError):
-            pass
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("DNS TCP connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("DNS TCP handler error for %s", addr)
         finally:

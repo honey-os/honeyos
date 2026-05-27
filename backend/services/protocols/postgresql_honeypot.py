@@ -413,6 +413,8 @@ class PostgreSQLHoneypot:
                         + _make_ready_for_query()
                     )
 
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("PostgreSQL connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("PostgreSQL handler error for %s", addr)
         finally:
