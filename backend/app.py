@@ -127,6 +127,7 @@ def create_app(config_class=Config) -> Flask:
     # --- Database initialisation ------------------------------------------
     with application.app_context():
         db.create_all()
+        _run_migrations()
         _seed_defaults()
 
     # --- Start honeypot listeners -----------------------------------------
@@ -154,6 +155,21 @@ def create_app(config_class=Config) -> Flask:
 # ---------------------------------------------------------------------------
 # Seed defaults
 # ---------------------------------------------------------------------------
+
+def _run_migrations() -> None:
+    """Apply schema migrations that db.create_all() cannot handle
+    (e.g. adding columns to existing tables)."""
+    import sqlalchemy
+
+    with db.engine.connect() as conn:
+        # Check if sessions.threat_intel column exists
+        result = conn.execute(sqlalchemy.text("PRAGMA table_info(sessions)"))
+        columns = {row[1] for row in result}
+        if "threat_intel" not in columns:
+            conn.execute(sqlalchemy.text("ALTER TABLE sessions ADD COLUMN threat_intel TEXT"))
+            conn.commit()
+            logger.info("Migration: added threat_intel column to sessions table")
+
 
 def _seed_defaults() -> None:
     """Populate default honeypot configs and system settings if the tables
