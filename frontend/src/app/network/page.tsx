@@ -516,6 +516,16 @@ function DriftTab({
                 Last checked {formatRelativeTime(scanResult.timestamp)}
               </div>
 
+              {scanResult.scan_source === 'none' && (
+                <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-400">
+                    No external data source available. Set <code className="px-1 py-0.5 bg-[#1c1c28] rounded text-amber-300 text-xs">CENSYS_API_TOKEN</code> in
+                    your <code className="px-1 py-0.5 bg-[#1c1c28] rounded text-amber-300 text-xs">.env</code> to compare against real external scan data.
+                  </p>
+                </div>
+              )}
+
               {/* Unexpected ports */}
               {scanResult.unexpected_ports.length > 0 && (
                 <div className="p-4 rounded-lg bg-red-500/5 border border-red-500/20">
