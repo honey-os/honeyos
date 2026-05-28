@@ -134,24 +134,59 @@ class PerimeterService:
         resource = data.get("result", {}).get("resource", {})
 
         services = resource.get("services", [])
-        for i, svc in enumerate(services[:3]):
-            logger.info("Censys: service[%d] keys: %s", i, list(svc.keys()))
-            logger.info("Censys: service[%d] sample: %s", i, json.dumps(svc, default=str)[:1500])
 
         ports_data = []
         for svc in services:
+            # Extract product and version from software array
+            product = ""
             version = ""
-            software = svc.get("software", [])
-            if software and isinstance(software, list):
-                version = software[0].get("version", "")
+            for sw in svc.get("software", []):
+                if isinstance(sw, dict) and sw.get("product"):
+                    vendor = sw.get("vendor", "")
+                    product = sw["product"]
+                    if vendor and vendor.lower() != product.lower():
+                        product = f"{vendor} {product}"
+                    version = sw.get("version", "")
+                    break
+
+            # Extract banner from protocol-specific sub-objects
+            banner = ""
+            proto_key = svc.get("protocol", "").lower()
+            if proto_key == "ssh" and "ssh" in svc:
+                banner = svc["ssh"].get("endpoint_id", {}).get("raw", "")
+            elif proto_key in ("http", "https") and "http" in svc:
+                resp = svc["http"].get("response", {})
+                # Server header
+                headers = resp.get("headers", {})
+                server = headers.get("Server") or headers.get("server")
+                if isinstance(server, list):
+                    banner = server[0] if server else ""
+                elif isinstance(server, str):
+                    banner = server
+                # Fall back to status line
+                if not banner:
+                    status_line = resp.get("status_line", "")
+                    if status_line:
+                        banner = status_line
+            elif proto_key == "ftp" and "ftp" in svc:
+                ftp_data = svc["ftp"]
+                banner = ftp_data.get("banner", "") or ftp_data.get("status_meaning", "")
+            elif proto_key == "mysql" and "mysql" in svc:
+                mysql_data = svc["mysql"]
+                banner = mysql_data.get("server_version", "")
+            elif proto_key == "dns" and "dns" in svc:
+                dns_data = svc["dns"]
+                version_bind = dns_data.get("version", "")
+                if version_bind:
+                    banner = version_bind
 
             ports_data.append({
                 "port": svc.get("port"),
                 "transport": (svc.get("transport_protocol") or "tcp").lower(),
                 "service": svc.get("protocol", ""),
-                "product": svc.get("extended_service_name", ""),
+                "product": product,
                 "version": version,
-                "banner": (svc.get("banner", "") or "")[:2000],
+                "banner": (banner or "")[:2000],
             })
 
         raw_labels = resource.get("labels", [])
