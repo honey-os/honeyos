@@ -214,7 +214,7 @@ export interface CredentialsParams {
 }
 
 // ---------------------------------------------------------------------------
-// Perimeter / Shodan
+// Perimeter / Censys
 // ---------------------------------------------------------------------------
 
 export interface DeclaredPort {
@@ -238,7 +238,7 @@ export interface PerimeterScan {
   timestamp: string;
 }
 
-export interface ShodanPort {
+export interface CensysPort {
   port: number;
   transport: string;
   service: string;
@@ -247,10 +247,10 @@ export interface ShodanPort {
   banner: string;
 }
 
-export interface ShodanSnapshot {
+export interface CensysSnapshot {
   id: string;
   ip: string;
-  ports_data: ShodanPort[];
+  ports_data: CensysPort[];
   tags: string[];
   honeypot_flagged: boolean;
   vulns: string[];
@@ -258,7 +258,7 @@ export interface ShodanSnapshot {
   org: string | null;
   isp: string | null;
   os_name: string | null;
-  shodan_updated: string | null;
+  censys_updated: string | null;
   timestamp: string;
 }
 
@@ -266,13 +266,13 @@ export interface BannerComparison {
   port: number;
   protocol: string;
   configured_banner: string | null;
-  shodan_banner: string | null;
+  censys_banner: string | null;
   match: boolean;
 }
 
 export interface PerimeterStatus {
   public_ip: string | null;
-  shodan_configured: boolean;
+  censys_configured: boolean;
   drift_detected: boolean;
   honeypot_flagged: boolean;
   last_scan: string | null;
@@ -678,12 +678,12 @@ export async function triggerPerimeterScan(): Promise<PerimeterScan> {
   return fetchApi<PerimeterScan>('/perimeter/scan', { method: 'POST' });
 }
 
-export async function getShodanSnapshot(): Promise<ShodanSnapshot | null> {
-  return fetchApi<ShodanSnapshot | null>('/perimeter/shodan');
+export async function getCensysSnapshot(): Promise<CensysSnapshot | null> {
+  return fetchApi<CensysSnapshot | null>('/perimeter/censys');
 }
 
-export async function refreshShodan(): Promise<ShodanSnapshot> {
-  return fetchApi<ShodanSnapshot>('/perimeter/shodan/refresh', { method: 'POST' });
+export async function refreshCensys(): Promise<CensysSnapshot> {
+  return fetchApi<CensysSnapshot>('/perimeter/censys/refresh', { method: 'POST' });
 }
 
 export async function getBannerComparison(): Promise<{ items: BannerComparison[] }> {

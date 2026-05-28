@@ -17,7 +17,7 @@ config_bp = Blueprint("config", __name__)
 _start_time = time.time()
 
 # Keys whose values should be masked in the response
-_SENSITIVE_KEYS = {"SECRET_KEY", "SMTP_PASSWORD", "SLACK_WEBHOOK_URL", "SHODAN_API_KEY"}
+_SENSITIVE_KEYS = {"SECRET_KEY", "SMTP_PASSWORD", "SLACK_WEBHOOK_URL", "CENSYS_API_TOKEN"}
 
 _MASK = "\u2022" * 8  # ••••••••
 
@@ -87,9 +87,9 @@ _SECTIONS = [
     },
     {
         "id": "perimeter",
-        "label": "Perimeter / Shodan",
+        "label": "Perimeter / Censys",
         "settings": [
-            ("SHODAN_API_KEY", "Shodan API Key", "string"),
+            ("CENSYS_API_TOKEN", "Censys API Token", "string"),
             ("PUBLIC_IP", "Public IP Override", "string"),
         ],
     },

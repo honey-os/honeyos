@@ -12,7 +12,7 @@ import {
   type SettingsResponse,
   type PerimeterStatus,
   type DeclaredPort,
-  type ShodanSnapshot,
+  type CensysSnapshot,
   getEvents,
   getSessions,
   getHoneypots,
@@ -25,7 +25,7 @@ import {
   getSettings,
   getPerimeterStatus,
   getDeclaredPorts,
-  getShodanSnapshot,
+  getCensysSnapshot,
 } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -108,11 +108,11 @@ interface HoneyStore {
   perimeterStatusLoading: boolean;
   declaredPorts: DeclaredPort[];
   declaredPortsLoading: boolean;
-  shodanSnapshot: ShodanSnapshot | null;
-  shodanLoading: boolean;
+  censysSnapshot: CensysSnapshot | null;
+  censysLoading: boolean;
   fetchPerimeterStatus: () => Promise<void>;
   fetchDeclaredPorts: () => Promise<void>;
-  fetchShodanSnapshot: () => Promise<void>;
+  fetchCensysSnapshot: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,8 +323,8 @@ export const useStore = create<HoneyStore>((set) => ({
   perimeterStatusLoading: false,
   declaredPorts: [],
   declaredPortsLoading: false,
-  shodanSnapshot: null,
-  shodanLoading: false,
+  censysSnapshot: null,
+  censysLoading: false,
   fetchPerimeterStatus: async () => {
     set({ perimeterStatusLoading: true });
     try {
@@ -343,13 +343,13 @@ export const useStore = create<HoneyStore>((set) => ({
       set({ declaredPortsLoading: false });
     }
   },
-  fetchShodanSnapshot: async () => {
-    set({ shodanLoading: true });
+  fetchCensysSnapshot: async () => {
+    set({ censysLoading: true });
     try {
-      const data = await getShodanSnapshot();
-      set({ shodanSnapshot: data, shodanLoading: false });
+      const data = await getCensysSnapshot();
+      set({ censysSnapshot: data, censysLoading: false });
     } catch {
-      set({ shodanLoading: false });
+      set({ censysLoading: false });
     }
   },
 }));

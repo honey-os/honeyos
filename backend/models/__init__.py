@@ -342,11 +342,11 @@ class PerimeterScan(db.Model):
 
 
 # ---------------------------------------------------------------------------
-# ShodanSnapshot
+# CensysSnapshot
 # ---------------------------------------------------------------------------
 
-class ShodanSnapshot(db.Model):
-    __tablename__ = "shodan_snapshots"
+class CensysSnapshot(db.Model):
+    __tablename__ = "censys_snapshots"
 
     id = db.Column(db.Text, primary_key=True)
     ip = db.Column(db.String(45), nullable=False, index=True)
@@ -358,7 +358,7 @@ class ShodanSnapshot(db.Model):
     org = db.Column(db.String(256))
     isp = db.Column(db.String(256))
     os_name = db.Column(db.String(128))
-    shodan_updated = db.Column(db.String(64))
+    censys_updated = db.Column(db.String(64))
     timestamp = db.Column(db.DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
@@ -373,6 +373,6 @@ class ShodanSnapshot(db.Model):
             "org": self.org,
             "isp": self.isp,
             "os_name": self.os_name,
-            "shodan_updated": self.shodan_updated,
+            "censys_updated": self.censys_updated,
             "timestamp": _iso_utc(self.timestamp),
         }

@@ -27,13 +27,13 @@ import {
   syncDeclaredPorts,
   triggerPerimeterScan,
   getPerimeterScans,
-  refreshShodan,
+  refreshCensys,
   getBannerComparison,
 } from '@/lib/api';
 import type {
   DeclaredPort,
   PerimeterScan,
-  ShodanSnapshot,
+  CensysSnapshot,
   BannerComparison,
 } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/utils/formatters';
@@ -47,11 +47,11 @@ export default function NetworkPage() {
     perimeterStatusLoading,
     declaredPorts,
     declaredPortsLoading,
-    shodanSnapshot,
-    shodanLoading,
+    censysSnapshot,
+    censysLoading,
     fetchPerimeterStatus,
     fetchDeclaredPorts,
-    fetchShodanSnapshot,
+    fetchCensysSnapshot,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<Tab>('drift');
@@ -74,8 +74,8 @@ export default function NetworkPage() {
   const loadInitialData = useCallback(() => {
     fetchPerimeterStatus();
     fetchDeclaredPorts();
-    fetchShodanSnapshot();
-  }, [fetchPerimeterStatus, fetchDeclaredPorts, fetchShodanSnapshot]);
+    fetchCensysSnapshot();
+  }, [fetchPerimeterStatus, fetchDeclaredPorts, fetchCensysSnapshot]);
 
   useEffect(() => {
     loadInitialData();
@@ -95,12 +95,12 @@ export default function NetworkPage() {
 
   // Load banners when exposure tab is active
   useEffect(() => {
-    if (activeTab === 'exposure' && perimeterStatus?.shodan_configured) {
+    if (activeTab === 'exposure' && perimeterStatus?.censys_configured) {
       getBannerComparison()
         .then((data) => setBanners(data.items || []))
         .catch(() => {});
     }
-  }, [activeTab, perimeterStatus?.shodan_configured]);
+  }, [activeTab, perimeterStatus?.censys_configured]);
 
   const handleAddPort = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,11 +160,11 @@ export default function NetworkPage() {
     }
   };
 
-  const handleRefreshShodan = async () => {
+  const handleRefreshCensys = async () => {
     setRefreshing(true);
     try {
-      await refreshShodan();
-      fetchShodanSnapshot();
+      await refreshCensys();
+      fetchCensysSnapshot();
       fetchPerimeterStatus();
       const data = await getBannerComparison();
       setBanners(data.items || []);
@@ -227,13 +227,13 @@ export default function NetworkPage() {
       ) : (
         <ExposureTab
           status={perimeterStatus}
-          snapshot={shodanSnapshot}
-          shodanLoading={shodanLoading}
+          snapshot={censysSnapshot}
+          censysLoading={censysLoading}
           refreshing={refreshing}
           banners={banners}
           expandedBanner={expandedBanner}
           setExpandedBanner={setExpandedBanner}
-          onRefresh={handleRefreshShodan}
+          onRefresh={handleRefreshCensys}
         />
       )}
     </div>
@@ -482,7 +482,7 @@ function DriftTab({
               <Shield className="w-12 h-12 text-gray-700 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-400 mb-2">No drift checks yet</h3>
               <p className="text-sm text-gray-600">
-                Run a check to compare your declared ports against what is visible externally via Shodan.
+                Run a check to compare your declared ports against what is visible externally via Censys.
               </p>
             </div>
           ) : !scanResult.drift_detected ? (
@@ -601,7 +601,7 @@ function DriftTab({
 function ExposureTab({
   status,
   snapshot,
-  shodanLoading,
+  censysLoading,
   refreshing,
   banners,
   expandedBanner,
@@ -609,8 +609,8 @@ function ExposureTab({
   onRefresh,
 }: {
   status: ReturnType<typeof useStore.getState>['perimeterStatus'];
-  snapshot: ShodanSnapshot | null;
-  shodanLoading: boolean;
+  snapshot: CensysSnapshot | null;
+  censysLoading: boolean;
   refreshing: boolean;
   banners: BannerComparison[];
   expandedBanner: number | null;
@@ -618,31 +618,31 @@ function ExposureTab({
   onRefresh: () => void;
 }) {
   // Not configured
-  if (!status?.shodan_configured) {
+  if (!status?.censys_configured) {
     return (
       <div className="card p-8 text-center">
         <Eye className="w-12 h-12 text-gray-700 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-400 mb-2">
-          Shodan API Not Configured
+          Censys API Not Configured
         </h3>
         <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
-          Add <code className="px-1.5 py-0.5 bg-[#1c1c28] rounded text-amber-400 text-xs">SHODAN_API_KEY</code> to
+          Add <code className="px-1.5 py-0.5 bg-[#1c1c28] rounded text-amber-400 text-xs">CENSYS_API_TOKEN</code> to
           your <code className="px-1.5 py-0.5 bg-[#1c1c28] rounded text-amber-400 text-xs">.env</code> file
           to enable external exposure monitoring.
         </p>
         <p className="text-xs text-gray-600">
-          Get a free API key at{' '}
-          <span className="text-amber-400">shodan.io</span>
+          Get free API credentials at{' '}
+          <span className="text-amber-400">censys.io</span>
         </p>
       </div>
     );
   }
 
-  if (shodanLoading && !snapshot) {
+  if (censysLoading && !snapshot) {
     return (
       <div className="card p-12 text-center">
         <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-        <p className="mt-3 text-sm text-gray-500">Loading Shodan data...</p>
+        <p className="mt-3 text-sm text-gray-500">Loading Censys data...</p>
       </div>
     );
   }
@@ -663,8 +663,8 @@ function ExposureTab({
                 Your honeypot has been fingerprinted
               </h3>
               <p className="text-sm text-gray-400 mt-1">
-                Shodan has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded text-red-400 text-xs">honeypot</code>.
-                Attackers using Shodan will know this is a honeypot. Consider adjusting your service banners.
+                Censys has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded text-red-400 text-xs">honeypot</code>.
+                Attackers using Censys will know this is a honeypot. Consider adjusting your service banners.
               </p>
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {tags.map((tag) => (
@@ -738,7 +738,7 @@ function ExposureTab({
             )}
 
             <div className="mt-4 text-xs text-gray-600">
-              Shodan last updated: {snapshot.shodan_updated || 'N/A'}
+              Censys last updated: {snapshot.censys_updated || 'N/A'}
               <span className="mx-2">|</span>
               Fetched: {formatRelativeTime(snapshot.timestamp)}
             </div>
@@ -746,7 +746,7 @@ function ExposureTab({
         ) : (
           <div className="p-5 text-center py-8">
             <p className="text-sm text-gray-500">
-              No Shodan data available. Click Refresh to fetch.
+              No Censys data available. Click Refresh to fetch.
             </p>
           </div>
         )}
@@ -822,7 +822,7 @@ function ExposureTab({
                   <th className="text-left px-5 py-2.5 font-medium">Port</th>
                   <th className="text-left py-2.5 font-medium">Protocol</th>
                   <th className="text-left py-2.5 font-medium">Configured Banner</th>
-                  <th className="text-left py-2.5 font-medium">Shodan Banner</th>
+                  <th className="text-left py-2.5 font-medium">Censys Banner</th>
                   <th className="text-center py-2.5 pr-5 font-medium">Match</th>
                 </tr>
               </thead>
@@ -835,10 +835,10 @@ function ExposureTab({
                       {b.configured_banner || <span className="text-gray-600 italic">not set</span>}
                     </td>
                     <td className="py-2.5 font-mono text-xs text-gray-400 max-w-xs truncate">
-                      {b.shodan_banner
-                        ? b.shodan_banner.length > 80
-                          ? b.shodan_banner.slice(0, 80) + '...'
-                          : b.shodan_banner
+                      {b.censys_banner
+                        ? b.censys_banner.length > 80
+                          ? b.censys_banner.slice(0, 80) + '...'
+                          : b.censys_banner
                         : <span className="text-gray-600 italic">not captured</span>}
                     </td>
                     <td className="py-2.5 pr-5 text-center">

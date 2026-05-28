@@ -2,12 +2,12 @@
 Perimeter API blueprint.
 
 Provides endpoints for declared port management, drift detection,
-Shodan exposure lookups, and banner comparison.
+Censys exposure lookups, and banner comparison.
 """
 
 from flask import Blueprint, current_app, jsonify, request
 
-from models import DeclaredPort, PerimeterScan, ShodanSnapshot, db
+from models import DeclaredPort, PerimeterScan, CensysSnapshot, db
 from models import _iso_utc
 
 perimeter_bp = Blueprint("perimeter", __name__)
@@ -28,11 +28,11 @@ def perimeter_status():
     last_scan = PerimeterScan.query.order_by(PerimeterScan.timestamp.desc()).first()
     declared_count = DeclaredPort.query.count()
 
-    snapshot = ShodanSnapshot.query.filter_by(ip=ip).first() if ip else None
+    snapshot = CensysSnapshot.query.filter_by(ip=ip).first() if ip else None
 
     return jsonify({
         "public_ip": ip,
-        "shodan_configured": bool(Config.SHODAN_API_KEY),
+        "censys_configured": bool(Config.CENSYS_API_TOKEN),
         "drift_detected": last_scan.drift_detected if last_scan else False,
         "honeypot_flagged": snapshot.honeypot_flagged if snapshot else False,
         "last_scan": _iso_utc(last_scan.timestamp) if last_scan else None,
@@ -133,28 +133,28 @@ def trigger_scan():
 
 
 # ---------------------------------------------------------------------------
-# Shodan
+# Censys
 # ---------------------------------------------------------------------------
 
-@perimeter_bp.route("/api/perimeter/shodan", methods=["GET"])
-def get_shodan():
-    """Latest ShodanSnapshot for our public IP."""
+@perimeter_bp.route("/api/perimeter/censys", methods=["GET"])
+def get_censys():
+    """Latest CensysSnapshot for our public IP."""
     svc = current_app.perimeter_service
     ip = svc.detect_public_ip()
     if not ip:
         return jsonify(None)
 
-    snapshot = ShodanSnapshot.query.filter_by(ip=ip).first()
+    snapshot = CensysSnapshot.query.filter_by(ip=ip).first()
     return jsonify(snapshot.to_dict() if snapshot else None)
 
 
-@perimeter_bp.route("/api/perimeter/shodan/refresh", methods=["POST"])
-def refresh_shodan():
-    """Trigger a fresh Shodan lookup."""
+@perimeter_bp.route("/api/perimeter/censys/refresh", methods=["POST"])
+def refresh_censys():
+    """Trigger a fresh Censys lookup."""
     from config import Config
 
-    if not Config.SHODAN_API_KEY:
-        return jsonify({"error": "not_configured", "message": "SHODAN_API_KEY not set"}), 400
+    if not Config.CENSYS_API_TOKEN:
+        return jsonify({"error": "not_configured", "message": "CENSYS_API_TOKEN not set"}), 400
 
     svc = current_app.perimeter_service
     ip = svc.detect_public_ip()
@@ -162,11 +162,11 @@ def refresh_shodan():
         return jsonify({"error": "failed", "message": "Could not detect public IP"}), 500
 
     try:
-        snapshot = svc.lookup_shodan(ip)
+        snapshot = svc.lookup_censys(ip)
     except PermissionError as exc:
         return jsonify({"error": "forbidden", "message": str(exc)}), 403
     if not snapshot:
-        return jsonify({"error": "failed", "message": "Shodan lookup returned no data"}), 404
+        return jsonify({"error": "failed", "message": "Censys lookup returned no data"}), 404
     return jsonify(snapshot.to_dict())
 
 
@@ -176,8 +176,7 @@ def refresh_shodan():
 
 @perimeter_bp.route("/api/perimeter/banners", methods=["GET"])
 def banner_comparison():
-    """Compare configured honeypot banners against Shodan-captured banners."""
+    """Compare configured honeypot banners against Censys-captured banners."""
     svc = current_app.perimeter_service
-    with current_app.app_context():
-        results = svc.get_banner_comparison()
+    results = svc.get_banner_comparison()
     return jsonify({"items": results})

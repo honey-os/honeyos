@@ -78,7 +78,7 @@ class Config:
     SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
 
     # --- External Port Mapping ---
-    # The port attackers/Shodan see externally (after Docker/firewall NAT).
+    # The port attackers/scanners see externally (after Docker/firewall NAT).
     # Defaults match production docker-compose.yml mappings.
     SSH_EXTERNAL_PORT = int(os.getenv("SSH_EXTERNAL_PORT", "22"))
     HTTP_EXTERNAL_PORT = int(os.getenv("HTTP_EXTERNAL_PORT", "80"))
@@ -134,6 +134,6 @@ class Config:
     # --- Threat Intelligence ---
     ABUSECH_API_KEY = os.getenv("ABUSECH_API_KEY", "")
 
-    # --- Perimeter / Shodan ---
-    SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
+    # --- Perimeter / Censys ---
+    CENSYS_API_TOKEN = os.getenv("CENSYS_API_TOKEN", "")
     PUBLIC_IP = os.getenv("PUBLIC_IP", "")
