@@ -61,7 +61,10 @@ class ConnectionThrottler:
                 ThrottleBlock.expires_at > now_utc
             ).all()
             for b in blocks:
-                remaining = (b.expires_at - now_utc).total_seconds()
+                expires = b.expires_at
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=timezone.utc)
+                remaining = (expires - now_utc).total_seconds()
                 self._blocked_until[(b.ip, b.protocol)] = now_mono + remaining
 
             # Clean up expired rows
