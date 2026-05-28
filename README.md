@@ -123,6 +123,8 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_EXTERNAL_PORT` | `5432` | External-facing PostgreSQL port |
 | `DNS_EXTERNAL_PORT` | `53` | External-facing DNS port |
 | `SMB_EXTERNAL_PORT` | `445` | External-facing SMB port |
+| `CENSYS_API_TOKEN` | *(empty)* | Censys API personal access token for perimeter monitoring |
+| `PUBLIC_IP` | *(empty)* | Override public IP detection (auto-detected if empty) |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
@@ -246,6 +248,41 @@ TLS_CERT=off
 ### Development Mode
 
 `make dev` bypasses Caddy entirely and serves plain HTTP on ports 7777/7778 directly.
+
+## Censys Integration (Optional)
+
+HoneyOS can check your public IP against [Censys](https://search.censys.io) to detect perimeter drift — ports that are unexpectedly open or missing compared to what you've declared. This is optional; without it the Network page still tracks declared ports but can't compare them against what's actually visible externally.
+
+### Setup
+
+1. Create a free account at [search.censys.io](https://search.censys.io)
+2. Go to [Account > API](https://app.censys.io/account/api) and copy your **Personal Access Token**
+3. Add it to your `.env` file:
+
+```
+CENSYS_API_TOKEN=your-token-here
+```
+
+4. Optionally set your public IP if auto-detection doesn't work:
+
+```
+PUBLIC_IP=203.0.113.50
+```
+
+5. Restart HoneyOS:
+
+```bash
+docker compose up -d
+```
+
+6. Open the Network page and click **Check Now** to run your first scan
+
+### What it checks
+
+- **Drift detection** — compares your declared honeypot ports against what Censys sees externally. Unexpected ports may indicate unauthorized services; missing ports may indicate firewall misconfiguration.
+- **Host overview** — shows your IP's organization, ISP, OS, and hostnames as seen by Censys.
+- **Banner comparison** — checks whether the banners Censys captured match what your honeypots are configured to send. Mismatches may mean your honeypots are being fingerprinted.
+- **Honeypot flagging** — warns you if Censys has tagged your IP as a known honeypot.
 
 ## Troubleshooting
 

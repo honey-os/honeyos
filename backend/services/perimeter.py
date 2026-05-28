@@ -55,11 +55,14 @@ class PerimeterService:
             honeypots = Honeypot.query.filter_by(enabled=True).all()
             active_ports: set[int] = set()
 
+            _UDP_PROTOCOLS = {"dns"}
+
             for hp in honeypots:
                 external_port = Config.EXTERNAL_PORT.get(hp.protocol, hp.port)
+                transport = "udp" if hp.protocol in _UDP_PROTOCOLS else "tcp"
                 active_ports.add(external_port)
                 existing = DeclaredPort.query.filter_by(
-                    port=external_port, transport="tcp"
+                    port=external_port, transport=transport
                 ).first()
                 if existing:
                     if existing.source == "honeypot":
@@ -67,7 +70,7 @@ class PerimeterService:
                 else:
                     db.session.add(DeclaredPort(
                         port=external_port,
-                        transport="tcp",
+                        transport=transport,
                         label=hp.name,
                         source="honeypot",
                     ))
