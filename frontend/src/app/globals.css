@@ -108,4 +108,17 @@
       linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
     background-size: 40px 40px;
   }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.2s ease-out;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
