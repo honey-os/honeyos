@@ -75,8 +75,28 @@ class PerimeterService:
                         source="honeypot",
                     ))
 
-            # Remove honeypot-sourced rows whose (port, transport) is no longer active
-            for row in DeclaredPort.query.filter_by(source="honeypot").all():
+            # Declare the frontend/dashboard port
+            frontend_port = Config.FRONTEND_PORT
+            if frontend_port:
+                active.add((frontend_port, "tcp"))
+                existing = DeclaredPort.query.filter_by(
+                    port=frontend_port, transport="tcp"
+                ).first()
+                if existing:
+                    if existing.source == "system":
+                        existing.label = "HoneyOS Dashboard"
+                else:
+                    db.session.add(DeclaredPort(
+                        port=frontend_port,
+                        transport="tcp",
+                        label="HoneyOS Dashboard",
+                        source="system",
+                    ))
+
+            # Remove auto-sourced rows whose (port, transport) is no longer active
+            for row in DeclaredPort.query.filter(
+                DeclaredPort.source.in_(["honeypot", "system"])
+            ).all():
                 if (row.port, row.transport) not in active:
                     db.session.delete(row)
 

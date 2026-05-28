@@ -125,6 +125,9 @@ class Config:
         "smb": SMB_EXTERNAL_PORT,
     }
 
+    # --- Frontend ---
+    FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "7777"))
+
     # --- Authentication ---
     SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "168"))
 
