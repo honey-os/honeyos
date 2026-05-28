@@ -230,6 +230,7 @@ export interface PerimeterScan {
   id: string;
   public_ip: string;
   scan_source: string;
+  censys_status?: string;
   declared_snapshot: DeclaredPort[];
   actual_ports: number[];
   unexpected_ports: number[];

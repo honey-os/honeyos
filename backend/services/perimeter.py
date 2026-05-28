@@ -93,22 +93,29 @@ class PerimeterService:
 
         api_token = Config.CENSYS_API_TOKEN
         if not api_token:
+            logger.warning("lookup_censys: CENSYS_API_TOKEN is empty, skipping")
             return None
+
+        url = f"https://api.platform.censys.io/v3/global/asset/host/{ip}"
+        logger.info("Censys: querying %s", url)
 
         try:
             resp = requests.get(
-                f"https://api.platform.censys.io/v3/global/asset/host/{ip}",
+                url,
                 headers={"Authorization": f"Bearer {api_token}"},
                 timeout=15,
             )
+            logger.info("Censys: response status %d for %s", resp.status_code, ip)
             if resp.status_code == 404:
                 logger.info("Censys: no data for %s", ip)
                 return None
             if resp.status_code in (401, 403):
+                logger.warning("Censys: auth failed (%d) for %s", resp.status_code, ip)
                 raise PermissionError(
-                    "Censys API token is invalid or lacks permissions"
+                    f"Censys API returned {resp.status_code}: token is invalid or lacks permissions"
                 )
             if resp.status_code == 429:
+                logger.warning("Censys: rate limited for %s", ip)
                 raise PermissionError(
                     "Censys API rate limit exceeded"
                 )
@@ -117,7 +124,7 @@ class PerimeterService:
         except PermissionError:
             raise
         except Exception:
-            logger.warning("Censys lookup failed for %s", ip, exc_info=True)
+            logger.error("Censys lookup failed for %s", ip, exc_info=True)
             return None
 
         result = data.get("result", {})
@@ -154,6 +161,9 @@ class PerimeterService:
         reverse_dns = dns.get("reverse_dns", {})
         hostnames = reverse_dns.get("names", [])
 
+        logger.info("Censys: found %d services, %d labels for %s",
+                     len(ports_data), len(labels), ip)
+
         # Keep only latest snapshot per IP
         CensysSnapshot.query.filter_by(ip=ip).delete()
 
@@ -184,16 +194,36 @@ class PerimeterService:
 
         ip = self.detect_public_ip()
         if not ip:
+            logger.warning("Drift check: could not detect public IP")
             return None
+
+        logger.info("Drift check: starting for IP %s", ip)
+        censys_status = "not_configured"
 
         # Get or refresh Censys snapshot
         with self._app.app_context():
             snapshot = CensysSnapshot.query.filter_by(ip=ip).first()
-            if not snapshot and Config.CENSYS_API_TOKEN:
+
+            if snapshot:
+                logger.info("Drift check: using cached Censys snapshot for %s", ip)
+                censys_status = "cached"
+            elif not Config.CENSYS_API_TOKEN:
+                logger.warning("Drift check: CENSYS_API_TOKEN not configured, skipping lookup")
+                censys_status = "not_configured"
+            else:
+                logger.info("Drift check: no cached snapshot, querying Censys for %s", ip)
+                censys_status = "querying"
                 try:
                     snapshot = self.lookup_censys(ip)
-                except PermissionError:
-                    logger.warning("Censys API credentials rejected; continuing drift check without Censys data")
+                    if snapshot:
+                        censys_status = "ok"
+                        logger.info("Drift check: Censys lookup succeeded for %s", ip)
+                    else:
+                        censys_status = "no_data"
+                        logger.warning("Drift check: Censys returned no data for %s", ip)
+                except PermissionError as exc:
+                    censys_status = "auth_error"
+                    logger.warning("Drift check: Censys auth failed: %s", exc)
                     snapshot = None
 
             # Declared ports
@@ -217,6 +247,9 @@ class PerimeterService:
             missing = [p for p, t in declared_set if (p, t) not in actual_set]
             drift_detected = len(unexpected) > 0 or len(missing) > 0
 
+            logger.info("Drift check: %d declared, %d actual, %d unexpected, %d missing, censys_status=%s",
+                        len(declared), len(actual_ports), len(unexpected), len(missing), censys_status)
+
             scan = PerimeterScan(
                 id=generate_id(),
                 public_ip=ip,
@@ -229,7 +262,10 @@ class PerimeterService:
             )
             db.session.add(scan)
             db.session.commit()
-            return scan.to_dict()
+
+            result = scan.to_dict()
+            result["censys_status"] = censys_status
+            return result
 
     # -----------------------------------------------------------------
     # Banner comparison

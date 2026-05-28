@@ -247,6 +247,45 @@ export default function NetworkPage() {
 }
 
 // ---------------------------------------------------------------------------
+// Censys Status Banner
+// ---------------------------------------------------------------------------
+
+const CENSYS_STATUS_MESSAGES: Record<string, { color: string; message: string }> = {
+  ok: { color: 'green', message: 'Censys data retrieved successfully.' },
+  cached: { color: 'blue', message: 'Using cached Censys data. Click Refresh on the Exposure tab to update.' },
+  not_configured: { color: 'amber', message: 'CENSYS_API_TOKEN is not configured. Add it to your .env file to enable external lookups.' },
+  no_data: { color: 'amber', message: 'Censys has no data for this IP address.' },
+  auth_error: { color: 'red', message: 'Censys API token is invalid or lacks permissions. Check your CENSYS_API_TOKEN.' },
+};
+
+function CensysStatusBanner({ status, source }: { status?: string; source: string }) {
+  // For older scans without censys_status, fall back to scan_source
+  const key = status || (source === 'censys' ? 'ok' : 'not_configured');
+  const info = CENSYS_STATUS_MESSAGES[key];
+  if (!info) return null;
+
+  const colorMap: Record<string, string> = {
+    green: 'bg-green-500/5 border-green-500/20 text-green-400',
+    blue: 'bg-blue-500/5 border-blue-500/20 text-blue-400',
+    amber: 'bg-amber-500/5 border-amber-500/20 text-amber-400',
+    red: 'bg-red-500/5 border-red-500/20 text-red-400',
+  };
+
+  return (
+    <div className={`p-3 rounded-lg border flex items-start gap-2 ${colorMap[info.color]}`}>
+      {info.color === 'green' ? (
+        <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      ) : info.color === 'red' ? (
+        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      ) : (
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      )}
+      <p className="text-sm">{info.message}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Drift Tab
 // ---------------------------------------------------------------------------
 
@@ -500,14 +539,17 @@ function DriftTab({
               </p>
             </div>
           ) : !scanResult.drift_detected ? (
-            <div className="flex items-center gap-3 py-4">
-              <CheckCircle className="w-6 h-6 text-green-400" />
-              <div>
-                <p className="text-sm font-medium text-green-400">Perimeter matches declaration</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Last checked {formatRelativeTime(scanResult.timestamp)}
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 py-4">
+                <CheckCircle className="w-6 h-6 text-green-400" />
+                <div>
+                  <p className="text-sm font-medium text-green-400">Perimeter matches declaration</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Last checked {formatRelativeTime(scanResult.timestamp)}
+                  </p>
+                </div>
               </div>
+              <CensysStatusBanner status={scanResult.censys_status} source={scanResult.scan_source} />
             </div>
           ) : (
             <div className="space-y-4">
@@ -516,15 +558,7 @@ function DriftTab({
                 Last checked {formatRelativeTime(scanResult.timestamp)}
               </div>
 
-              {scanResult.scan_source === 'none' && (
-                <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-amber-400">
-                    No external data source available. Set <code className="px-1 py-0.5 bg-[#1c1c28] rounded text-amber-300 text-xs">CENSYS_API_TOKEN</code> in
-                    your <code className="px-1 py-0.5 bg-[#1c1c28] rounded text-amber-300 text-xs">.env</code> to compare against real external scan data.
-                  </p>
-                </div>
-              )}
+              <CensysStatusBanner status={scanResult.censys_status} source={scanResult.scan_source} />
 
               {/* Unexpected ports */}
               {scanResult.unexpected_ports.length > 0 && (
