@@ -53,23 +53,22 @@ class ConnectionThrottler:
         with self._app.app_context():
             from models import Event, ThrottleBlock, db
 
-            now_utc = datetime.now(timezone.utc)
+            # Use naive UTC for DB queries — SQLite stores naive datetimes
+            # and SQLAlchemy's ORM evaluator will compare them in Python.
+            now_naive = datetime.utcnow()
             now_mono = time.monotonic()
 
             # --- 1. Restore persisted blocks that haven't expired ----------
             blocks = ThrottleBlock.query.filter(
-                ThrottleBlock.expires_at > now_utc
+                ThrottleBlock.expires_at > now_naive
             ).all()
             for b in blocks:
-                expires = b.expires_at
-                if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=timezone.utc)
-                remaining = (expires - now_utc).total_seconds()
+                remaining = (b.expires_at - now_naive).total_seconds()
                 self._blocked_until[(b.ip, b.protocol)] = now_mono + remaining
 
             # Clean up expired rows
             ThrottleBlock.query.filter(
-                ThrottleBlock.expires_at <= now_utc
+                ThrottleBlock.expires_at <= now_naive
             ).delete()
             db.session.commit()
 
@@ -85,7 +84,7 @@ class ConnectionThrottler:
             # created by the old in-memory-only code).
             threshold = Config.THROTTLE_EVENT_THRESHOLD
             duration = Config.THROTTLE_BLOCK_SECONDS
-            cutoff = now_utc - timedelta(seconds=duration)
+            cutoff = now_naive - timedelta(seconds=duration)
 
             high_volume = (
                 db.session.query(
@@ -104,7 +103,7 @@ class ConnectionThrottler:
                 key = (ip, protocol)
                 if key not in self._blocked_until:
                     self._blocked_until[key] = now_mono + duration
-                    expires_at = now_utc + timedelta(seconds=duration)
+                    expires_at = now_naive + timedelta(seconds=duration)
                     db.session.add(
                         ThrottleBlock(
                             ip=ip, protocol=protocol, expires_at=expires_at
@@ -127,7 +126,7 @@ class ConnectionThrottler:
             with self._app.app_context():
                 from models import ThrottleBlock, db
 
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=duration)
+                expires_at = datetime.utcnow() + timedelta(seconds=duration)
                 existing = ThrottleBlock.query.filter_by(
                     ip=ip, protocol=protocol
                 ).first()
