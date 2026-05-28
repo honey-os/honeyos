@@ -113,6 +113,10 @@ def list_attackers():
         }
         items.append(entry)
 
+    # Sort by blocked status if requested
+    if sort_by == "blocked":
+        items.sort(key=lambda x: (len(x["throttled"]) > 0, x["throttled"][0]["expires_in"] if x["throttled"] else 0), reverse=True)
+
     # Paginate the filtered results
     total = len(items)
     pages = max((total + per_page - 1) // per_page, 1)
@@ -126,4 +130,59 @@ def list_attackers():
         "page": page,
         "per_page": per_page,
         "pages": pages,
+    })
+
+
+@attackers_bp.route("/api/attackers/<path:ip>", methods=["GET"])
+def get_attacker(ip: str):
+    """Return aggregated data for a single attacker IP."""
+    row = (
+        db.session.query(
+            Event.source_ip,
+            db.func.count(Event.id).label("event_count"),
+            db.func.max(Event.timestamp).label("last_seen"),
+            db.func.min(Event.timestamp).label("first_seen"),
+        )
+        .filter(Event.source_ip == ip)
+        .group_by(Event.source_ip)
+        .first()
+    )
+
+    if row is None:
+        return jsonify({"error": "not_found", "message": f"No events for IP {ip}"}), 404
+
+    protocols = sorted(
+        p
+        for (p,) in db.session.query(Event.protocol)
+        .filter(Event.source_ip == ip)
+        .distinct()
+        .all()
+    )
+
+    geo = IPGeoCache.query.filter_by(ip=ip).first()
+
+    throttle_list: list[dict] = []
+    throttler = getattr(current_app, "connection_throttler", None)
+    if throttler is not None:
+        for entry in throttler.get_all_blocked():
+            if entry["ip"] == ip:
+                throttle_list.append({
+                    "protocol": entry["protocol"],
+                    "expires_in": entry["expires_in"],
+                })
+
+    return jsonify({
+        "ip": row.source_ip,
+        "event_count": row.event_count,
+        "first_seen": _iso_utc(row.first_seen),
+        "last_seen": _iso_utc(row.last_seen),
+        "protocols": protocols,
+        "country": geo.country if geo else None,
+        "country_code": geo.country_code if geo else None,
+        "city": geo.city if geo else None,
+        "org": geo.org if geo else None,
+        "isp": geo.isp if geo else None,
+        "lat": geo.lat if geo else None,
+        "lon": geo.lon if geo else None,
+        "throttled": throttle_list,
     })

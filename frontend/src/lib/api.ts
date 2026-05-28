@@ -399,6 +399,10 @@ export async function getAttackers(params: AttackerParams = {}): Promise<Paginat
   return fetchApi<PaginatedResponse<Attacker>>(`/attackers${query ? `?${query}` : ''}`);
 }
 
+export async function getAttacker(ip: string): Promise<Attacker> {
+  return fetchApi<Attacker>(`/attackers/${ip}`);
+}
+
 export async function getAttackerEvents(ip: string, params: EventParams = {}): Promise<PaginatedResponse<Event>> {
   return getEvents({ source_ip: ip, ...params });
 }
