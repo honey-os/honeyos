@@ -110,6 +110,8 @@ class PerimeterService:
                 )
             resp.raise_for_status()
             data = resp.json()
+        except PermissionError:
+            raise
         except Exception:
             logger.warning("Shodan lookup failed for %s", ip, exc_info=True)
             return None
@@ -203,7 +205,7 @@ class PerimeterService:
             )
             db.session.add(scan)
             db.session.commit()
-            return scan
+            return scan.to_dict()
 
     # -----------------------------------------------------------------
     # Banner comparison

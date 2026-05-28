@@ -123,10 +123,13 @@ def list_scans():
 def trigger_scan():
     """Trigger a drift check and return the result."""
     svc = current_app.perimeter_service
-    scan = svc.run_drift_check()
-    if not scan:
+    try:
+        result = svc.run_drift_check()
+    except PermissionError as exc:
+        return jsonify({"error": "forbidden", "message": str(exc)}), 403
+    if not result:
         return jsonify({"error": "failed", "message": "Could not detect public IP"}), 500
-    return jsonify(scan.to_dict()), 201
+    return jsonify(result), 201
 
 
 # ---------------------------------------------------------------------------
