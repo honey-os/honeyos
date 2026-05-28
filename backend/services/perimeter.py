@@ -200,19 +200,15 @@ class PerimeterService:
         logger.info("Drift check: starting for IP %s", ip)
         censys_status = "not_configured"
 
-        # Get or refresh Censys snapshot
+        # Always fetch fresh Censys data
         with self._app.app_context():
-            snapshot = CensysSnapshot.query.filter_by(ip=ip).first()
+            snapshot = None
 
-            if snapshot:
-                logger.info("Drift check: using cached Censys snapshot for %s", ip)
-                censys_status = "cached"
-            elif not Config.CENSYS_API_TOKEN:
+            if not Config.CENSYS_API_TOKEN:
                 logger.warning("Drift check: CENSYS_API_TOKEN not configured, skipping lookup")
                 censys_status = "not_configured"
             else:
-                logger.info("Drift check: no cached snapshot, querying Censys for %s", ip)
-                censys_status = "querying"
+                logger.info("Drift check: querying Censys for %s", ip)
                 try:
                     snapshot = self.lookup_censys(ip)
                     if snapshot:

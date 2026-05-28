@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Tag,
   Server,
   Clock,
@@ -27,19 +26,15 @@ import {
   syncDeclaredPorts,
   triggerPerimeterScan,
   getPerimeterScans,
-  refreshCensys,
   getBannerComparison,
 } from '@/lib/api';
 import type {
   DeclaredPort,
   PerimeterScan,
-  CensysSnapshot,
   BannerComparison,
 } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/utils/formatters';
 import clsx from 'clsx';
-
-type Tab = 'drift' | 'exposure';
 
 export default function NetworkPage() {
   const {
@@ -54,22 +49,20 @@ export default function NetworkPage() {
     fetchCensysSnapshot,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<Tab>('drift');
-
-  // Drift tab state
+  // Port management
   const [newPort, setNewPort] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [addingPort, setAddingPort] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Scan state
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<PerimeterScan | null>(null);
   const [scanHistory, setScanHistory] = useState<PerimeterScan[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Exposure tab state
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
+  // Exposure state
   const [banners, setBanners] = useState<BannerComparison[]>([]);
   const [expandedBanner, setExpandedBanner] = useState<number | null>(null);
 
@@ -77,6 +70,9 @@ export default function NetworkPage() {
     fetchPerimeterStatus();
     fetchDeclaredPorts();
     fetchCensysSnapshot();
+    getBannerComparison()
+      .then((data) => setBanners(data.items || []))
+      .catch(() => {});
   }, [fetchPerimeterStatus, fetchDeclaredPorts, fetchCensysSnapshot]);
 
   useEffect(() => {
@@ -94,15 +90,6 @@ export default function NetworkPage() {
       })
       .catch(() => {});
   }, []);
-
-  // Load banners when exposure tab is active
-  useEffect(() => {
-    if (activeTab === 'exposure' && perimeterStatus?.censys_configured) {
-      getBannerComparison()
-        .then((data) => setBanners(data.items || []))
-        .catch(() => {});
-    }
-  }, [activeTab, perimeterStatus?.censys_configured]);
 
   const handleAddPort = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,33 +138,27 @@ export default function NetworkPage() {
       const result = await triggerPerimeterScan();
       setScanResult(result);
       fetchPerimeterStatus();
+      // Refresh exposure data (snapshot + banners) since the scan fetched fresh Censys data
+      fetchCensysSnapshot();
+      getBannerComparison()
+        .then((data) => setBanners(data.items || []))
+        .catch(() => {});
       // Refresh history
       const data = await getPerimeterScans({ page: 1, per_page: 11 });
       if (data.items.length > 1) {
         setScanHistory(data.items.slice(1));
       }
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : 'Drift scan failed');
+      setScanError(err instanceof Error ? err.message : 'Scan failed');
     } finally {
       setScanning(false);
     }
   };
 
-  const handleRefreshCensys = async () => {
-    setRefreshing(true);
-    setRefreshError(null);
-    try {
-      await refreshCensys();
-      fetchCensysSnapshot();
-      fetchPerimeterStatus();
-      const data = await getBannerComparison();
-      setBanners(data.items || []);
-    } catch (err) {
-      setRefreshError(err instanceof Error ? err.message : 'Censys refresh failed');
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  const snapshot = censysSnapshot;
+  const portsData = snapshot?.ports_data || [];
+  const tags = snapshot?.tags || [];
+  const vulns = snapshot?.vulns || [];
 
   return (
     <div className="space-y-6">
@@ -189,151 +170,25 @@ export default function NetworkPage() {
             Perimeter drift detection and external exposure monitoring
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          {(['drift', 'exposure'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={
-                activeTab === tab
-                  ? 'px-3 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium'
-                  : 'px-3 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors'
-              }
-            >
-              {tab === 'drift' ? 'Perimeter Drift' : 'External Exposure'}
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={handleScan}
+          disabled={scanning}
+          className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
+        >
+          {scanning ? (
+            <>
+              <div className="w-3.5 h-3.5 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
+              Scanning...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-3.5 h-3.5" />
+              Check Now
+            </>
+          )}
+        </button>
       </div>
 
-      {activeTab === 'drift' ? (
-        <DriftTab
-          status={perimeterStatus}
-          statusLoading={perimeterStatusLoading}
-          declaredPorts={declaredPorts}
-          declaredPortsLoading={declaredPortsLoading}
-          scanResult={scanResult}
-          scanError={scanError}
-          scanHistory={scanHistory}
-          historyOpen={historyOpen}
-          setHistoryOpen={setHistoryOpen}
-          scanning={scanning}
-          syncing={syncing}
-          addingPort={addingPort}
-          newPort={newPort}
-          newLabel={newLabel}
-          setNewPort={setNewPort}
-          setNewLabel={setNewLabel}
-          onAddPort={handleAddPort}
-          onRemovePort={handleRemovePort}
-          onSync={handleSync}
-          onScan={handleScan}
-        />
-      ) : (
-        <ExposureTab
-          status={perimeterStatus}
-          snapshot={censysSnapshot}
-          censysLoading={censysLoading}
-          refreshing={refreshing}
-          refreshError={refreshError}
-          banners={banners}
-          expandedBanner={expandedBanner}
-          setExpandedBanner={setExpandedBanner}
-          onRefresh={handleRefreshCensys}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Censys Status Banner
-// ---------------------------------------------------------------------------
-
-const CENSYS_STATUS_MESSAGES: Record<string, { color: string; message: string }> = {
-  ok: { color: 'green', message: 'Censys data retrieved successfully.' },
-  cached: { color: 'blue', message: 'Using cached Censys data. Click Refresh on the Exposure tab to update.' },
-  not_configured: { color: 'amber', message: 'CENSYS_API_TOKEN is not configured. Add it to your .env file to enable external lookups.' },
-  no_data: { color: 'amber', message: 'Censys has no data for this IP address.' },
-  auth_error: { color: 'red', message: 'Censys API token is invalid or lacks permissions. Check your CENSYS_API_TOKEN.' },
-};
-
-function CensysStatusBanner({ status, source }: { status?: string; source: string }) {
-  // For older scans without censys_status, fall back to scan_source
-  const key = status || (source === 'censys' ? 'ok' : 'not_configured');
-  const info = CENSYS_STATUS_MESSAGES[key];
-  if (!info) return null;
-
-  const colorMap: Record<string, string> = {
-    green: 'bg-green-500/5 border-green-500/20 text-green-400',
-    blue: 'bg-blue-500/5 border-blue-500/20 text-blue-400',
-    amber: 'bg-amber-500/5 border-amber-500/20 text-amber-400',
-    red: 'bg-red-500/5 border-red-500/20 text-red-400',
-  };
-
-  return (
-    <div className={`p-3 rounded-lg border flex items-start gap-2 ${colorMap[info.color]}`}>
-      {info.color === 'green' ? (
-        <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-      ) : info.color === 'red' ? (
-        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-      ) : (
-        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-      )}
-      <p className="text-sm">{info.message}</p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Drift Tab
-// ---------------------------------------------------------------------------
-
-function DriftTab({
-  status,
-  statusLoading,
-  declaredPorts,
-  declaredPortsLoading,
-  scanResult,
-  scanError,
-  scanHistory,
-  historyOpen,
-  setHistoryOpen,
-  scanning,
-  syncing,
-  addingPort,
-  newPort,
-  newLabel,
-  setNewPort,
-  setNewLabel,
-  onAddPort,
-  onRemovePort,
-  onSync,
-  onScan,
-}: {
-  status: ReturnType<typeof useStore.getState>['perimeterStatus'];
-  statusLoading: boolean;
-  declaredPorts: DeclaredPort[];
-  declaredPortsLoading: boolean;
-  scanResult: PerimeterScan | null;
-  scanError: string | null;
-  scanHistory: PerimeterScan[];
-  historyOpen: boolean;
-  setHistoryOpen: (v: boolean) => void;
-  scanning: boolean;
-  syncing: boolean;
-  addingPort: boolean;
-  newPort: string;
-  newLabel: string;
-  setNewPort: (v: string) => void;
-  setNewLabel: (v: string) => void;
-  onAddPort: (e: React.FormEvent) => void;
-  onRemovePort: (id: number) => void;
-  onSync: () => void;
-  onScan: () => void;
-}) {
-  return (
-    <div className="space-y-6">
       {/* Metric cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Public IP */}
@@ -342,11 +197,11 @@ function DriftTab({
             <Globe className="w-4 h-4 text-amber-500" />
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Public IP</span>
           </div>
-          {statusLoading ? (
+          {perimeterStatusLoading ? (
             <div className="h-8 bg-[#1c1c28] rounded animate-pulse" />
           ) : (
             <p className="text-xl font-mono text-amber-400">
-              {status?.public_ip || 'Not detected'}
+              {perimeterStatus?.public_ip || 'Not detected'}
             </p>
           )}
         </div>
@@ -358,7 +213,7 @@ function DriftTab({
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Declared Ports</span>
           </div>
           <p className="text-xl font-bold text-gray-100">
-            {status?.declared_count ?? 0}
+            {perimeterStatus?.declared_count ?? 0}
           </p>
         </div>
 
@@ -368,14 +223,14 @@ function DriftTab({
             <Shield className="w-4 h-4 text-gray-400" />
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Drift Status</span>
           </div>
-          {status?.drift_detected ? (
+          {perimeterStatus?.drift_detected ? (
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-red-400" />
               <span className="text-lg font-semibold text-red-400">Drift Detected</span>
               <span className="text-xs text-gray-500 ml-2">
-                {status.unexpected_count > 0 && `${status.unexpected_count} unexpected`}
-                {status.unexpected_count > 0 && status.missing_count > 0 && ', '}
-                {status.missing_count > 0 && `${status.missing_count} missing`}
+                {perimeterStatus.unexpected_count > 0 && `${perimeterStatus.unexpected_count} unexpected`}
+                {perimeterStatus.unexpected_count > 0 && perimeterStatus.missing_count > 0 && ', '}
+                {perimeterStatus.missing_count > 0 && `${perimeterStatus.missing_count} missing`}
               </span>
             </div>
           ) : (
@@ -387,140 +242,46 @@ function DriftTab({
         </div>
       </div>
 
-      {/* Declared Ports */}
-      <div className="card">
-        <div className="px-5 py-4 border-b border-[#2a2a3a] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-            <Server className="w-4 h-4 text-amber-500" />
-            Declared Ports
-          </h3>
-          <button
-            onClick={onSync}
-            disabled={syncing}
-            className="btn-secondary flex items-center gap-1.5 text-xs"
-          >
-            <RefreshCw className={clsx('w-3.5 h-3.5', syncing && 'animate-spin')} />
-            Sync from Honeypots
-          </button>
-        </div>
-
-        <div className="p-5">
-          {declaredPortsLoading && declaredPorts.length === 0 ? (
-            <div className="text-center py-6">
-              <div className="inline-block w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-            </div>
-          ) : declaredPorts.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
-              No ports declared. Sync from honeypots or add manually below.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500 uppercase tracking-wider border-b border-[#2a2a3a]">
-                  <th className="text-left pb-2 font-medium">Port</th>
-                  <th className="text-left pb-2 font-medium">Transport</th>
-                  <th className="text-left pb-2 font-medium">Label</th>
-                  <th className="text-left pb-2 font-medium">Source</th>
-                  <th className="text-right pb-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {declaredPorts.map((dp) => (
-                  <tr key={dp.id} className="border-b border-[#1c1c28] last:border-0">
-                    <td className="py-2.5 font-mono text-amber-400">{dp.port}</td>
-                    <td className="py-2.5 text-gray-400 uppercase text-xs">{dp.transport}</td>
-                    <td className="py-2.5 text-gray-200">{dp.label}</td>
-                    <td className="py-2.5">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded-md text-xs font-medium',
-                          dp.source === 'honeypot'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                        )}
-                      >
-                        {dp.source}
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-right">
-                      {dp.source === 'user' && (
-                        <button
-                          onClick={() => onRemovePort(dp.id)}
-                          className="text-gray-600 hover:text-red-400 transition-colors"
-                          title="Remove"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+      {/* Honeypot Fingerprint Alert */}
+      {snapshot?.honeypot_flagged && (
+        <div className="card p-5 border-red-500/30 bg-red-500/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-red-400">
+                Your honeypot has been fingerprinted
+              </h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Censys has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded text-red-400 text-xs">honeypot</code>.
+                Attackers using Censys will know this is a honeypot. Consider adjusting your service banners.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={clsx(
+                      'px-2 py-0.5 rounded-md text-xs font-medium border',
+                      tag === 'honeypot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                        : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                    )}
+                  >
+                    {tag}
+                  </span>
                 ))}
-              </tbody>
-            </table>
-          )}
-
-          {/* Add port form */}
-          <form onSubmit={onAddPort} className="flex items-end gap-3 mt-4 pt-4 border-t border-[#2a2a3a]">
-            <div className="w-28">
-              <label className="label-text">Port</label>
-              <input
-                type="number"
-                value={newPort}
-                onChange={(e) => setNewPort(e.target.value)}
-                className="input-field w-full"
-                placeholder="443"
-                min="1"
-                max="65535"
-                required
-              />
+              </div>
             </div>
-            <div className="flex-1">
-              <label className="label-text">Label</label>
-              <input
-                type="text"
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                className="input-field w-full"
-                placeholder="HTTPS reverse proxy"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={addingPort}
-              className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4" />
-              Add
-            </button>
-          </form>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Drift Results */}
       <div className="card">
-        <div className="px-5 py-4 border-b border-[#2a2a3a] flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-[#2a2a3a]">
           <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
             <Eye className="w-4 h-4 text-amber-500" />
             Drift Results
           </h3>
-          <button
-            onClick={onScan}
-            disabled={scanning}
-            className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
-          >
-            {scanning ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
-                Checking...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-3.5 h-3.5" />
-                Check Now
-              </>
-            )}
-          </button>
         </div>
 
         <div className="p-5">
@@ -535,7 +296,7 @@ function DriftTab({
               <Shield className="w-12 h-12 text-gray-700 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-400 mb-2">No drift checks yet</h3>
               <p className="text-sm text-gray-600">
-                Run a check to compare your declared ports against what is visible externally via Censys.
+                Click Check Now to compare your declared ports against what is visible externally via Censys.
               </p>
             </div>
           ) : !scanResult.drift_detected ? (
@@ -605,172 +366,19 @@ function DriftTab({
               )}
             </div>
           )}
-
-          {/* Scan history */}
-          {scanHistory.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-[#2a2a3a]">
-              <button
-                onClick={() => setHistoryOpen(!historyOpen)}
-                className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                {historyOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                Scan History ({scanHistory.length})
-              </button>
-              {historyOpen && (
-                <div className="mt-3 space-y-2">
-                  {scanHistory.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between px-3 py-2 rounded-md bg-[#0a0a0f] border border-[#2a2a3a] text-xs"
-                    >
-                      <div className="flex items-center gap-2">
-                        {s.drift_detected ? (
-                          <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-                        ) : (
-                          <ShieldCheck className="w-3.5 h-3.5 text-green-400" />
-                        )}
-                        <span className="text-gray-400">{formatDate(s.timestamp)}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-gray-500">
-                        {s.unexpected_ports.length > 0 && (
-                          <span className="text-red-400">{s.unexpected_ports.length} unexpected</span>
-                        )}
-                        {s.missing_ports.length > 0 && (
-                          <span className="text-amber-400">{s.missing_ports.length} missing</span>
-                        )}
-                        {!s.drift_detected && <span className="text-green-400">clean</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Exposure Tab
-// ---------------------------------------------------------------------------
-
-function ExposureTab({
-  status,
-  snapshot,
-  censysLoading,
-  refreshing,
-  refreshError,
-  banners,
-  expandedBanner,
-  setExpandedBanner,
-  onRefresh,
-}: {
-  status: ReturnType<typeof useStore.getState>['perimeterStatus'];
-  snapshot: CensysSnapshot | null;
-  censysLoading: boolean;
-  refreshing: boolean;
-  refreshError: string | null;
-  banners: BannerComparison[];
-  expandedBanner: number | null;
-  setExpandedBanner: (v: number | null) => void;
-  onRefresh: () => void;
-}) {
-  // Not configured
-  if (!status?.censys_configured) {
-    return (
-      <div className="card p-8 text-center">
-        <Eye className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-400 mb-2">
-          Censys API Not Configured
-        </h3>
-        <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
-          Add <code className="px-1.5 py-0.5 bg-[#1c1c28] rounded text-amber-400 text-xs">CENSYS_API_TOKEN</code> to
-          your <code className="px-1.5 py-0.5 bg-[#1c1c28] rounded text-amber-400 text-xs">.env</code> file
-          to enable external exposure monitoring.
-        </p>
-        <p className="text-xs text-gray-600">
-          Get free API credentials at{' '}
-          <span className="text-amber-400">censys.io</span>
-        </p>
-      </div>
-    );
-  }
-
-  if (censysLoading && !snapshot) {
-    return (
-      <div className="card p-12 text-center">
-        <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-        <p className="mt-3 text-sm text-gray-500">Loading Censys data...</p>
-      </div>
-    );
-  }
-
-  const portsData = snapshot?.ports_data || [];
-  const tags = snapshot?.tags || [];
-  const vulns = snapshot?.vulns || [];
-
-  return (
-    <div className="space-y-6">
-      {/* Honeypot Fingerprint Alert */}
-      {snapshot?.honeypot_flagged && (
-        <div className="card p-5 border-red-500/30 bg-red-500/5">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-semibold text-red-400">
-                Your honeypot has been fingerprinted
-              </h3>
-              <p className="text-sm text-gray-400 mt-1">
-                Censys has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded text-red-400 text-xs">honeypot</code>.
-                Attackers using Censys will know this is a honeypot. Consider adjusting your service banners.
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={clsx(
-                      'px-2 py-0.5 rounded-md text-xs font-medium border',
-                      tag === 'honeypot'
-                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                        : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                    )}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+      {/* Host Overview — only shown when snapshot exists */}
+      {snapshot && (
+        <div className="card">
+          <div className="px-5 py-4 border-b border-[#2a2a3a]">
+            <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-amber-500" />
+              Host Overview
+            </h3>
           </div>
-        </div>
-      )}
 
-      {/* Host Overview */}
-      <div className="card">
-        <div className="px-5 py-4 border-b border-[#2a2a3a] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-            <Globe className="w-4 h-4 text-amber-500" />
-            Host Overview
-          </h3>
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="btn-secondary flex items-center gap-1.5 text-xs"
-          >
-            <RefreshCw className={clsx('w-3.5 h-3.5', refreshing && 'animate-spin')} />
-            Refresh
-          </button>
-        </div>
-
-        {refreshError && (
-          <div className="mx-5 mt-4 p-3 rounded-lg bg-red-500/5 border border-red-500/20 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-400">{refreshError}</p>
-          </div>
-        )}
-
-        {snapshot ? (
           <div className="p-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
@@ -810,22 +418,16 @@ function ExposureTab({
               Fetched: {formatRelativeTime(snapshot.timestamp)}
             </div>
           </div>
-        ) : (
-          <div className="p-5 text-center py-8">
-            <p className="text-sm text-gray-500">
-              No Censys data available. Click Refresh to fetch.
-            </p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Open Ports */}
+      {/* Open Ports from Censys */}
       {portsData.length > 0 && (
         <div className="card">
           <div className="px-5 py-4 border-b border-[#2a2a3a]">
             <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
               <Server className="w-4 h-4 text-amber-500" />
-              Open Ports ({portsData.length})
+              Externally Visible Ports ({portsData.length})
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -923,55 +525,246 @@ function ExposureTab({
         </div>
       )}
 
-      {/* Tags + Vulns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Tags */}
-        <div className="card p-5">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-3">
-            <Tag className="w-4 h-4 text-amber-500" />
-            Tags
+      {/* Tags + Vulns — only shown when snapshot has data */}
+      {(tags.length > 0 || vulns.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Tags */}
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-3">
+              <Tag className="w-4 h-4 text-amber-500" />
+              Tags
+            </h3>
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={clsx(
+                      'px-2 py-0.5 rounded-md text-xs font-medium border',
+                      tag === 'honeypot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                        : 'bg-[#1c1c28] text-gray-300 border-[#2a2a3a]'
+                    )}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">No tags detected</p>
+            )}
+          </div>
+
+          {/* Vulns */}
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              Vulnerabilities
+            </h3>
+            {vulns.length > 0 ? (
+              <div className="space-y-1">
+                {vulns.map((v) => (
+                  <div key={v} className="flex items-center gap-2">
+                    <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                    <span className="text-sm font-mono text-gray-300">{v}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">None detected</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Declared Ports */}
+      <div className="card">
+        <div className="px-5 py-4 border-b border-[#2a2a3a] flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+            <Server className="w-4 h-4 text-amber-500" />
+            Declared Ports
           </h3>
-          {tags.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className={clsx(
-                    'px-2 py-0.5 rounded-md text-xs font-medium border',
-                    tag === 'honeypot'
-                      ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                      : 'bg-[#1c1c28] text-gray-300 border-[#2a2a3a]'
-                  )}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">No tags detected</p>
-          )}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="btn-secondary flex items-center gap-1.5 text-xs"
+          >
+            <RefreshCw className={clsx('w-3.5 h-3.5', syncing && 'animate-spin')} />
+            Sync from Honeypots
+          </button>
         </div>
 
-        {/* Vulns */}
-        <div className="card p-5">
-          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Vulnerabilities
-          </h3>
-          {vulns.length > 0 ? (
-            <div className="space-y-1">
-              {vulns.map((v) => (
-                <div key={v} className="flex items-center gap-2">
-                  <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
-                  <span className="text-sm font-mono text-gray-300">{v}</span>
-                </div>
-              ))}
+        <div className="p-5">
+          {declaredPortsLoading && declaredPorts.length === 0 ? (
+            <div className="text-center py-6">
+              <div className="inline-block w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
             </div>
+          ) : declaredPorts.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">
+              No ports declared. Sync from honeypots or add manually below.
+            </p>
           ) : (
-            <p className="text-sm text-gray-600">None detected</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 uppercase tracking-wider border-b border-[#2a2a3a]">
+                  <th className="text-left pb-2 font-medium">Port</th>
+                  <th className="text-left pb-2 font-medium">Transport</th>
+                  <th className="text-left pb-2 font-medium">Label</th>
+                  <th className="text-left pb-2 font-medium">Source</th>
+                  <th className="text-right pb-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {declaredPorts.map((dp) => (
+                  <tr key={dp.id} className="border-b border-[#1c1c28] last:border-0">
+                    <td className="py-2.5 font-mono text-amber-400">{dp.port}</td>
+                    <td className="py-2.5 text-gray-400 uppercase text-xs">{dp.transport}</td>
+                    <td className="py-2.5 text-gray-200">{dp.label}</td>
+                    <td className="py-2.5">
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 rounded-md text-xs font-medium',
+                          dp.source === 'honeypot'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        )}
+                      >
+                        {dp.source}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {dp.source === 'user' && (
+                        <button
+                          onClick={() => handleRemovePort(dp.id)}
+                          className="text-gray-600 hover:text-red-400 transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
+
+          {/* Add port form */}
+          <form onSubmit={handleAddPort} className="flex items-end gap-3 mt-4 pt-4 border-t border-[#2a2a3a]">
+            <div className="w-28">
+              <label className="label-text">Port</label>
+              <input
+                type="number"
+                value={newPort}
+                onChange={(e) => setNewPort(e.target.value)}
+                className="input-field w-full"
+                placeholder="443"
+                min="1"
+                max="65535"
+                required
+              />
+            </div>
+            <div className="flex-1">
+              <label className="label-text">Label</label>
+              <input
+                type="text"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                className="input-field w-full"
+                placeholder="HTTPS reverse proxy"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={addingPort}
+              className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              Add
+            </button>
+          </form>
         </div>
       </div>
+
+      {/* Scan history */}
+      {scanHistory.length > 0 && (
+        <div className="card">
+          <div className="px-5 py-4">
+            <button
+              onClick={() => setHistoryOpen(!historyOpen)}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full"
+            >
+              {historyOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <span className="font-medium">Scan History ({scanHistory.length})</span>
+            </button>
+            {historyOpen && (
+              <div className="mt-3 space-y-2">
+                {scanHistory.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-md bg-[#0a0a0f] border border-[#2a2a3a] text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      {s.drift_detected ? (
+                        <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 text-green-400" />
+                      )}
+                      <span className="text-gray-400">{formatDate(s.timestamp)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-500">
+                      {s.unexpected_ports.length > 0 && (
+                        <span className="text-red-400">{s.unexpected_ports.length} unexpected</span>
+                      )}
+                      {s.missing_ports.length > 0 && (
+                        <span className="text-amber-400">{s.missing_ports.length} missing</span>
+                      )}
+                      {!s.drift_detected && <span className="text-green-400">clean</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Censys Status Banner
+// ---------------------------------------------------------------------------
+
+const CENSYS_STATUS_MESSAGES: Record<string, { color: string; message: string }> = {
+  ok: { color: 'green', message: 'Censys data retrieved successfully.' },
+  not_configured: { color: 'amber', message: 'CENSYS_API_TOKEN is not configured. Add it to your .env file to enable external lookups.' },
+  no_data: { color: 'amber', message: 'Censys has no data for this IP address.' },
+  auth_error: { color: 'red', message: 'Censys API token is invalid or lacks permissions. Check your CENSYS_API_TOKEN.' },
+};
+
+function CensysStatusBanner({ status, source }: { status?: string; source: string }) {
+  const key = status || (source === 'censys' ? 'ok' : 'not_configured');
+  const info = CENSYS_STATUS_MESSAGES[key];
+  if (!info) return null;
+
+  const colorMap: Record<string, string> = {
+    green: 'bg-green-500/5 border-green-500/20 text-green-400',
+    amber: 'bg-amber-500/5 border-amber-500/20 text-amber-400',
+    red: 'bg-red-500/5 border-red-500/20 text-red-400',
+  };
+
+  return (
+    <div className={`p-3 rounded-lg border flex items-start gap-2 ${colorMap[info.color]}`}>
+      {info.color === 'green' ? (
+        <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      ) : info.color === 'red' ? (
+        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      ) : (
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      )}
+      <p className="text-sm">{info.message}</p>
     </div>
   );
 }
