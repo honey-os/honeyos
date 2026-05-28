@@ -29,9 +29,11 @@ from utils.helpers import generate_id
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+_log_level = getattr(logging, Config.LOG_LEVEL, logging.INFO)
 logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
+    level=_log_level,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
 )
 logger = logging.getLogger("honeyos")
 
