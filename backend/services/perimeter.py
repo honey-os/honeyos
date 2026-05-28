@@ -53,14 +53,14 @@ class PerimeterService:
             from models import DeclaredPort, Honeypot, db
 
             honeypots = Honeypot.query.filter_by(enabled=True).all()
-            active_ports: set[int] = set()
+            active: set[tuple[int, str]] = set()
 
             _UDP_PROTOCOLS = {"dns"}
 
             for hp in honeypots:
                 external_port = Config.EXTERNAL_PORT.get(hp.protocol, hp.port)
                 transport = "udp" if hp.protocol in _UDP_PROTOCOLS else "tcp"
-                active_ports.add(external_port)
+                active.add((external_port, transport))
                 existing = DeclaredPort.query.filter_by(
                     port=external_port, transport=transport
                 ).first()
@@ -75,13 +75,10 @@ class PerimeterService:
                         source="honeypot",
                     ))
 
-            # Remove honeypot-sourced rows whose port is no longer active
-            stale = DeclaredPort.query.filter(
-                DeclaredPort.source == "honeypot",
-                ~DeclaredPort.port.in_(active_ports) if active_ports else True,
-            ).all()
-            for row in stale:
-                db.session.delete(row)
+            # Remove honeypot-sourced rows whose (port, transport) is no longer active
+            for row in DeclaredPort.query.filter_by(source="honeypot").all():
+                if (row.port, row.transport) not in active:
+                    db.session.delete(row)
 
             db.session.commit()
             logger.info("Synced declared ports from %d enabled honeypots", len(honeypots))
@@ -137,48 +134,52 @@ class PerimeterService:
 
         ports_data = []
         for svc in services:
-            # Extract product and version from software array
+            # Extract product from software array
             product = ""
-            version = ""
             for sw in svc.get("software", []):
                 if isinstance(sw, dict) and sw.get("product"):
-                    vendor = sw.get("vendor", "")
                     product = sw["product"]
-                    if vendor and vendor.lower() != product.lower():
-                        product = f"{vendor} {product}"
-                    version = sw.get("version", "")
+                    # Capitalise and clean underscores
+                    product = product.replace("_", " ").title()
                     break
 
-            # Extract banner from protocol-specific sub-objects
+            # Extract version and banner from protocol-specific sub-objects
             banner = ""
+            version = ""
             proto_key = svc.get("protocol", "").lower()
             if proto_key == "ssh" and "ssh" in svc:
-                banner = svc["ssh"].get("endpoint_id", {}).get("raw", "")
+                ssh = svc["ssh"]
+                eid = ssh.get("endpoint_id", {})
+                banner = eid.get("raw", "")
+                version = eid.get("software_version", "")
             elif proto_key in ("http", "https") and "http" in svc:
                 resp = svc["http"].get("response", {})
-                # Server header
                 headers = resp.get("headers", {})
                 server = headers.get("Server") or headers.get("server")
                 if isinstance(server, list):
                     banner = server[0] if server else ""
                 elif isinstance(server, str):
                     banner = server
-                # Fall back to status line
                 if not banner:
-                    status_line = resp.get("status_line", "")
-                    if status_line:
-                        banner = status_line
+                    banner = resp.get("status_line", "")
+                # Try X-Powered-By for version
+                powered = headers.get("X-Powered-By") or headers.get("x-powered-by")
+                if powered:
+                    version = powered[0] if isinstance(powered, list) else powered
             elif proto_key == "ftp" and "ftp" in svc:
-                ftp_data = svc["ftp"]
-                banner = ftp_data.get("banner", "") or ftp_data.get("status_meaning", "")
+                ftp = svc["ftp"]
+                banner = ftp.get("status_meaning", "") or ftp.get("banner", "")
             elif proto_key == "mysql" and "mysql" in svc:
-                mysql_data = svc["mysql"]
-                banner = mysql_data.get("server_version", "")
+                mysql = svc["mysql"]
+                version = mysql.get("server_version", "")
+                banner = version
             elif proto_key == "dns" and "dns" in svc:
                 dns_data = svc["dns"]
-                version_bind = dns_data.get("version", "")
-                if version_bind:
-                    banner = version_bind
+                version = dns_data.get("version", "")
+                banner = version
+            elif proto_key == "smb" and "smb" in svc:
+                smb = svc["smb"]
+                version = smb.get("version", "")
 
             ports_data.append({
                 "port": svc.get("port"),
@@ -221,7 +222,8 @@ class PerimeterService:
             org=autonomous_system.get("name"),
             isp=autonomous_system.get("description"),
             os_name=operating_system.get("product"),
-            censys_updated=resource.get("last_updated_at"),
+            censys_updated=resource.get("last_updated_at")
+                or max((s.get("scan_time", "") for s in services), default=None),
         )
         db.session.add(snapshot)
         db.session.commit()
