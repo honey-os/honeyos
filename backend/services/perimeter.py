@@ -56,16 +56,17 @@ class PerimeterService:
             active_ports: set[int] = set()
 
             for hp in honeypots:
-                active_ports.add(hp.port)
+                external_port = Config.EXTERNAL_PORT.get(hp.protocol, hp.port)
+                active_ports.add(external_port)
                 existing = DeclaredPort.query.filter_by(
-                    port=hp.port, transport="tcp"
+                    port=external_port, transport="tcp"
                 ).first()
                 if existing:
                     if existing.source == "honeypot":
                         existing.label = hp.name
                 else:
                     db.session.add(DeclaredPort(
-                        port=hp.port,
+                        port=external_port,
                         transport="tcp",
                         label=hp.name,
                         source="honeypot",
@@ -214,12 +215,15 @@ class PerimeterService:
                 return []
 
             ports_data = json.loads(snapshot.ports_data) if isinstance(snapshot.ports_data, str) else (snapshot.ports_data or [])
-            honeypots = {hp.port: hp for hp in Honeypot.query.filter_by(enabled=True).all()}
+            honeypots_by_ext: dict[int, Honeypot] = {}
+            for hp in Honeypot.query.filter_by(enabled=True).all():
+                ext = Config.EXTERNAL_PORT.get(hp.protocol, hp.port)
+                honeypots_by_ext[ext] = hp
 
             results = []
             for p in ports_data:
                 port_num = p.get("port")
-                hp = honeypots.get(port_num)
+                hp = honeypots_by_ext.get(port_num)
                 if not hp:
                     continue
 

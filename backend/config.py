@@ -77,6 +77,19 @@ class Config:
     DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
     SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
 
+    # --- External Port Mapping ---
+    # The port attackers/Shodan see externally (after Docker/firewall NAT).
+    # Defaults match production docker-compose.yml mappings.
+    SSH_EXTERNAL_PORT = int(os.getenv("SSH_EXTERNAL_PORT", "22"))
+    HTTP_EXTERNAL_PORT = int(os.getenv("HTTP_EXTERNAL_PORT", "80"))
+    HTTPS_EXTERNAL_PORT = int(os.getenv("HTTPS_EXTERNAL_PORT", "443"))
+    TELNET_EXTERNAL_PORT = int(os.getenv("TELNET_EXTERNAL_PORT", "23"))
+    FTP_EXTERNAL_PORT = int(os.getenv("FTP_EXTERNAL_PORT", "21"))
+    MYSQL_EXTERNAL_PORT = int(os.getenv("MYSQL_EXTERNAL_PORT", "3306"))
+    POSTGRESQL_EXTERNAL_PORT = int(os.getenv("POSTGRESQL_EXTERNAL_PORT", "5432"))
+    DNS_EXTERNAL_PORT = int(os.getenv("DNS_EXTERNAL_PORT", "53"))
+    SMB_EXTERNAL_PORT = int(os.getenv("SMB_EXTERNAL_PORT", "445"))
+
     # --- Honeypot Enable/Disable ---
     SSH_HONEYPOT_ENABLED = os.getenv("SSH_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
     HTTP_HONEYPOT_ENABLED = os.getenv("HTTP_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -98,6 +111,18 @@ class Config:
         "postgresql": POSTGRESQL_HONEYPOT_ENABLED,
         "dns": DNS_HONEYPOT_ENABLED,
         "smb": SMB_HONEYPOT_ENABLED,
+    }
+
+    EXTERNAL_PORT: dict[str, int] = {
+        "ssh": SSH_EXTERNAL_PORT,
+        "http": HTTP_EXTERNAL_PORT,
+        "https": HTTPS_EXTERNAL_PORT,
+        "telnet": TELNET_EXTERNAL_PORT,
+        "ftp": FTP_EXTERNAL_PORT,
+        "mysql": MYSQL_EXTERNAL_PORT,
+        "postgresql": POSTGRESQL_EXTERNAL_PORT,
+        "dns": DNS_EXTERNAL_PORT,
+        "smb": SMB_EXTERNAL_PORT,
     }
 
     # --- Authentication ---

@@ -71,6 +71,21 @@ _SECTIONS = [
         ],
     },
     {
+        "id": "external_ports",
+        "label": "External Ports",
+        "settings": [
+            ("SSH_EXTERNAL_PORT", "SSH", "int"),
+            ("HTTP_EXTERNAL_PORT", "HTTP", "int"),
+            ("HTTPS_EXTERNAL_PORT", "HTTPS", "int"),
+            ("TELNET_EXTERNAL_PORT", "Telnet", "int"),
+            ("FTP_EXTERNAL_PORT", "FTP", "int"),
+            ("MYSQL_EXTERNAL_PORT", "MySQL", "int"),
+            ("POSTGRESQL_EXTERNAL_PORT", "PostgreSQL", "int"),
+            ("DNS_EXTERNAL_PORT", "DNS", "int"),
+            ("SMB_EXTERNAL_PORT", "SMB", "int"),
+        ],
+    },
+    {
         "id": "perimeter",
         "label": "Perimeter / Shodan",
         "settings": [

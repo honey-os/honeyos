@@ -113,6 +113,16 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
 | `POSTGRESQL_HONEYPOT_PORT` | `5433` | Internal PostgreSQL honeypot port |
 | `DNS_HONEYPOT_PORT` | `5353` | Internal DNS honeypot port |
+| `SMB_HONEYPOT_PORT` | `4450` | Internal SMB honeypot port |
+| `SSH_EXTERNAL_PORT` | `22` | External-facing SSH port (after Docker/firewall NAT) |
+| `HTTP_EXTERNAL_PORT` | `80` | External-facing HTTP port |
+| `HTTPS_EXTERNAL_PORT` | `443` | External-facing HTTPS port |
+| `TELNET_EXTERNAL_PORT` | `23` | External-facing Telnet port |
+| `FTP_EXTERNAL_PORT` | `21` | External-facing FTP port |
+| `MYSQL_EXTERNAL_PORT` | `3306` | External-facing MySQL port |
+| `POSTGRESQL_EXTERNAL_PORT` | `5432` | External-facing PostgreSQL port |
+| `DNS_EXTERNAL_PORT` | `53` | External-facing DNS port |
+| `SMB_EXTERNAL_PORT` | `445` | External-facing SMB port |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
