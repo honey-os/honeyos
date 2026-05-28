@@ -127,16 +127,11 @@ class PerimeterService:
             logger.error("Censys lookup failed for %s", ip, exc_info=True)
             return None
 
-        result = data.get("result", {})
-        logger.info("Censys: top-level keys: %s", list(data.keys()))
-        logger.info("Censys: result keys: %s", list(result.keys()))
-        if result.get("services"):
-            logger.info("Censys: first service sample: %s", json.dumps(result["services"][0], default=str)[:1000])
-        else:
-            logger.warning("Censys: no 'services' key in result, raw result (truncated): %s", json.dumps(result, default=str)[:2000])
+        # v3 nests host data under result.resource
+        resource = data.get("result", {}).get("resource", {})
 
         ports_data = []
-        for svc in result.get("services", []):
+        for svc in resource.get("services", []):
             version = ""
             software = svc.get("software", [])
             if software and isinstance(software, list):
@@ -145,14 +140,13 @@ class PerimeterService:
             ports_data.append({
                 "port": svc.get("port"),
                 "transport": (svc.get("transport_protocol") or "tcp").lower(),
-                "service": svc.get("service_name", ""),
+                "service": svc.get("protocol", ""),
                 "product": svc.get("extended_service_name", ""),
                 "version": version,
                 "banner": (svc.get("banner", "") or "")[:2000],
             })
 
-        raw_labels = result.get("labels", [])
-        # v3 labels are objects with a "value" key
+        raw_labels = resource.get("labels", [])
         labels = [
             lbl["value"] if isinstance(lbl, dict) else lbl
             for lbl in raw_labels
@@ -161,9 +155,9 @@ class PerimeterService:
             lbl.lower() == "honeypot" for lbl in labels
         )
 
-        autonomous_system = result.get("autonomous_system", {})
-        operating_system = result.get("operating_system", {})
-        dns = result.get("dns", {})
+        autonomous_system = resource.get("autonomous_system", {})
+        operating_system = resource.get("operating_system", {})
+        dns = resource.get("dns", {})
         reverse_dns = dns.get("reverse_dns", {})
         hostnames = reverse_dns.get("names", [])
 
@@ -184,7 +178,7 @@ class PerimeterService:
             org=autonomous_system.get("name"),
             isp=autonomous_system.get("description"),
             os_name=operating_system.get("product"),
-            censys_updated=result.get("last_updated_at"),
+            censys_updated=resource.get("last_updated_at"),
         )
         db.session.add(snapshot)
         db.session.commit()
