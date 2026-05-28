@@ -123,6 +123,15 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_EXTERNAL_PORT` | `5432` | External-facing PostgreSQL port |
 | `DNS_EXTERNAL_PORT` | `53` | External-facing DNS port |
 | `SMB_EXTERNAL_PORT` | `445` | External-facing SMB port |
+| `SSH_HONEYPOT_ENABLED` | `true` | Enable SSH honeypot on startup |
+| `HTTP_HONEYPOT_ENABLED` | `true` | Enable HTTP honeypot on startup |
+| `HTTPS_HONEYPOT_ENABLED` | `true` | Enable HTTPS honeypot on startup |
+| `TELNET_HONEYPOT_ENABLED` | `true` | Enable Telnet honeypot on startup |
+| `FTP_HONEYPOT_ENABLED` | `true` | Enable FTP honeypot on startup |
+| `MYSQL_HONEYPOT_ENABLED` | `true` | Enable MySQL honeypot on startup |
+| `POSTGRESQL_HONEYPOT_ENABLED` | `true` | Enable PostgreSQL honeypot on startup |
+| `DNS_HONEYPOT_ENABLED` | `true` | Enable DNS honeypot on startup |
+| `SMB_HONEYPOT_ENABLED` | `true` | Enable SMB honeypot on startup |
 | `CENSYS_API_TOKEN` | *(empty)* | Censys API personal access token for perimeter monitoring |
 | `PUBLIC_IP` | *(empty)* | Override public IP detection (auto-detected if empty) |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |

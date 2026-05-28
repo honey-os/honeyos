@@ -133,8 +133,13 @@ class PerimeterService:
         # v3 nests host data under result.resource
         resource = data.get("result", {}).get("resource", {})
 
+        services = resource.get("services", [])
+        for i, svc in enumerate(services[:3]):
+            logger.info("Censys: service[%d] keys: %s", i, list(svc.keys()))
+            logger.info("Censys: service[%d] sample: %s", i, json.dumps(svc, default=str)[:1500])
+
         ports_data = []
-        for svc in resource.get("services", []):
+        for svc in services:
             version = ""
             software = svc.get("software", [])
             if software and isinstance(software, list):
