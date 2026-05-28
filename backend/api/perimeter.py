@@ -158,8 +158,10 @@ def refresh_shodan():
     if not ip:
         return jsonify({"error": "failed", "message": "Could not detect public IP"}), 500
 
-    with current_app.app_context():
+    try:
         snapshot = svc.lookup_shodan(ip)
+    except PermissionError as exc:
+        return jsonify({"error": "forbidden", "message": str(exc)}), 403
     if not snapshot:
         return jsonify({"error": "failed", "message": "Shodan lookup returned no data"}), 404
     return jsonify(snapshot.to_dict())

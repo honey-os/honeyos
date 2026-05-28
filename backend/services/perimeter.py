@@ -104,6 +104,10 @@ class PerimeterService:
             if resp.status_code == 404:
                 logger.info("Shodan: no data for %s", ip)
                 return None
+            if resp.status_code == 403:
+                raise PermissionError(
+                    "Shodan API key is invalid, expired, or rate-limited"
+                )
             resp.raise_for_status()
             data = resp.json()
         except Exception:
@@ -160,7 +164,11 @@ class PerimeterService:
         with self._app.app_context():
             snapshot = ShodanSnapshot.query.filter_by(ip=ip).first()
             if not snapshot and Config.SHODAN_API_KEY:
-                snapshot = self.lookup_shodan(ip)
+                try:
+                    snapshot = self.lookup_shodan(ip)
+                except PermissionError:
+                    logger.warning("Shodan API key rejected; continuing drift check without Shodan data")
+                    snapshot = None
 
             # Declared ports
             declared = DeclaredPort.query.all()
