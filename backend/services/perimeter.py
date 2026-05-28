@@ -128,6 +128,12 @@ class PerimeterService:
             return None
 
         result = data.get("result", {})
+        logger.info("Censys: top-level keys: %s", list(data.keys()))
+        logger.info("Censys: result keys: %s", list(result.keys()))
+        if result.get("services"):
+            logger.info("Censys: first service sample: %s", json.dumps(result["services"][0], default=str)[:1000])
+        else:
+            logger.warning("Censys: no 'services' key in result, raw result (truncated): %s", json.dumps(result, default=str)[:2000])
 
         ports_data = []
         for svc in result.get("services", []):
