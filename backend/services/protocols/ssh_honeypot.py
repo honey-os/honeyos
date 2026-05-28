@@ -179,6 +179,7 @@ class SSHHoneypot:
             ctx.push()
         try:
             transport = paramiko.Transport(client_sock)
+            transport.local_version = "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6"
             transport.add_server_key(_HOST_KEY)
             server = _ServerInterface(
                 self.event_processor, self.session_recorder, addr, self.app, self.port

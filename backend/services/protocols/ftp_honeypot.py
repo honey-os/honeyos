@@ -29,7 +29,7 @@ class FTPHoneypot:
     commands needed to lure and log attackers.
     """
 
-    BANNER = "220 FTP Server Ready\r\n"
+    BANNER = "220 (vsFTPd 3.0.5)\r\n"
 
     def __init__(self, port, config=None, event_processor=None,
                  session_recorder=None, app=None, connection_throttler=None):
