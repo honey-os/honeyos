@@ -5,10 +5,14 @@ Provides endpoints for declared port management, drift detection,
 Censys exposure lookups, and banner comparison.
 """
 
+import logging
+
 from flask import Blueprint, current_app, jsonify, request
 
 from models import DeclaredPort, PerimeterScan, CensysSnapshot, db
 from models import _iso_utc
+
+logger = logging.getLogger(__name__)
 
 perimeter_bp = Blueprint("perimeter", __name__)
 
@@ -154,19 +158,24 @@ def refresh_censys():
     from config import Config
 
     if not Config.CENSYS_API_TOKEN:
+        logger.warning("Censys refresh requested but CENSYS_API_TOKEN not set")
         return jsonify({"error": "not_configured", "message": "CENSYS_API_TOKEN not set"}), 400
 
     svc = current_app.perimeter_service
     ip = svc.detect_public_ip()
     if not ip:
+        logger.warning("Censys refresh: could not detect public IP")
         return jsonify({"error": "failed", "message": "Could not detect public IP"}), 500
 
+    logger.info("Refreshing Censys snapshot for %s", ip)
     try:
         snapshot = svc.lookup_censys(ip)
     except PermissionError as exc:
+        logger.warning("Censys API rejected: %s", exc)
         return jsonify({"error": "forbidden", "message": str(exc)}), 403
     if not snapshot:
         return jsonify({"error": "failed", "message": "Censys lookup returned no data"}), 404
+    logger.info("Censys snapshot refreshed: %d services found", len(snapshot.to_dict().get("ports_data") or []))
     return jsonify(snapshot.to_dict())
 
 

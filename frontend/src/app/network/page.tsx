@@ -62,12 +62,14 @@ export default function NetworkPage() {
   const [addingPort, setAddingPort] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<PerimeterScan | null>(null);
   const [scanHistory, setScanHistory] = useState<PerimeterScan[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   // Exposure tab state
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [banners, setBanners] = useState<BannerComparison[]>([]);
   const [expandedBanner, setExpandedBanner] = useState<number | null>(null);
 
@@ -144,6 +146,7 @@ export default function NetworkPage() {
 
   const handleScan = async () => {
     setScanning(true);
+    setScanError(null);
     try {
       const result = await triggerPerimeterScan();
       setScanResult(result);
@@ -153,8 +156,8 @@ export default function NetworkPage() {
       if (data.items.length > 1) {
         setScanHistory(data.items.slice(1));
       }
-    } catch {
-      // handled by UI
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Drift scan failed');
     } finally {
       setScanning(false);
     }
@@ -162,14 +165,15 @@ export default function NetworkPage() {
 
   const handleRefreshCensys = async () => {
     setRefreshing(true);
+    setRefreshError(null);
     try {
       await refreshCensys();
       fetchCensysSnapshot();
       fetchPerimeterStatus();
       const data = await getBannerComparison();
       setBanners(data.items || []);
-    } catch {
-      // handled by UI
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Censys refresh failed');
     } finally {
       setRefreshing(false);
     }
@@ -209,6 +213,7 @@ export default function NetworkPage() {
           declaredPorts={declaredPorts}
           declaredPortsLoading={declaredPortsLoading}
           scanResult={scanResult}
+          scanError={scanError}
           scanHistory={scanHistory}
           historyOpen={historyOpen}
           setHistoryOpen={setHistoryOpen}
@@ -230,6 +235,7 @@ export default function NetworkPage() {
           snapshot={censysSnapshot}
           censysLoading={censysLoading}
           refreshing={refreshing}
+          refreshError={refreshError}
           banners={banners}
           expandedBanner={expandedBanner}
           setExpandedBanner={setExpandedBanner}
@@ -250,6 +256,7 @@ function DriftTab({
   declaredPorts,
   declaredPortsLoading,
   scanResult,
+  scanError,
   scanHistory,
   historyOpen,
   setHistoryOpen,
@@ -270,6 +277,7 @@ function DriftTab({
   declaredPorts: DeclaredPort[];
   declaredPortsLoading: boolean;
   scanResult: PerimeterScan | null;
+  scanError: string | null;
   scanHistory: PerimeterScan[];
   historyOpen: boolean;
   setHistoryOpen: (v: boolean) => void;
@@ -477,6 +485,12 @@ function DriftTab({
         </div>
 
         <div className="p-5">
+          {scanError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-500/5 border border-red-500/20 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-400">{scanError}</p>
+            </div>
+          )}
           {!scanResult ? (
             <div className="text-center py-8">
               <Shield className="w-12 h-12 text-gray-700 mx-auto mb-4" />
@@ -603,6 +617,7 @@ function ExposureTab({
   snapshot,
   censysLoading,
   refreshing,
+  refreshError,
   banners,
   expandedBanner,
   setExpandedBanner,
@@ -612,6 +627,7 @@ function ExposureTab({
   snapshot: CensysSnapshot | null;
   censysLoading: boolean;
   refreshing: boolean;
+  refreshError: string | null;
   banners: BannerComparison[];
   expandedBanner: number | null;
   setExpandedBanner: (v: number | null) => void;
@@ -702,6 +718,13 @@ function ExposureTab({
             Refresh
           </button>
         </div>
+
+        {refreshError && (
+          <div className="mx-5 mt-4 p-3 rounded-lg bg-red-500/5 border border-red-500/20 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-400">{refreshError}</p>
+          </div>
+        )}
 
         {snapshot ? (
           <div className="p-5">
