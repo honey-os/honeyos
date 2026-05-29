@@ -101,6 +101,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 |----------|---------|-------------|
 | `SECRET_KEY` | `honeyos-default-secret-change-me` | Flask secret key. Generate with `openssl rand -hex 32` |
 | `DEBUG` | `false` | Enable Flask debug mode |
+| `READ_ONLY` | `false` | Lock dashboard to read-only mode. Login/logout still works; manage honeypots via `*_HONEYPOT_ENABLED` env vars instead |
 | `DATABASE_URL` | `sqlite:///honeyos.db` | SQLAlchemy database URI |
 | `BIND_HOST` | `0.0.0.0` | Address the backend binds to |
 | `API_PORT` | `7778` | Backend API port |
@@ -132,11 +133,15 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_HONEYPOT_ENABLED` | `true` | Enable PostgreSQL honeypot on startup |
 | `DNS_HONEYPOT_ENABLED` | `true` | Enable DNS honeypot on startup |
 | `SMB_HONEYPOT_ENABLED` | `true` | Enable SMB honeypot on startup |
+| `ABUSECH_API_KEY` | *(empty)* | abuse.ch API key for ThreatFox/URLhaus threat intelligence lookups |
 | `CENSYS_API_TOKEN` | *(empty)* | Censys API personal access token for perimeter monitoring |
 | `PUBLIC_IP` | *(empty)* | Override public IP detection (auto-detected if empty) |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
+| `THROTTLE_EVENT_THRESHOLD` | `5000` | Events from one IP on one protocol before blocking new connections |
+| `THROTTLE_BLOCK_SECONDS` | `3600` | Duration (seconds) to block an IP after threshold is exceeded |
+| `MAX_CONNECTIONS_PER_IP` | `100` | Max concurrent connections from a single IP before blocking |
 | `LOG_LEVEL` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `SMTP_HOST` | *(empty)* | SMTP server for email alerts |
 | `SMTP_PORT` | `587` | SMTP server port |
@@ -145,11 +150,13 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SMTP_USE_TLS` | `true` | Use TLS for SMTP |
 | `SMTP_FROM_ADDRESS` | `honeyos@localhost` | From address for alert emails |
 | `SLACK_WEBHOOK_URL` | *(empty)* | Slack incoming webhook URL for alerts |
+| `WEBHOOK_URL` | *(empty)* | Generic webhook URL for alerts (receives JSON POST) |
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
 | `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
 | `TLS_CERT` | `internal` | TLS certificate: `internal` (self-signed), a file path, or a domain for Let's Encrypt |
 | `TLS_KEY` | *(empty)* | TLS private key file path (used with custom certs only) |
+| `FTP_PASV_ADDRESS` | *(empty)* | IP to advertise in FTP PASV responses (set to host/public IP in Docker) |
 
 ## Default Honeypot Ports
 
