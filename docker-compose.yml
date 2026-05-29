@@ -6,6 +6,7 @@ services:
     command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
+      - "7778:7778"
     volumes:
       - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs
@@ -26,7 +27,6 @@ services:
     container_name: honeyos-backend
     restart: unless-stopped
     ports:
-      - "7778:7778"   # API (browser talks directly to backend)
       # Honeypot ports - map standard ports to internal high ports
       # Attackers scanning the network see real service ports
       - "22:2222"     # SSH honeypot

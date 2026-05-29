@@ -122,6 +122,7 @@ services:
     command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
+      - "7778:7778"
     volumes:
       - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs
@@ -150,7 +151,6 @@ services:
       - "53:5353/udp"
       - "53:5353/tcp"
       - "445:4450"
-      - "7778:7778"
       - "4400-4404:4400-4404"
     volumes:
       - ./data:/data

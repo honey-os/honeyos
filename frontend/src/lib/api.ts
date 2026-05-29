@@ -1,10 +1,11 @@
 /**
  * HoneyOS API Client
  *
- * Talks directly to the Flask backend (default port 7778).
- * The browser auto-detects the backend URL from its own hostname,
- * so same-machine deployments work without any configuration.
- * For two-machine setups, set NEXT_PUBLIC_API_URL at build time.
+ * The browser talks directly to the backend on port 7778.
+ * getBaseUrl() auto-detects the backend URL from the current hostname.
+ * Caddy terminates TLS on both :7777 (frontend) and :7778 (backend)
+ * so HTTPS works without the backend needing its own certs.
+ * Set NEXT_PUBLIC_API_URL to override for non-standard setups.
  */
 
 // ---------------------------------------------------------------------------
@@ -298,14 +299,20 @@ export interface AuthStatus {
 // Base URL & fetch helper
 // ---------------------------------------------------------------------------
 
+declare global {
+  interface Window {
+    __HONEYOS_API_URL__?: string;
+  }
+}
+
 export function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined' && window.__HONEYOS_API_URL__) {
+    return window.__HONEYOS_API_URL__;
   }
   if (typeof window !== 'undefined') {
     return `${window.location.protocol}//${window.location.hostname}:7778`;
   }
-  return 'http://localhost:7778';
+  return 'http://backend:7778';
 }
 
 async function fetchApi<T>(
