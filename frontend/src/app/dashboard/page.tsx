@@ -343,7 +343,7 @@ export default function DashboardPage() {
                     >
                       <td className="px-5 py-3 font-mono text-sm whitespace-nowrap">
                         <Link
-                          href={`/attackers?ip=${encodeURIComponent(attacker.ip)}`}
+                          href={`/attackers/${encodeURIComponent(attacker.ip)}`}
                           className="text-amber-400 hover:text-amber-300"
                         >
                           {attacker.ip}
