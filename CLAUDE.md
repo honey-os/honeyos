@@ -65,9 +65,11 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 ## Testing & Validation
 - **Backend syntax check**: `cd backend && python -c "import ast; ast.parse(open('FILE').read())"`
 - **Backend tests**: `cd backend && python -m pytest tests/ -v`
-- **Frontend**: No local `node_modules` — everything runs in Docker. Use `make dev` to build/test.
-- **Frontend type-check in Docker**: `docker compose exec frontend npx tsc --noEmit`
-- **Frontend lint in Docker**: `docker compose exec frontend npm run lint`
+- **Frontend**: No local `node_modules` — everything runs in Docker.
+- **Frontend type-check (containers running)**: `docker compose -f docker-compose.dev.yml exec frontend npx tsc --noEmit`
+- **Frontend type-check (containers stopped)**: `docker compose -f docker-compose.dev.yml run --rm --no-deps frontend npx tsc --noEmit`
+- **Frontend lint**: No `.eslintrc` config exists yet — `npm run lint` will prompt to create one. Type-check with `tsc` is the primary frontend validation.
+- **Note**: The `.next/types/validator.ts` error from tsc is a known Next.js internal artifact — ignore it. Only errors in `src/` matter.
 
 ## Code Conventions
 - Python: type hints, snake_case, docstrings for public functions

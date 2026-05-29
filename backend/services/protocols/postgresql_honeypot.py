@@ -7,6 +7,7 @@ simple clients (psql, pgAdmin, scanners).
 """
 
 import logging
+import re
 import socket
 import struct
 import threading
@@ -79,6 +80,34 @@ def _make_empty_result(tag: str = "SELECT 0") -> bytes:
     return row_desc + cmd_complete
 
 
+def _make_row_result(columns: list[tuple[str, str | None]],
+                     tag: str = "SELECT 1") -> bytes:
+    """Return a result set with one row.
+
+    *columns* is a list of ``(column_name, value)`` pairs.
+    A value of ``None`` sends a SQL NULL.
+    """
+    num_fields = len(columns)
+    # -- RowDescription --
+    fields = b""
+    for col_name, _ in columns:
+        fields += col_name.encode() + b"\x00"
+        # table_oid=0  col_attr=0  type_oid=25(text)  typlen=-1  typmod=-1  fmt=0
+        fields += struct.pack("!IhIhih", 0, 0, 25, -1, -1, 0)
+    row_desc = _make_msg(ROW_DESCRIPTION, struct.pack("!H", num_fields) + fields)
+    # -- DataRow --
+    row_data = struct.pack("!H", num_fields)
+    for _, value in columns:
+        if value is None:
+            row_data += struct.pack("!i", -1)
+        else:
+            val_bytes = value.encode()
+            row_data += struct.pack("!i", len(val_bytes)) + val_bytes
+    data_row = _make_msg(DATA_ROW, row_data)
+    # -- CommandComplete --
+    return row_desc + data_row + _make_command_complete(tag)
+
+
 # Map of statement-leading keywords to their CommandComplete tag.
 # These are statements that do NOT return a result set — the correct
 # response is just CommandComplete(<tag>) + ReadyForQuery.
@@ -114,19 +143,63 @@ _COMMAND_TAGS: dict[str, str] = {
 }
 
 
-def _query_response(query: str) -> bytes:
-    """Build the correct pre-ReadyForQuery response for *query*.
+# Patterns for SELECT queries that must return realistic data to avoid
+# fingerprinting.  Returning 0 rows for scalar functions like
+# inet_server_addr() is a dead giveaway that this isn't real Postgres.
+_RE_INET_SERVER = re.compile(r"inet_server_addr", re.IGNORECASE)
+_RE_VERSION_FUNC = re.compile(r"\bversion\s*\(\s*\)", re.IGNORECASE)
+_RE_CURRENT_USER = re.compile(r"\bcurrent_user\b", re.IGNORECASE)
+_RE_CURRENT_DB = re.compile(r"\bcurrent_database\s*\(\s*\)", re.IGNORECASE)
+_RE_COPY_SUBQUERY = re.compile(r"^COPY\s*\(", re.IGNORECASE)
 
-    Statements that return rows (SELECT, SHOW, EXPLAIN, …) get an empty
-    result set.  Everything else gets a bare CommandComplete with the
-    appropriate tag — no RowDescription.
+
+def _query_response(query: str, *, server_addr: str = "127.0.0.1",
+                    version: str = "14.5", username: str = "postgres",
+                    database: str = "postgres") -> tuple[bytes, str]:
+    """Build the wire response and human-readable reply text for *query*.
+
+    Returns ``(wire_bytes, reply_text)`` where *wire_bytes* is everything
+    before the ReadyForQuery message and *reply_text* is a short string
+    for the session recorder.
     """
     keyword = query.split(None, 1)[0].upper().rstrip(";") if query else ""
+
+    # COPY with a sub-SELECT (e.g. COPY (SELECT '') TO PROGRAM '…')
+    # pipes at least 1 row.  Real Postgres returns COPY 1.
+    if keyword == "COPY" and _RE_COPY_SUBQUERY.match(query):
+        tag = "COPY 1"
+        return _make_command_complete(tag), tag
+
+    # Non-row-returning statements (SET, BEGIN, INSERT, plain COPY, …)
     tag = _COMMAND_TAGS.get(keyword)
     if tag is not None:
-        return _make_command_complete(tag)
-    # Default: treat as a row-returning statement.
-    return _make_empty_result()
+        return _make_command_complete(tag), tag
+
+    # -- Row-returning statements (SELECT, SHOW, EXPLAIN, …) -----------
+
+    # inet_server_addr() — must return at least 1 row on real PG.
+    if _RE_INET_SERVER.search(query):
+        ip = server_addr
+        if "host(" in query.lower():
+            return _make_row_result([("host", ip)]), ip
+        return _make_row_result([("inet_server_addr", f"{ip}/32")]), f"{ip}/32"
+
+    # version()
+    if _RE_VERSION_FUNC.search(query):
+        full = (f"PostgreSQL {version} on x86_64-pc-linux-gnu, "
+                "compiled by gcc (GCC) 12.2.0, 64-bit")
+        return _make_row_result([("version", full)]), f"PostgreSQL {version}"
+
+    # current_user
+    if _RE_CURRENT_USER.search(query):
+        return _make_row_result([("current_user", username)]), username
+
+    # current_database()
+    if _RE_CURRENT_DB.search(query):
+        return _make_row_result([("current_database", database)]), database
+
+    # Unknown SELECT → empty result set
+    return _make_empty_result(), "SELECT 0"
 
 
 def _read_message(sock: socket.socket) -> tuple[str, bytes] | None:
@@ -293,6 +366,7 @@ class PostgreSQLHoneypot:
             ctx.push()
         try:
             client_sock.settimeout(60)
+            server_addr = client_sock.getsockname()[0]
 
             # Read startup message
             params = _read_startup(client_sock)
@@ -405,15 +479,17 @@ class PostgreSQLHoneypot:
                     # Respond with the right message shape for the
                     # statement type, then signal ReadyForQuery so the
                     # client knows it can send the next command.
-                    client_sock.sendall(
-                        _query_response(query) + _make_ready_for_query()
+                    response, reply_text = _query_response(
+                        query,
+                        server_addr=server_addr,
+                        version=version,
+                        username=username,
+                        database=database,
                     )
+                    client_sock.sendall(response + _make_ready_for_query())
 
                     # Record command with human-readable response
                     if self.session_recorder and session_id:
-                        keyword = query.split(None, 1)[0].upper().rstrip(";") if query else ""
-                        cmd_tag = _COMMAND_TAGS.get(keyword)
-                        reply_text = cmd_tag if cmd_tag is not None else "SELECT 0 (empty set)"
                         self.session_recorder.record_command(
                             session_id, query, cmd_time, output=reply_text,
                         )
