@@ -388,11 +388,7 @@ class PostgreSQLHoneypot:
                 if tag == "Q":  # Simple Query
                     query = payload.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
                     logger.info("PostgreSQL query from %s: %s", addr[0], query)
-
-                    if self.session_recorder and session_id:
-                        self.session_recorder.record_command(
-                            session_id, query, datetime.now(timezone.utc)
-                        )
+                    cmd_time = datetime.now(timezone.utc)
 
                     if self.event_processor:
                         self.event_processor.process_event({
@@ -412,6 +408,15 @@ class PostgreSQLHoneypot:
                     client_sock.sendall(
                         _query_response(query) + _make_ready_for_query()
                     )
+
+                    # Record command with human-readable response
+                    if self.session_recorder and session_id:
+                        keyword = query.split(None, 1)[0].upper().rstrip(";") if query else ""
+                        cmd_tag = _COMMAND_TAGS.get(keyword)
+                        reply_text = cmd_tag if cmd_tag is not None else "SELECT 0 (empty set)"
+                        self.session_recorder.record_command(
+                            session_id, query, cmd_time, output=reply_text,
+                        )
 
                 else:
                     # Unknown/unsupported message -- send error and stay alive

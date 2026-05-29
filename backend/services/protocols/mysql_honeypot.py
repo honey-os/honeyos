@@ -254,6 +254,23 @@ def _query_resultset(query: str, seq: int, status_flags: int,
     return None
 
 
+def _describe_query_result(query: str, database: str) -> str:
+    """Return a human-readable description of the result set for replay."""
+    upper = query.upper().strip().rstrip(";").strip()
+    if upper in ("SHOW DATABASES", "SHOW SCHEMAS"):
+        return "information_schema, mysql, performance_schema, sys"
+    if upper.startswith("SHOW TABLES"):
+        return f"(empty set — no tables in {database or 'mysql'})"
+    m = _RE_SELECT_VAR.match(query)
+    if m:
+        var = m.group(1).lower()
+        val = _SYSTEM_VARIABLES.get(var, "")
+        return f"{m.group(1)} = {val}"
+    if _RE_SELECT_DATABASE.match(query):
+        return database or "(NULL)"
+    return "OK"
+
+
 def _read_packet(sock: socket.socket) -> tuple[int, bytes] | None:
     """Read one MySQL packet.  Returns (sequence_id, payload) or None."""
     header = b""
@@ -406,6 +423,7 @@ class MySQLHoneypot:
                     session_id,
                     f"AUTH user={username} db={database}",
                     datetime.now(timezone.utc),
+                    output="OK (authentication accepted)",
                 )
 
             # Log credential attempt
@@ -453,11 +471,7 @@ class MySQLHoneypot:
                 if cmd_type == 0x03:  # COM_QUERY
                     query = cmd_data.strip()
                     logger.info("MySQL query from %s: %s", addr[0], query)
-
-                    if self.session_recorder and session_id:
-                        self.session_recorder.record_command(
-                            session_id, query, datetime.now(timezone.utc)
-                        )
+                    cmd_time = datetime.now(timezone.utc)
 
                     if self.event_processor:
                         self.event_processor.process_event({
@@ -488,8 +502,15 @@ class MySQLHoneypot:
                     )
                     if resultset is not None:
                         client_sock.sendall(resultset)
+                        reply_text = _describe_query_result(query, database)
                     else:
                         client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
+                        reply_text = "OK"
+
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_command(
+                            session_id, query, cmd_time, output=reply_text,
+                        )
 
                 elif cmd_type == 0x02:  # COM_INIT_DB
                     client_sock.sendall(_build_ok_packet(seq + 1, status_flags))

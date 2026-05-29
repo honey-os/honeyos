@@ -649,6 +649,7 @@ class SMBHoneypot:
                 session_id,
                 f"NTLMSSP_AUTH domain={creds.get('domain', '')} user={creds.get('username', '')}",
                 datetime.now(timezone.utc),
+                output="STATUS_LOGON_FAILURE (0xC000006D)",
             )
 
     def _emit_share_event(self, addr: tuple, session_id: str | None,
@@ -666,6 +667,14 @@ class SMBHoneypot:
                 "session_id": session_id,
                 "details": {"share_name": share_name},
             })
+
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id,
+                f"TREE_CONNECT {share_name}",
+                datetime.now(timezone.utc),
+                output="STATUS_BAD_NETWORK_NAME (0xC00000CC)",
+            )
 
     # ------------------------------------------------------------------
     # Helpers

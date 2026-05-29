@@ -260,12 +260,7 @@ class SSHHoneypot:
     def _execute_fake_command(self, channel, command: str, addr: tuple, session_id: str | None) -> None:
         """Process a command and send a fake response."""
         logger.info("SSH command from %s: %s", addr[0], command)
-
-        # Record the command
-        if self.session_recorder and session_id:
-            self.session_recorder.record_command(
-                session_id, command, datetime.now(timezone.utc)
-            )
+        cmd_time = datetime.now(timezone.utc)
 
         # Log as event
         if self.event_processor:
@@ -299,3 +294,10 @@ class SSHHoneypot:
                 response = f"bash: {command}: command not found\n"
 
         channel.send(response.replace("\n", "\r\n"))
+
+        # Record command with server response
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id, command, cmd_time,
+                output=response.rstrip("\n") or None,
+            )
