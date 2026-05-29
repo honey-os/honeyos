@@ -111,6 +111,8 @@ def create_app(config_class=Config) -> Flask:
             return None
         if request.path in READ_ONLY_ALLOWLIST:
             return None
+        if request.path.endswith("/identify-malware"):
+            return None
         return jsonify({
             "error": "read_only",
             "message": "This instance is in read-only mode",
