@@ -71,7 +71,7 @@ _COMMAND_RESPONSES = {
 }
 
 # Commands that succeed silently (exit code 0, no output)
-_SILENT_OK_PREFIXES = ("cd", "chmod", "rm", "cp", "mv", "mkdir", "touch")
+_SILENT_OK_PREFIXES = ("cd", "rm", "cp", "mv", "mkdir", "touch")
 
 # Valid 52-byte ARM 32-bit little-endian ELF header.
 # Bots read this via cat/hexdump/dd to determine CPU architecture before
@@ -371,12 +371,20 @@ class TelnetHoneypot:
         if cmd.startswith("printf "):
             return self._handle_printf(cmd), True
 
-        # --- Silent-success commands: cd, chmod, rm, cp, mv, mkdir, touch ---
+        # --- Silent-success commands: cd, rm, cp, mv, mkdir, touch ---
         base = cmd.split()[0] if cmd.split() else cmd
         # strip any path prefix on the command name (e.g. /bin/rm -> rm)
         base_name = base.rsplit("/", 1)[-1]
         if base_name in _SILENT_OK_PREFIXES:
             return "", True
+
+        # --- Built-in: cat (file-not-found for unknown files) ---
+        if base_name == "cat":
+            return self._handle_cat(cmd)
+
+        # --- Built-in: chmod (error on missing files) ---
+        if base_name == "chmod":
+            return self._handle_chmod(cmd)
 
         # --- Download commands: log the URL, return realistic failure ---
         if base_name in ("wget", "curl", "tftp"):
@@ -394,7 +402,11 @@ class TelnetHoneypot:
             if response is not None:
                 return response, True
 
-        # --- Unknown command ---
+        # --- Unknown command / file execution ---
+        # Preserve the typed path (e.g. "./i" not "i") and use the
+        # correct error for path-based execution attempts.
+        if "/" in base:
+            return f"-sh: {base}: No such file or directory", False
         return f"-sh: {base_name}: not found", False
 
     # ------------------------------------------------------------------
@@ -442,6 +454,45 @@ class TelnetHoneypot:
         ):
             text = text[1:-1]
         return _interpret_escapes(text)
+
+    def _handle_cat(self, cmd: str) -> tuple[str | bytes, bool]:
+        """Handle ``cat`` with realistic file-not-found errors.
+
+        Known files (from the static response table and arch probes) return
+        their content; everything else returns the standard BusyBox error.
+        """
+        # Check static responses first (e.g. "cat /etc/passwd")
+        response = _COMMAND_RESPONSES.get(cmd)
+        if response is not None:
+            return response, True
+
+        # Arch probes handled separately (returns bytes)
+        arch_result = self._handle_arch_probe(cmd)
+        if arch_result is not None:
+            return arch_result
+
+        # Extract the filename argument, stripping any output redirect
+        args = cmd.split(None, 1)[1] if " " in cmd else ""
+        if ">" in args:
+            args = args[:args.index(">")].strip()
+        if not args:
+            return "", True
+
+        return f"cat: {args}: No such file or directory", False
+
+    @staticmethod
+    def _handle_chmod(cmd: str) -> tuple[str, bool]:
+        """Handle ``chmod`` with error on missing files.
+
+        Real BusyBox chmod returns an error and exit code 1 when the
+        target doesn't exist, which is important for ``||`` fallback
+        chains in bot loaders.
+        """
+        parts = cmd.split()
+        if len(parts) >= 3:
+            target = parts[-1]
+            return f"chmod: cannot access '{target}': No such file or directory", False
+        return "", True
 
     def _handle_arch_probe(self, cmd: str) -> tuple[str | bytes, bool] | None:
         """Handle ELF architecture-probe commands.
