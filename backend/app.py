@@ -51,8 +51,8 @@ def create_app(config_class=Config) -> Flask:
 
     # --- Extensions -------------------------------------------------------
     db.init_app(application)
-    CORS(application, resources={r"/api/*": {"origins": "*"}})
-    socketio.init_app(application, cors_allowed_origins="*", async_mode="threading")
+    CORS(application, resources={r"/api/*": {"origins": r".*"}}, supports_credentials=True)
+    socketio.init_app(application, cors_allowed_origins=r".*", async_mode="threading")
 
     # --- Blueprints -------------------------------------------------------
     from api.events import events_bp

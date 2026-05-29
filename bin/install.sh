@@ -150,6 +150,7 @@ services:
       - "53:5353/udp"
       - "53:5353/tcp"
       - "445:4450"
+      - "7778:7778"
       - "4400-4404:4400-4404"
     volumes:
       - ./data:/data
@@ -170,8 +171,6 @@ services:
     image: ${IMAGE_PREFIX}/honeyos-frontend:${TAG}
     container_name: honeyos-frontend
     restart: unless-stopped
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:7778
     depends_on:
       backend:
         condition: service_healthy
@@ -207,8 +206,6 @@ CERT_DIR="/data/certs"
 if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
 }
 EOF
@@ -226,8 +223,6 @@ elif [ "$TLS_CERT" = "internal" ]; then
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
 	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
 }
 EOF
@@ -235,8 +230,6 @@ else
     cat > /tmp/Caddyfile <<EOF
 :7777 {
 	tls ${TLS_CERT} ${TLS_KEY}
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
 }
 EOF

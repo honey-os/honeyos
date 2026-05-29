@@ -44,8 +44,6 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:7778
     depends_on:
       - backend
     networks:

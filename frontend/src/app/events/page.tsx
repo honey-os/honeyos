@@ -14,7 +14,7 @@ import SeverityBadge from '@/components/ui/SeverityBadge';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatDate, formatRelativeTime, truncateText } from '@/utils/formatters';
 import { useUrlFilters } from '@/utils/useUrlFilters';
-import { getEvent } from '@/lib/api';
+import { getEvent, getBaseUrl } from '@/lib/api';
 import type { Event } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -119,28 +119,14 @@ export default function EventsPage() {
   const hasActiveFilters = filterEventType || filterProtocol || filterSeverity || filterStartDate || filterEndDate;
 
   const handleExport = () => {
-    const csv = [
-      ['Time', 'Type', 'Protocol', 'Source IP', 'Port', 'Severity', 'Details'].join(','),
-      ...events.map((e) =>
-        [
-          e.timestamp,
-          e.event_type,
-          e.protocol,
-          e.source_ip,
-          e.destination_port,
-          e.severity,
-          JSON.stringify(e.details || ''),
-        ].join(',')
-      ),
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `honeyos-events-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const params = new URLSearchParams();
+    if (filterEventType) params.set('event_type', filterEventType);
+    if (filterProtocol) params.set('protocol', filterProtocol);
+    if (filterSeverity) params.set('severity', filterSeverity);
+    if (filterStartDate) params.set('start_date', filterStartDate);
+    if (filterEndDate) params.set('end_date', filterEndDate);
+    const qs = params.toString();
+    window.open(`${getBaseUrl()}/api/events/export${qs ? `?${qs}` : ''}`, '_blank');
   };
 
   return (

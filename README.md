@@ -153,7 +153,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `WEBHOOK_URL` | *(empty)* | Generic webhook URL for alerts (receives JSON POST) |
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
 | `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
+| `NEXT_PUBLIC_API_URL` | *(auto-detected)* | Backend API URL. Only needed for two-machine setups where the frontend and backend run on different hosts |
 | `TLS_CERT` | `internal` | TLS certificate: `internal` (self-signed), a file path, or a domain for Let's Encrypt |
 | `TLS_KEY` | *(empty)* | TLS private key file path (used with custom certs only) |
 | `FTP_PASV_ADDRESS` | *(empty)* | IP to advertise in FTP PASV responses (set to host/public IP in Docker) |

@@ -1,9 +1,10 @@
 /**
  * HoneyOS API Client
  *
- * Communicates with the Flask backend API. Base URL is determined by
- * the NEXT_PUBLIC_API_URL environment variable or defaults to the
- * current origin (which uses Next.js rewrites to proxy /api/* requests).
+ * Talks directly to the Flask backend (default port 7778).
+ * The browser auto-detects the backend URL from its own hostname,
+ * so same-machine deployments work without any configuration.
+ * For two-machine setups, set NEXT_PUBLIC_API_URL at build time.
  */
 
 // ---------------------------------------------------------------------------
@@ -297,11 +298,14 @@ export interface AuthStatus {
 // Base URL & fetch helper
 // ---------------------------------------------------------------------------
 
-function getBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
+export function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:7778`;
+  }
+  return 'http://localhost:7778';
 }
 
 async function fetchApi<T>(
@@ -316,6 +320,7 @@ async function fetchApi<T>(
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -562,7 +567,7 @@ export async function getSettings(): Promise<SettingsResponse> {
 
 export async function getAuthStatus(): Promise<AuthStatus> {
   const url = `${getBaseUrl()}/api/auth/status`;
-  const res = await fetch(url, { credentials: 'same-origin' });
+  const res = await fetch(url, { credentials: 'include' });
   return res.json();
 }
 
@@ -571,7 +576,7 @@ export async function authSetup(password: string): Promise<void> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
@@ -591,7 +596,7 @@ export async function authLogin(password: string): Promise<void> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
@@ -610,7 +615,7 @@ export async function authLogout(): Promise<void> {
   const url = `${getBaseUrl()}/api/auth/logout`;
   await fetch(url, {
     method: 'POST',
-    credentials: 'same-origin',
+    credentials: 'include',
   });
 }
 
@@ -622,7 +627,7 @@ export async function authChangePassword(
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
   if (!res.ok) {
