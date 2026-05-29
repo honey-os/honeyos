@@ -235,11 +235,7 @@ class TelnetHoneypot:
                     client_sock.sendall(prompt)
                     continue
 
-                # Record the raw line
-                if self.session_recorder and session_id:
-                    self.session_recorder.record_command(
-                        session_id, cmd, datetime.now(timezone.utc)
-                    )
+                cmd_time = datetime.now(timezone.utc)
 
                 if self.event_processor:
                     self.event_processor.process_event({
@@ -260,9 +256,18 @@ class TelnetHoneypot:
                 response = self._execute_line(cmd)
                 if isinstance(response, bytes):
                     client_sock.sendall(response + b"\r\n")
+                    response_text = response.decode("utf-8", errors="replace")
                 else:
                     client_sock.sendall((response + "\r\n").encode())
+                    response_text = response
                 client_sock.sendall(prompt)
+
+                # Record command with server response
+                if self.session_recorder and session_id:
+                    self.session_recorder.record_command(
+                        session_id, cmd, cmd_time,
+                        output=response_text or None,
+                    )
 
         except (ConnectionResetError, BrokenPipeError, OSError):
             logger.debug("Telnet connection lost for %s", addr[0])

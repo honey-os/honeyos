@@ -139,7 +139,7 @@ class SessionRecorder:
             logger.exception("Failed to record keystroke for session %s", session_id)
             return False
 
-    def record_command(self, session_id: str, command: str, timestamp: datetime | None = None) -> bool:
+    def record_command(self, session_id: str, command: str, timestamp: datetime | None = None, output: str | None = None) -> bool:
         """Append a command entry and bump the counter."""
         try:
             session = Session.query.get(session_id)
@@ -147,11 +147,14 @@ class SessionRecorder:
                 return False
 
             ts = timestamp or datetime.now(timezone.utc)
-            commands = parse_json_field(session.commands) or []
-            commands.append({
+            entry: dict = {
                 "command": command,
                 "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
-            })
+            }
+            if output is not None:
+                entry["output"] = output
+            commands = parse_json_field(session.commands) or []
+            commands.append(entry)
             session.commands = json.dumps(commands)
             session.commands_count = len(commands)
             db.session.commit()
