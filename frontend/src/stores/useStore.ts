@@ -33,6 +33,10 @@ import {
 // ---------------------------------------------------------------------------
 
 interface HoneyStore {
+  // Read-only mode
+  readOnly: boolean;
+  setReadOnly: (val: boolean) => void;
+
   // Sidebar
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -120,6 +124,10 @@ interface HoneyStore {
 // ---------------------------------------------------------------------------
 
 export const useStore = create<HoneyStore>((set) => ({
+  // Read-only mode
+  readOnly: false,
+  setReadOnly: (val) => set({ readOnly: val }),
+
   // Sidebar
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),

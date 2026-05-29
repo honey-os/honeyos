@@ -48,6 +48,7 @@ export default function NetworkPage() {
     fetchDeclaredPorts,
     fetchCensysSnapshot,
   } = useStore();
+  const readOnly = useStore((s) => s.readOnly);
 
   // Port management
   const [newPort, setNewPort] = useState('');
@@ -172,7 +173,7 @@ export default function NetworkPage() {
         </div>
         <button
           onClick={handleScan}
-          disabled={scanning}
+          disabled={readOnly || scanning}
           className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
         >
           {scanning ? (
@@ -586,8 +587,8 @@ export default function NetworkPage() {
           </h3>
           <button
             onClick={handleSync}
-            disabled={syncing}
-            className="btn-secondary flex items-center gap-1.5 text-xs"
+            disabled={readOnly || syncing}
+            className="btn-secondary flex items-center gap-1.5 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <RefreshCw className={clsx('w-3.5 h-3.5', syncing && 'animate-spin')} />
             Sync from Honeypots
@@ -636,7 +637,8 @@ export default function NetworkPage() {
                       {dp.source === 'user' && (
                         <button
                           onClick={() => handleRemovePort(dp.id)}
-                          className="text-gray-600 hover:text-red-400 transition-colors"
+                          disabled={readOnly}
+                          className="text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600"
                           title="Remove"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -657,6 +659,7 @@ export default function NetworkPage() {
                 type="number"
                 value={newPort}
                 onChange={(e) => setNewPort(e.target.value)}
+                disabled={readOnly}
                 className="input-field w-full"
                 placeholder="443"
                 min="1"
@@ -670,6 +673,7 @@ export default function NetworkPage() {
                 type="text"
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
+                disabled={readOnly}
                 className="input-field w-full"
                 placeholder="HTTPS reverse proxy"
                 required
@@ -677,7 +681,7 @@ export default function NetworkPage() {
             </div>
             <button
               type="submit"
-              disabled={addingPort}
+              disabled={readOnly || addingPort}
               className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />

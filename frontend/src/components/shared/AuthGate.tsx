@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { getAuthStatus, authSetup, authLogin } from '@/lib/api';
+import { useStore } from '@/stores/useStore';
 
 type AuthState = 'loading' | 'needs_setup' | 'needs_login' | 'authenticated';
 
@@ -21,6 +22,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       } else if (!status.authenticated) {
         setState('needs_login');
       } else {
+        useStore.getState().setReadOnly(status.read_only);
         setState('authenticated');
       }
     } catch {

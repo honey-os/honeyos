@@ -167,6 +167,7 @@ export default function SettingsPage() {
 // ---------------------------------------------------------------------------
 
 function ChangePasswordSection() {
+  const readOnly = useStore((s) => s.readOnly);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -212,6 +213,11 @@ function ChangePasswordSection() {
         <Lock className="w-4 h-4 text-amber-500" />
         Change Password
       </h3>
+      {readOnly && (
+        <p className="text-sm text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2 mb-4">
+          Password changes are disabled in read-only mode.
+        </p>
+      )}
       <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
         <div>
           <label className="block text-sm font-medium text-gray-400 mb-1.5">
@@ -221,6 +227,7 @@ function ChangePasswordSection() {
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
+            disabled={readOnly}
             className="input-field w-full text-sm"
             placeholder="Enter current password"
           />
@@ -233,6 +240,7 @@ function ChangePasswordSection() {
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
+            disabled={readOnly}
             className="input-field w-full text-sm"
             placeholder="Minimum 8 characters"
           />
@@ -245,6 +253,7 @@ function ChangePasswordSection() {
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            disabled={readOnly}
             className="input-field w-full text-sm"
             placeholder="Re-enter new password"
           />
@@ -270,7 +279,7 @@ function ChangePasswordSection() {
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={readOnly || saving}
           className="btn-primary text-sm disabled:opacity-50"
         >
           {saving ? 'Changing...' : 'Change Password'}
