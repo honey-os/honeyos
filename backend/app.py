@@ -49,6 +49,10 @@ def create_app(config_class=Config) -> Flask:
     application = Flask(__name__)
     application.config.from_object(config_class)
 
+    # Trust X-Forwarded-* headers from Caddy (TLS termination proxy)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    application.wsgi_app = ProxyFix(application.wsgi_app, x_proto=1)
+
     # --- Extensions -------------------------------------------------------
     db.init_app(application)
     CORS(application, resources={r"/api/*": {"origins": r".*"}}, supports_credentials=True)
