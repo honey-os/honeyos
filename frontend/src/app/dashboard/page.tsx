@@ -8,6 +8,7 @@ import {
   Radio,
   Server,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -133,6 +134,14 @@ export default function DashboardPage() {
               {h}h
             </button>
           ))}
+          <button
+            onClick={() => fetchDashboard(timelineHours)}
+            disabled={dashboardLoading}
+            className="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] border border-[#2a2a3a] transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${dashboardLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
