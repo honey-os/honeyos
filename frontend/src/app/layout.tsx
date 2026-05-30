@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import Script from 'next/script';
 import './globals.css';
 import AuthGate from '@/components/shared/AuthGate';
 
@@ -36,9 +35,7 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased bg-[#0a0a0f] text-gray-200`}
       >
         {apiUrl && (
-          <Script
-            id="honeyos-config"
-            strategy="beforeInteractive"
+          <script
             dangerouslySetInnerHTML={{
               __html: `window.__HONEYOS_API_URL__=${JSON.stringify(apiUrl)};`,
             }}

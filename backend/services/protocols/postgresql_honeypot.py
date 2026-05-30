@@ -304,6 +304,32 @@ class PostgreSQLHoneypot:
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
         self._conn_counter = 0
+        self._host_ip = self._detect_host_ip()
+
+    @staticmethod
+    def _detect_host_ip() -> str:
+        """Return the IP that inet_server_addr() should report.
+
+        Prefers the PUBLIC_IP env var (explicit override), then tries to
+        detect the default-route IP via a non-transmitting UDP socket.
+        Falls back to 127.0.0.1 if detection fails.
+        """
+        import os
+        public = os.getenv("PUBLIC_IP", "")
+        if public:
+            return public
+        try:
+            # Connect a UDP socket to an external address to discover
+            # which local interface the OS would route through.
+            # No data is actually sent.
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -366,7 +392,7 @@ class PostgreSQLHoneypot:
             ctx.push()
         try:
             client_sock.settimeout(60)
-            server_addr = client_sock.getsockname()[0]
+            server_addr = self._host_ip
 
             # Read startup message
             params = _read_startup(client_sock)

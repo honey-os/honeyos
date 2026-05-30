@@ -61,6 +61,8 @@ services:
       dockerfile: Dockerfile
     container_name: honeyos-frontend
     restart: unless-stopped
+    environment:
+      - API_URL=${API_URL:-}
     depends_on:
       backend:
         condition: service_healthy

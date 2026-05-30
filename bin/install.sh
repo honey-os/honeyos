@@ -171,6 +171,8 @@ services:
     image: ${IMAGE_PREFIX}/honeyos-frontend:${TAG}
     container_name: honeyos-frontend
     restart: unless-stopped
+    environment:
+      - API_URL=\${API_URL:-}
     depends_on:
       backend:
         condition: service_healthy
@@ -208,6 +210,9 @@ if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
 :7777 {
 	reverse_proxy frontend:7777
 }
+:7778 {
+	reverse_proxy backend:7778
+}
 EOF
 elif [ "$TLS_CERT" = "internal" ]; then
     if [ ! -f "$CERT_DIR/honeyos-selfsigned.pem" ] || [ ! -f "$CERT_DIR/honeyos-selfsigned.key" ]; then
@@ -225,12 +230,20 @@ elif [ "$TLS_CERT" = "internal" ]; then
 	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
 	reverse_proxy frontend:7777
 }
+:7778 {
+	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
+	reverse_proxy backend:7778
+}
 EOF
 else
     cat > /tmp/Caddyfile <<EOF
 :7777 {
 	tls ${TLS_CERT} ${TLS_KEY}
 	reverse_proxy frontend:7777
+}
+:7778 {
+	tls ${TLS_CERT} ${TLS_KEY}
+	reverse_proxy backend:7778
 }
 EOF
 fi
