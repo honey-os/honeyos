@@ -76,3 +76,4 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - TypeScript: strict mode, interfaces for API responses
 - Git: conventional commits (feat:, fix:, docs:, etc.)
 - No authentication — this is a local-only deployment
+- All new backend code must include tests. Run `make test-backend` and verify tests pass before considering work complete.

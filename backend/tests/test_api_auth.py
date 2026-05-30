@@ -119,6 +119,61 @@ class TestAuthStatusAfterSetup:
         assert data["has_admin"] is True
 
 
+class TestConcurrentSessions:
+    def test_concurrent_sessions(self, client):
+        """Two logins should both remain valid."""
+        # Setup admin
+        client.post(
+            "/api/auth/setup",
+            data=json.dumps({"password": "securepass123"}),
+            content_type="application/json",
+        )
+        # Login from "browser 1"
+        resp1 = client.post(
+            "/api/auth/login",
+            data=json.dumps({"password": "securepass123"}),
+            content_type="application/json",
+        )
+        assert resp1.status_code == 200
+        cookie1 = resp1.headers["Set-Cookie"]
+        # Extract token from Set-Cookie header
+        token1 = [
+            part.split("=", 1)[1]
+            for part in cookie1.split(";")[0:1]
+            for part in [part.strip()]
+            if part.startswith("honeyos_session=")
+        ][0]
+
+        # Login from "browser 2"
+        resp2 = client.post(
+            "/api/auth/login",
+            data=json.dumps({"password": "securepass123"}),
+            content_type="application/json",
+        )
+        assert resp2.status_code == 200
+        cookie2 = resp2.headers["Set-Cookie"]
+        token2 = [
+            part.split("=", 1)[1]
+            for part in cookie2.split(";")[0:1]
+            for part in [part.strip()]
+            if part.startswith("honeyos_session=")
+        ][0]
+
+        assert token1 != token2
+
+        # Browser 1 should still be authenticated
+        client.set_cookie("honeyos_session", token1, domain="localhost")
+        resp = client.get("/api/auth/status")
+        data = resp.get_json()
+        assert data["authenticated"] is True
+
+        # Browser 2 should also be authenticated
+        client.set_cookie("honeyos_session", token2, domain="localhost")
+        resp = client.get("/api/auth/status")
+        data = resp.get_json()
+        assert data["authenticated"] is True
+
+
 class TestChangePassword:
     def test_change_password(self, client):
         # Setup admin

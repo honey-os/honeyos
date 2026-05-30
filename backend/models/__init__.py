@@ -230,6 +230,16 @@ class SystemConfig(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# AuthSession
+# ---------------------------------------------------------------------------
+
+class AuthSession(db.Model):
+    __tablename__ = "auth_sessions"
+    token = db.Column(db.String(64), primary_key=True)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+
+# ---------------------------------------------------------------------------
 # IPGeoCache
 # ---------------------------------------------------------------------------
 
