@@ -29,6 +29,7 @@ class HoneypotManager:
         "postgresql": "services.protocols.postgresql_honeypot.PostgreSQLHoneypot",
         "dns": "services.protocols.dns_honeypot.DNSHoneypot",
         "smb": "services.protocols.smb_honeypot.SMBHoneypot",
+        "rdp": "services.protocols.rdp_honeypot.RDPHoneypot",
     }
 
     def __init__(self, app=None, event_processor=None, session_recorder=None,
@@ -152,6 +153,7 @@ class HoneypotManager:
             "postgresql": ("services.protocols.postgresql_honeypot", "PostgreSQLHoneypot"),
             "dns": ("services.protocols.dns_honeypot", "DNSHoneypot"),
             "smb": ("services.protocols.smb_honeypot", "SMBHoneypot"),
+            "rdp": ("services.protocols.rdp_honeypot", "RDPHoneypot"),
         }
         entry = mapping.get(protocol)
         if not entry:

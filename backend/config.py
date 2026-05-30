@@ -76,6 +76,7 @@ class Config:
     POSTGRESQL_HONEYPOT_PORT = int(os.getenv("POSTGRESQL_HONEYPOT_PORT", "5433"))
     DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
     SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
+    RDP_HONEYPOT_PORT = int(os.getenv("RDP_HONEYPOT_PORT", "3390"))
 
     # --- External Port Mapping ---
     # The port attackers/scanners see externally (after Docker/firewall NAT).
@@ -89,6 +90,7 @@ class Config:
     POSTGRESQL_EXTERNAL_PORT = int(os.getenv("POSTGRESQL_EXTERNAL_PORT", "5432"))
     DNS_EXTERNAL_PORT = int(os.getenv("DNS_EXTERNAL_PORT", "53"))
     SMB_EXTERNAL_PORT = int(os.getenv("SMB_EXTERNAL_PORT", "445"))
+    RDP_EXTERNAL_PORT = int(os.getenv("RDP_EXTERNAL_PORT", "3389"))
 
     # --- Honeypot Enable/Disable ---
     SSH_HONEYPOT_ENABLED = os.getenv("SSH_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -100,6 +102,7 @@ class Config:
     POSTGRESQL_HONEYPOT_ENABLED = os.getenv("POSTGRESQL_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
     DNS_HONEYPOT_ENABLED = os.getenv("DNS_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
     SMB_HONEYPOT_ENABLED = os.getenv("SMB_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    RDP_HONEYPOT_ENABLED = os.getenv("RDP_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
 
     HONEYPOT_ENABLED: dict[str, bool] = {
         "ssh": SSH_HONEYPOT_ENABLED,
@@ -111,6 +114,7 @@ class Config:
         "postgresql": POSTGRESQL_HONEYPOT_ENABLED,
         "dns": DNS_HONEYPOT_ENABLED,
         "smb": SMB_HONEYPOT_ENABLED,
+        "rdp": RDP_HONEYPOT_ENABLED,
     }
 
     EXTERNAL_PORT: dict[str, int] = {
@@ -123,6 +127,7 @@ class Config:
         "postgresql": POSTGRESQL_EXTERNAL_PORT,
         "dns": DNS_EXTERNAL_PORT,
         "smb": SMB_EXTERNAL_PORT,
+        "rdp": RDP_EXTERNAL_PORT,
     }
 
     # --- Frontend ---

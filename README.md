@@ -12,7 +12,7 @@ An open-source, self-hosted alternative to commercial honeypot appliances. No cl
 
 When an attacker compromises a device on your network, they scan for other targets — file servers, databases, admin panels. HoneyOS creates convincing fake versions of these services that no legitimate user would ever touch. Any interaction is an immediate indicator of compromise.
 
-**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL, DNS (with SMB and RDP planned)
+**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL, DNS, SMB, RDP
 
 **Key Capabilities**:
 - Catches ransomware, lateral movement, and insider threats
@@ -115,6 +115,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_HONEYPOT_PORT` | `5433` | Internal PostgreSQL honeypot port |
 | `DNS_HONEYPOT_PORT` | `5353` | Internal DNS honeypot port |
 | `SMB_HONEYPOT_PORT` | `4450` | Internal SMB honeypot port |
+| `RDP_HONEYPOT_PORT` | `3390` | Internal RDP honeypot port |
 | `SSH_EXTERNAL_PORT` | `22` | External-facing SSH port (after Docker/firewall NAT) |
 | `HTTP_EXTERNAL_PORT` | `80` | External-facing HTTP port |
 | `HTTPS_EXTERNAL_PORT` | `443` | External-facing HTTPS port |
@@ -124,6 +125,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_EXTERNAL_PORT` | `5432` | External-facing PostgreSQL port |
 | `DNS_EXTERNAL_PORT` | `53` | External-facing DNS port |
 | `SMB_EXTERNAL_PORT` | `445` | External-facing SMB port |
+| `RDP_EXTERNAL_PORT` | `3389` | External-facing RDP port |
 | `SSH_HONEYPOT_ENABLED` | `true` | Enable SSH honeypot on startup |
 | `HTTP_HONEYPOT_ENABLED` | `true` | Enable HTTP honeypot on startup |
 | `HTTPS_HONEYPOT_ENABLED` | `true` | Enable HTTPS honeypot on startup |
@@ -133,6 +135,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `POSTGRESQL_HONEYPOT_ENABLED` | `true` | Enable PostgreSQL honeypot on startup |
 | `DNS_HONEYPOT_ENABLED` | `true` | Enable DNS honeypot on startup |
 | `SMB_HONEYPOT_ENABLED` | `true` | Enable SMB honeypot on startup |
+| `RDP_HONEYPOT_ENABLED` | `true` | Enable RDP honeypot on startup |
 | `ABUSECH_API_KEY` | *(empty)* | abuse.ch API key for ThreatFox/URLhaus threat intelligence lookups |
 | `CENSYS_API_TOKEN` | *(empty)* | Censys API personal access token for perimeter monitoring |
 | `PUBLIC_IP` | *(empty)* | Override public IP detection (auto-detected if empty) |
@@ -172,6 +175,8 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 | MySQL | 3306 | 3307 | MySQL 8.0 database |
 | PostgreSQL | 5432 | 5433 | PostgreSQL 14.5 database |
 | DNS | 53 | 5353 | Misconfigured DNS server (UDP + TCP) |
+| SMB | 445 | 4450 | Windows file server |
+| RDP | 3389 | 3390 | Windows Remote Desktop |
 
 In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
 

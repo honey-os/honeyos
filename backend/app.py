@@ -277,6 +277,13 @@ def _seed_defaults() -> None:
                 "description": "Fake SMB/CIFS file server capturing authentication and share access attempts",
                 "config": {"server_name": "FILESERVER", "domain": "WORKGROUP"},
             },
+            {
+                "name": "RDP Honeypot",
+                "protocol": "rdp",
+                "port": Config.RDP_HONEYPOT_PORT,
+                "description": "Fake RDP server capturing connection and authentication attempts",
+                "config": {"server_name": "DESKTOP-HOS7890"},
+            },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]
     for hp_data in new_honeypots:
