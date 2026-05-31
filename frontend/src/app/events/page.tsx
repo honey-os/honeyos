@@ -251,11 +251,18 @@ export default function EventsPage() {
       )}
 
       {/* Table */}
-      <div className="card overflow-hidden">
-        {eventsLoading && events.length === 0 ? (
+      <div className="card overflow-hidden relative">
+        {eventsLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
+              <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              Loading events...
+            </div>
+          </div>
+        )}
+        {events.length === 0 && !eventsLoading ? (
           <div className="p-12 text-center">
-            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-            <p className="mt-3 text-sm text-gray-500">Loading events...</p>
+            <p className="text-sm text-gray-500">No events match your filters</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -286,17 +293,7 @@ export default function EventsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a2a3a]/50">
-                {events.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-sm text-gray-600"
-                    >
-                      No events match your filters
-                    </td>
-                  </tr>
-                ) : (
-                  events.map((event) => (
+                {events.map((event) => (
                     <tr
                       key={event.id}
                       className={clsx(
@@ -329,8 +326,7 @@ export default function EventsPage() {
                           : '-'}
                       </td>
                     </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
