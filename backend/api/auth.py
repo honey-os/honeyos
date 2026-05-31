@@ -120,8 +120,8 @@ def auth_status():
         "authenticated": is_authenticated(cookie_token),
         "read_only": Config.READ_ONLY,
     }
-    if Config.READ_ONLY and Config.READONLY_PASSWORD:
-        resp["readonly_password"] = Config.READONLY_PASSWORD
+    if Config.READ_ONLY and Config.READ_ONLY_PASSWORD:
+        resp["readonly_password"] = Config.READ_ONLY_PASSWORD
     return jsonify(resp)
 
 

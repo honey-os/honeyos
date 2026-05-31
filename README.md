@@ -102,6 +102,7 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SECRET_KEY` | `honeyos-default-secret-change-me` | Flask secret key. Generate with `openssl rand -hex 32` |
 | `DEBUG` | `false` | Enable Flask debug mode |
 | `READ_ONLY` | `false` | Lock dashboard to read-only mode. Login/logout still works; manage honeypots via `*_HONEYPOT_ENABLED` env vars instead |
+| `READ_ONLY_PASSWORD` | *(empty)* | When `READ_ONLY` is true, display this password on the login screen so visitors can log in |
 | `DATABASE_URL` | `sqlite:///honeyos.db` | SQLAlchemy database URI |
 | `BIND_HOST` | `0.0.0.0` | Address the backend binds to |
 | `API_PORT` | `7778` | Backend API port |
