@@ -9,7 +9,7 @@ from models import Event, db
 
 credentials_bp = Blueprint("credentials", __name__)
 
-CREDENTIAL_PROTOCOLS = ("ssh", "telnet", "ftp", "mysql", "postgresql")
+CREDENTIAL_PROTOCOLS = ("ssh", "telnet", "ftp", "mysql", "postgresql", "rdp")
 
 
 @credentials_bp.route("/api/credentials", methods=["GET"])
