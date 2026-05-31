@@ -118,6 +118,33 @@ def _interpret_escapes(text: str) -> str:
     return re.sub(r"\\x[0-9a-fA-F]{2}|\\[ntrba\\]", _replace, text)
 
 
+
+# ---------------------------------------------------------------------------
+# Telnet IAC (Interpret As Command) constants
+# ---------------------------------------------------------------------------
+_IAC = bytes([255])   # Interpret As Command
+_WILL = bytes([251])
+_WONT = bytes([252])
+_DO = bytes([253])
+_DONT = bytes([254])
+
+# Telnet options
+_OPT_ECHO = bytes([1])
+_OPT_SUPPRESS_GO_AHEAD = bytes([3])
+_OPT_LINEMODE = bytes([34])
+_OPT_NAWS = bytes([31])   # Negotiate About Window Size
+_OPT_TTYPE = bytes([24])  # Terminal Type
+
+# Standard IAC negotiation sent on connect -- mimics a BusyBox/Linux telnetd
+_IAC_NEGOTIATION = (
+    _IAC + _WILL + _OPT_ECHO
+    + _IAC + _WILL + _OPT_SUPPRESS_GO_AHEAD
+    + _IAC + _WONT + _OPT_LINEMODE
+    + _IAC + _DO + _OPT_NAWS
+    + _IAC + _DO + _OPT_TTYPE
+)
+
+
 class TelnetHoneypot:
     """Fake telnet server recording credentials and commands."""
 
@@ -191,6 +218,12 @@ class TelnetHoneypot:
             ctx.push()
         try:
             client_sock.settimeout(120)
+
+            # IAC option negotiation (required for scanners to identify as telnet)
+            client_sock.sendall(_IAC_NEGOTIATION)
+
+            # Drain any IAC responses the client sends back (DO/DONT/WILL/WONT)
+            self._drain_iac(client_sock)
 
             # Banner
             client_sock.sendall(self.BANNER.encode())
@@ -569,6 +602,46 @@ class TelnetHoneypot:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _drain_iac(sock: socket.socket) -> None:
+        """Consume any IAC responses the client sends after negotiation.
+
+        Reads with a short timeout so we don't block if the client sends
+        nothing (e.g. a scanner that just reads the banner).  IAC sequences
+        are 3 bytes each (IAC + verb + option).  Subnegotiation (IAC SB ...)
+        is consumed until IAC SE.
+        """
+        sock.settimeout(0.5)
+        try:
+            while True:
+                b = sock.recv(1)
+                if not b:
+                    break
+                if b[0] == 255:  # IAC
+                    verb = sock.recv(1)
+                    if not verb:
+                        break
+                    if verb[0] == 250:  # SB (subnegotiation)
+                        # Read until IAC SE (255, 240)
+                        while True:
+                            c = sock.recv(1)
+                            if not c:
+                                return
+                            if c[0] == 255:
+                                se = sock.recv(1)
+                                if not se or se[0] == 240:
+                                    break
+                    else:
+                        # WILL/WONT/DO/DONT + option byte
+                        sock.recv(1)
+                else:
+                    # Non-IAC data before login — ignore
+                    break
+        except (socket.timeout, OSError):
+            pass
+        finally:
+            sock.settimeout(120)
 
     @staticmethod
     def _readline(sock: socket.socket, prompt: str = "", echo: bool = True) -> str | None:

@@ -421,12 +421,19 @@ class PostgreSQLHoneypot:
             # Request cleartext password
             client_sock.sendall(_make_msg(AUTH_REQUEST, struct.pack("!I", AUTH_CLEARTEXT)))
 
-            # Read password message (tag 'p')
+            # Read password message (tag 'p') with a short timeout so scanners
+            # that don't send a password still get the version info.
             password = ""
-            result = _read_message(client_sock)
-            if result and result[0] == "p":
-                # Password payload is null-terminated string
-                password = result[1].rstrip(b"\x00").decode("utf-8", errors="replace")
+            prev_timeout = client_sock.gettimeout()
+            client_sock.settimeout(5)
+            try:
+                result = _read_message(client_sock)
+                if result and result[0] == "p":
+                    password = result[1].rstrip(b"\x00").decode("utf-8", errors="replace")
+            except (socket.timeout, OSError):
+                pass
+            finally:
+                client_sock.settimeout(prev_timeout)
 
             # Log credential attempt
             if self.event_processor:
@@ -449,7 +456,8 @@ class PostgreSQLHoneypot:
                 sess = self.session_recorder.start_session(addr[0], "postgresql")
                 session_id = sess.id
 
-            # Send AuthenticationOk
+            # Send AuthenticationOk -- always sent, even if no password was
+            # received, so scanners can read the ParameterStatus messages.
             client_sock.sendall(_make_msg(AUTH_REQUEST, struct.pack("!I", AUTH_OK)))
 
             # Send parameter status messages (mimics a real server)

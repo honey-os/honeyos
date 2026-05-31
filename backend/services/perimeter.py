@@ -363,6 +363,7 @@ class PerimeterService:
                 config.get("banner")
                 or config.get("server_header")
                 or config.get("version_string")
+                or config.get("version")
             )
 
             censys_banner = p.get("banner", "")
