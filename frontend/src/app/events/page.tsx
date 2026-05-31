@@ -252,7 +252,7 @@ export default function EventsPage() {
 
       {/* Table */}
       <div className="card overflow-hidden relative">
-        {eventsLoading && (
+        {eventsLoading && events.length > 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
               <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
@@ -260,7 +260,12 @@ export default function EventsPage() {
             </div>
           </div>
         )}
-        {events.length === 0 && !eventsLoading ? (
+        {eventsLoading && events.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+            <p className="mt-3 text-sm text-gray-500">Loading events...</p>
+          </div>
+        ) : events.length === 0 ? (
           <div className="p-12 text-center">
             <p className="text-sm text-gray-500">No events match your filters</p>
           </div>

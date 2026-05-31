@@ -71,12 +71,17 @@ def list_events():
     page = max(int(request.args.get("page", 1)), 1)
     offset = (page - 1) * per_page
 
-    query = _apply_event_filters(Event.query)
+    base_query = _apply_event_filters(Event.query)
 
-    total = query.count()
+    # Use db.func.count() directly to avoid SQLAlchemy wrapping in a
+    # subquery, which is very slow on large SQLite tables.
+    count_query = _apply_event_filters(
+        db.session.query(db.func.count(Event.id))
+    )
+    total = count_query.scalar()
     pages = max((total + per_page - 1) // per_page, 1)
     events = (
-        query
+        base_query
         .order_by(Event.timestamp.desc())
         .offset(offset)
         .limit(per_page)
