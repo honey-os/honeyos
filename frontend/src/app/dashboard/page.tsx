@@ -92,25 +92,16 @@ export default function DashboardPage() {
   const summary = dashboardSummary;
   const initialLoading = dashboardLoading && !summary;
 
-  if (initialLoading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-100">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Real-time overview of honeypot activity and threats
-          </p>
-        </div>
-        <div className="flex flex-col items-center justify-center py-32 text-gray-500 text-sm gap-3">
-          <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-          Loading dashboard...
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {initialLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm rounded-lg">
+          <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
+            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+            Loading dashboard...
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
