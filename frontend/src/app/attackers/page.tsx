@@ -18,7 +18,7 @@ import { formatDate, formatRelativeTime, formatNumber } from '@/utils/formatters
 import { useUrlFilters } from '@/utils/useUrlFilters';
 import clsx from 'clsx';
 
-const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb'];
+const PROTOCOLS = ['ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb', 'rdp'];
 
 export default function AttackersPage() {
   const {

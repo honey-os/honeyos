@@ -54,7 +54,7 @@ interface AlertFormData {
 }
 
 const protocolOptions = [
-  '', 'ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb',
+  '', 'ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb', 'rdp',
 ];
 
 const severityOptions = ['low', 'medium', 'high', 'critical'];
