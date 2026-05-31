@@ -9,6 +9,7 @@ type AuthState = 'loading' | 'needs_setup' | 'needs_login' | 'authenticated';
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>('loading');
+  const [readonlyPassword, setReadonlyPassword] = useState<string | undefined>();
 
   useEffect(() => {
     checkAuth();
@@ -20,6 +21,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!status.has_admin) {
         setState('needs_setup');
       } else if (!status.authenticated) {
+        setReadonlyPassword(status.readonly_password);
         setState('needs_login');
       } else {
         useStore.getState().setReadOnly(status.read_only);
@@ -43,7 +45,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (state === 'needs_login') {
-    return <LoginScreen onComplete={() => setState('authenticated')} />;
+    return <LoginScreen onComplete={() => setState('authenticated')} readonlyPassword={readonlyPassword} />;
   }
 
   return <>{children}</>;
@@ -158,7 +160,7 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
 // Login Screen
 // ---------------------------------------------------------------------------
 
-function LoginScreen({ onComplete }: { onComplete: () => void }) {
+function LoginScreen({ onComplete, readonlyPassword }: { onComplete: () => void; readonlyPassword?: string }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -202,6 +204,15 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
             Enter your password to access the dashboard.
           </p>
         </div>
+
+        {readonlyPassword && (
+          <div className="mb-6 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-300 text-center">
+            This instance is in read-only mode. The login password is{' '}
+            <code className="font-mono font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded">
+              {readonlyPassword}
+            </code>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

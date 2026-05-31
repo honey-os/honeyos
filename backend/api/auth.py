@@ -115,11 +115,14 @@ def auth_status():
     authenticated."""
     from config import Config
     cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
-    return jsonify({
+    resp: dict = {
         "has_admin": has_admin(),
         "authenticated": is_authenticated(cookie_token),
         "read_only": Config.READ_ONLY,
-    })
+    }
+    if Config.READ_ONLY and Config.READONLY_PASSWORD:
+        resp["readonly_password"] = Config.READONLY_PASSWORD
+    return jsonify(resp)
 
 
 @auth_bp.route("/api/auth/setup", methods=["POST"])

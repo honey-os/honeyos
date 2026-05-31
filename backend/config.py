@@ -18,6 +18,7 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "honeyos-default-secret-change-me")
     DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
     READ_ONLY = os.getenv("READ_ONLY", "false").lower() in ("true", "1", "yes")
+    READONLY_PASSWORD = os.getenv("READONLY_PASSWORD", "")
 
     # --- Database ---
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///honeyos.db")

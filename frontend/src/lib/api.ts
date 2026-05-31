@@ -293,6 +293,7 @@ export interface AuthStatus {
   has_admin: boolean;
   authenticated: boolean;
   read_only: boolean;
+  readonly_password?: string;
 }
 
 // ---------------------------------------------------------------------------
