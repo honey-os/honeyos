@@ -6,11 +6,8 @@ and file-transfer attempts.
 import logging
 import os
 import socket
-import ssl
 import threading
 from datetime import datetime, timezone
-
-from utils.tls import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
 
@@ -181,12 +178,11 @@ class FTPHoneypot:
                 session_id = sess.id
 
             authenticated = False
-            tls_active = False
 
             while not self._stop_event.is_set():
                 try:
                     data = client_sock.recv(1024)
-                except (socket.timeout, ConnectionResetError, OSError, ssl.SSLError):
+                except (socket.timeout, ConnectionResetError, OSError):
                     break
                 if not data:
                     break
@@ -234,43 +230,13 @@ class FTPHoneypot:
                     client_sock.sendall(b"215 UNIX Type: L8\r\n")
 
                 elif cmd == "FEAT":
-                    reply = "211-Features:\n AUTH TLS\n PASV\n PBSZ\n PROT\n UTF8\n211 End"
-                    client_sock.sendall(b"211-Features:\r\n AUTH TLS\r\n PASV\r\n PBSZ\r\n PROT\r\n UTF8\r\n211 End\r\n")
+                    reply = "211-Features:\n PASV\n UTF8\n211 End"
+                    client_sock.sendall(b"211-Features:\r\n PASV\r\n UTF8\r\n211 End\r\n")
 
                 elif cmd == "AUTH":
                     auth_type = arg.upper()
-                    if tls_active:
-                        reply = "503 TLS already active"
-                        client_sock.sendall(b"503 TLS already active\r\n")
-                    elif auth_type in ("TLS", "SSL"):
-                        try:
-                            cert_path, key_path = ensure_self_signed_cert()
-                            reply = "234 AUTH TLS successful"
-                            client_sock.sendall(b"234 AUTH TLS successful\r\n")
-                            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-                            ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
-                            client_sock = ctx.wrap_socket(client_sock, server_side=True)
-                            tls_active = True
-                            logger.info("FTP TLS handshake completed for %s", addr[0])
-                        except ssl.SSLError as exc:
-                            logger.warning("FTP TLS handshake failed for %s: %s", addr[0], exc)
-                            break
-                    else:
-                        reply = f"504 AUTH {auth_type} not supported"
-                        client_sock.sendall(f"504 AUTH {auth_type} not supported\r\n".encode())
-
-                elif cmd == "PBSZ":
-                    reply = "200 PBSZ=0"
-                    client_sock.sendall(b"200 PBSZ=0\r\n")
-
-                elif cmd == "PROT":
-                    prot_level = arg.upper()
-                    if prot_level in ("P", "C"):
-                        reply = f"200 Protection level set to {prot_level}"
-                        client_sock.sendall(f"200 Protection level set to {prot_level}\r\n".encode())
-                    else:
-                        reply = f"504 Protection level {prot_level} not supported"
-                        client_sock.sendall(f"504 Protection level {prot_level} not supported\r\n".encode())
+                    reply = f"504 AUTH {auth_type} not supported"
+                    client_sock.sendall(f"504 AUTH {auth_type} not supported\r\n".encode())
 
                 elif cmd == "PWD":
                     reply = '257 "/" is current directory'
