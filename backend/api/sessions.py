@@ -40,24 +40,30 @@ def list_sessions():
     page = max(int(request.args.get("page", 1)), 1)
     offset = (page - 1) * per_page
 
-    query = Session.query
+    base_query = Session.query
+    count_query = db.session.query(db.func.count()).select_from(Session)
 
     protocol = request.args.get("protocol")
     if protocol:
-        query = query.filter(Session.protocol == protocol)
+        base_query = base_query.filter(Session.protocol == protocol)
+        count_query = count_query.filter(Session.protocol == protocol)
 
     status = request.args.get("status")
     if status:
-        query = query.filter(Session.status == status)
+        base_query = base_query.filter(Session.status == status)
+        count_query = count_query.filter(Session.status == status)
 
     active_only = request.args.get("active_only", "false").lower() in ("true", "1", "yes")
     if active_only and not status:
-        query = query.filter(Session.status == "active")
+        base_query = base_query.filter(Session.status == "active")
+        count_query = count_query.filter(Session.status == "active")
 
-    total = query.count()
+    # Use count(*) so SQLite scans a small secondary index, not the full
+    # table B-tree (which is bloated by large JSON TEXT columns).
+    total = count_query.scalar()
     pages = max((total + per_page - 1) // per_page, 1)
     sessions = (
-        query
+        base_query
         .order_by(Session.start_time.desc())
         .offset(offset)
         .limit(per_page)
