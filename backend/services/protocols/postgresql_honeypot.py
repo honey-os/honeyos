@@ -310,26 +310,25 @@ class PostgreSQLHoneypot:
     def _detect_host_ip() -> str:
         """Return the IP that inet_server_addr() should report.
 
-        Prefers the PUBLIC_IP env var (explicit override), then tries to
-        detect the default-route IP via a non-transmitting UDP socket.
-        Falls back to 127.0.0.1 if detection fails.
+        Prefers the PUBLIC_IP env var (explicit override), then queries
+        ipify for the real public IP.  Falls back to a generic private
+        address rather than using the default-route interface (which in
+        Docker returns the container bridge IP, e.g. 172.18.0.2).
         """
         import os
+        import requests as _req
         public = os.getenv("PUBLIC_IP", "")
         if public:
             return public
         try:
-            # Connect a UDP socket to an external address to discover
-            # which local interface the OS would route through.
-            # No data is actually sent.
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
+            resp = _req.get("https://api.ipify.org?format=json", timeout=5)
+            resp.raise_for_status()
+            ip = resp.json().get("ip")
+            if ip:
+                return ip
         except Exception:
-            return "127.0.0.1"
+            pass
+        return "10.0.0.1"
 
     # ------------------------------------------------------------------
     # Lifecycle

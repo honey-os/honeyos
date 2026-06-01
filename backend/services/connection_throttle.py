@@ -38,6 +38,9 @@ class ConnectionThrottler:
         self._blocked_until: dict[tuple[str, str], float] = {}
         # ip -> number of active (in-flight) connections
         self._active: dict[str, int] = {}
+        # Global cap on total concurrent handler threads
+        self._global_semaphore = threading.Semaphore(Config.MAX_TOTAL_CONNECTIONS)
+        self._global_active = 0
         self._app = app
         if app is not None:
             self._load_from_db()
@@ -229,11 +232,20 @@ class ConnectionThrottler:
 
     def track_connect(self, ip: str, protocol: str) -> bool:
         """Register a new connection.  Returns True if allowed, False if
-        the IP has reached MAX_CONNECTIONS_PER_IP and must be refused.
+        the IP has reached MAX_CONNECTIONS_PER_IP or the global cap has
+        been reached.
 
-        When the limit is hit the IP is blocked on *protocol* for
+        When the per-IP limit is hit the IP is blocked on *protocol* for
         THROTTLE_BLOCK_SECONDS (same duration as the event throttle).
         """
+        # Global cap — non-blocking acquire
+        if not self._global_semaphore.acquire(blocking=False):
+            logger.warning(
+                "Global connection limit (%d) reached — refusing %s on %s",
+                Config.MAX_TOTAL_CONNECTIONS, ip, protocol,
+            )
+            return False
+
         limit = Config.MAX_CONNECTIONS_PER_IP
         persist = False
         duration = 0
@@ -257,6 +269,11 @@ class ConnectionThrottler:
                 allowed = False
             else:
                 self._active[ip] = current + 1
+                self._global_active += 1
+
+        if not allowed:
+            # Release the semaphore slot we acquired above
+            self._global_semaphore.release()
 
         if persist:
             self._persist_block(ip, protocol, duration)
@@ -271,6 +288,10 @@ class ConnectionThrottler:
                 self._active.pop(ip, None)
             else:
                 self._active[ip] = current - 1
+            if current > 0:
+                self._global_active -= 1
+        if current > 0:
+            self._global_semaphore.release()
 
     # -----------------------------------------------------------------
     # Query
@@ -311,3 +332,8 @@ class ConnectionThrottler:
         """Return a snapshot of active connection counts per IP."""
         with self._lock:
             return dict(self._active)
+
+    def get_global_active(self) -> int:
+        """Return total active connections across all IPs."""
+        with self._lock:
+            return self._global_active

@@ -17,6 +17,7 @@ class TestRecordEvent:
     def test_triggers_block_at_threshold(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 3
         mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
 
         for _ in range(3):
@@ -30,6 +31,7 @@ class TestRecordEvent:
     def test_no_block_below_threshold(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 10
         mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
 
         for _ in range(5):
@@ -41,6 +43,7 @@ class TestRecordEvent:
     def test_ignores_events_when_already_blocked(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 3
         mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
 
         # Trigger block
@@ -61,6 +64,7 @@ class TestIsBlocked:
     def test_block_expires(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 1
         mock_config.THROTTLE_BLOCK_SECONDS = 0  # immediate expiry
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
         throttler.record_event("10.0.0.1", "ssh")
 
@@ -74,6 +78,7 @@ class TestTrackConnect:
     def test_allows_connection_below_limit(self, mock_config):
         mock_config.MAX_CONNECTIONS_PER_IP = 5
         mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
         assert throttler.track_connect("10.0.0.1", "ssh") is True
         assert throttler._active.get("10.0.0.1") == 1
@@ -82,6 +87,7 @@ class TestTrackConnect:
     def test_blocks_at_connection_limit(self, mock_config):
         mock_config.MAX_CONNECTIONS_PER_IP = 2
         mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
 
         assert throttler.track_connect("10.0.0.1", "ssh") is True
@@ -94,13 +100,18 @@ class TestTrackConnect:
 class TestTrackDisconnect:
     def test_decrements_active_count(self):
         throttler = ConnectionThrottler()
-        throttler._active["10.0.0.1"] = 3
+        # Use track_connect so the semaphore stays in sync
+        throttler.track_connect("10.0.0.1", "ssh")
+        throttler.track_connect("10.0.0.1", "ssh")
+        throttler.track_connect("10.0.0.1", "ssh")
+        assert throttler._active["10.0.0.1"] == 3
         throttler.track_disconnect("10.0.0.1")
         assert throttler._active["10.0.0.1"] == 2
 
     def test_removes_entry_at_zero(self):
         throttler = ConnectionThrottler()
-        throttler._active["10.0.0.1"] = 1
+        throttler.track_connect("10.0.0.1", "ssh")
+        assert throttler._active["10.0.0.1"] == 1
         throttler.track_disconnect("10.0.0.1")
         assert "10.0.0.1" not in throttler._active
 
@@ -109,11 +120,41 @@ class TestTrackDisconnect:
         throttler.track_disconnect("10.0.0.1")  # should not raise
 
 
+class TestGlobalConnectionLimit:
+    @patch("services.connection_throttle.Config")
+    def test_refuses_above_global_limit(self, mock_config):
+        mock_config.MAX_CONNECTIONS_PER_IP = 100
+        mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 3
+        throttler = ConnectionThrottler()
+
+        assert throttler.track_connect("10.0.0.1", "ssh") is True
+        assert throttler.track_connect("10.0.0.2", "ssh") is True
+        assert throttler.track_connect("10.0.0.3", "ssh") is True
+        # 4th connection exceeds global limit
+        assert throttler.track_connect("10.0.0.4", "ssh") is False
+
+    @patch("services.connection_throttle.Config")
+    def test_allows_after_disconnect(self, mock_config):
+        mock_config.MAX_CONNECTIONS_PER_IP = 100
+        mock_config.THROTTLE_BLOCK_SECONDS = 60
+        mock_config.MAX_TOTAL_CONNECTIONS = 2
+        throttler = ConnectionThrottler()
+
+        assert throttler.track_connect("10.0.0.1", "ssh") is True
+        assert throttler.track_connect("10.0.0.2", "ssh") is True
+        assert throttler.track_connect("10.0.0.3", "ssh") is False
+        # Disconnect one — slot opens up
+        throttler.track_disconnect("10.0.0.1")
+        assert throttler.track_connect("10.0.0.3", "ssh") is True
+
+
 class TestGetAllBlocked:
     @patch("services.connection_throttle.Config")
     def test_returns_active_blocks(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 1
         mock_config.THROTTLE_BLOCK_SECONDS = 3600
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
         throttler.record_event("10.0.0.1", "ssh")
 
@@ -131,6 +172,7 @@ class TestGetAllBlocked:
     def test_prunes_expired_blocks(self, mock_config):
         mock_config.THROTTLE_EVENT_THRESHOLD = 1
         mock_config.THROTTLE_BLOCK_SECONDS = 0
+        mock_config.MAX_TOTAL_CONNECTIONS = 200
         throttler = ConnectionThrottler()
         throttler.record_event("10.0.0.1", "ssh")
         time.sleep(0.01)
