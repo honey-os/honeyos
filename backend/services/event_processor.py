@@ -26,7 +26,7 @@ class EventProcessor:
     # Public API
     # -----------------------------------------------------------------
 
-    def process_event(self, event_data: dict) -> Event:
+    def process_event(self, event_data: dict) -> Event | None:
         """
         Validate, enrich, persist an event and fire alert checks.
 
@@ -38,8 +38,15 @@ class EventProcessor:
 
         Returns
         -------
-        Event  The persisted ORM instance.
+        Event | None  The persisted ORM instance, or None if the IP is blocked.
         """
+        # Skip persistence for already-blocked IPs — we have enough evidence.
+        if self.connection_throttler:
+            ip = event_data.get("source_ip", "")
+            protocol = event_data.get("protocol", "")
+            if ip and protocol and self.connection_throttler.is_blocked(ip, protocol):
+                return None
+
         event = Event(
             id=event_data.get("id") or generate_id(),
             event_type=sanitize_input(event_data.get("event_type", "unknown")),

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
-from models import Event, Honeypot, IPGeoCache, Session, db, _iso_utc
+from models import DailyStat, Event, Honeypot, IPGeoCache, Session, db, _iso_utc
 from services.event_processor import EventProcessor
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -162,3 +162,28 @@ def timeline():
     timeline_data = [{"timestamp": k, "count": v} for k, v in buckets.items()]
 
     return jsonify(timeline_data)
+
+
+@dashboard_bp.route("/api/dashboard/history", methods=["GET"])
+def history():
+    """
+    Return aggregated daily stats from beyond the raw event retention window.
+
+    Query params:
+        days     (int) default 30 -- how many days of history
+        protocol (str) optional -- filter to a single protocol
+
+    Returns an array of daily stat objects.
+    """
+    days = int(request.args.get("days", 30))
+    days = max(1, min(days, 365))
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+
+    query = DailyStat.query.filter(DailyStat.date >= since)
+
+    protocol = request.args.get("protocol")
+    if protocol:
+        query = query.filter(DailyStat.protocol == protocol)
+
+    stats = query.order_by(DailyStat.date.desc()).all()
+    return jsonify([s.to_dict() for s in stats])

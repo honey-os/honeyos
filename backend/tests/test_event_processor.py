@@ -105,6 +105,7 @@ class TestProcessEvent:
     def test_records_to_connection_throttler(self, app):
         with app.app_context():
             throttler = MagicMock()
+            throttler.is_blocked.return_value = False
             processor = EventProcessor(connection_throttler=throttler)
             processor.process_event({
                 "event_type": "connection",

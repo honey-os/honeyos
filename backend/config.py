@@ -57,16 +57,18 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
     # --- Data Retention ---
-    RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "90"))
+    RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 
     # --- Rate Limiting ---
     ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
 
     # --- Connection Throttling ---
-    THROTTLE_EVENT_THRESHOLD = int(os.getenv("THROTTLE_EVENT_THRESHOLD", "1000"))
+    THROTTLE_EVENT_THRESHOLD = int(os.getenv("THROTTLE_EVENT_THRESHOLD", "500"))
     THROTTLE_BLOCK_SECONDS = int(os.getenv("THROTTLE_BLOCK_SECONDS", "3600"))
-    MAX_CONNECTIONS_PER_IP = int(os.getenv("MAX_CONNECTIONS_PER_IP", "20"))
-    MAX_TOTAL_CONNECTIONS = int(os.getenv("MAX_TOTAL_CONNECTIONS", "200"))
+    MAX_CONNECTIONS_PER_IP = int(os.getenv("MAX_CONNECTIONS_PER_IP", "5"))
+    MAX_TOTAL_CONNECTIONS = int(os.getenv("MAX_TOTAL_CONNECTIONS", "50"))
+    # Max seconds a honeypot connection handler may run before forced close
+    HONEYPOT_CONNECTION_TIMEOUT = int(os.getenv("HONEYPOT_CONNECTION_TIMEOUT", "30"))
 
     # --- Honeypot Defaults ---
     SSH_HONEYPOT_PORT = int(os.getenv("SSH_HONEYPOT_PORT", "2222"))

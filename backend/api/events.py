@@ -147,6 +147,8 @@ def create_event():
         connection_throttler=getattr(current_app, "connection_throttler", None),
     )
     event = processor.process_event(data)
+    if event is None:
+        return jsonify({"status": "dropped", "reason": "ip_blocked"}), 202
 
     return jsonify(event.to_dict()), 201
 
