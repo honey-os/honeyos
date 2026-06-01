@@ -399,6 +399,10 @@ class FTPHoneypot:
                     reply = "211-Features:\n PASV\n UTF8\n211 End"
                     client_sock.sendall(b"211-Features:\r\n PASV\r\n UTF8\r\n211 End\r\n")
 
+                elif cmd == "OPTS":
+                    reply = f"200 {arg} OK"
+                    client_sock.sendall(f"200 {arg} OK\r\n".encode())
+
                 elif cmd == "AUTH":
                     auth_type = arg.upper()
                     reply = f"504 AUTH {auth_type} not supported"
