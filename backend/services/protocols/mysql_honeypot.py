@@ -393,7 +393,6 @@ class MySQLHoneypot:
         from models import db as _db
 
         session_id = None
-        clean_exit = False
         ctx = self.app.app_context() if self.app else None
         if ctx:
             ctx.push()
@@ -453,19 +452,16 @@ class MySQLHoneypot:
             while not self._stop_event.is_set():
                 result = _read_packet(client_sock)
                 if result is None:
-                    clean_exit = True
                     break
                 seq, payload = result
 
                 if not payload:
-                    clean_exit = True
                     break
 
                 cmd_type = payload[0]
                 cmd_data = payload[1:].decode("utf-8", errors="replace")
 
                 if cmd_type == 0x01:  # COM_QUIT
-                    clean_exit = True
                     break
 
                 if cmd_type == 0x03:  # COM_QUERY
@@ -531,10 +527,7 @@ class MySQLHoneypot:
         finally:
             if self.connection_throttler:
                 self.connection_throttler.track_disconnect(addr[0])
-            # Only end session on clean exit (COM_QUIT / EOF).  Scanners
-            # that reset the connection leave the session active so the
-            # next connection from the same IP reuses it.
-            if clean_exit and session_id and self.session_recorder:
+            if session_id and self.session_recorder:
                 self.session_recorder.end_session(session_id)
             if ctx:
                 _db.session.remove()

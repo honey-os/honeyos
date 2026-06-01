@@ -386,3 +386,44 @@ class CensysSnapshot(db.Model):
             "censys_updated": self.censys_updated,
             "timestamp": _iso_utc(self.timestamp),
         }
+
+
+# ---------------------------------------------------------------------------
+# DailyStat -- aggregated daily summary preserved beyond raw event retention
+# ---------------------------------------------------------------------------
+
+class DailyStat(db.Model):
+    __tablename__ = "daily_stats"
+
+    id = db.Column(db.Text, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    protocol = db.Column(db.String(32), nullable=False)
+    total_events = db.Column(db.Integer, default=0)
+    connection_events = db.Column(db.Integer, default=0)
+    auth_events = db.Column(db.Integer, default=0)
+    unique_source_ips = db.Column(db.Integer, default=0)
+    high_severity_events = db.Column(db.Integer, default=0)
+    blocked_events = db.Column(db.Integer, default=0)
+    top_source_ips = db.Column(db.Text)     # JSON: [{ip, count}, ...]
+    top_usernames = db.Column(db.Text)      # JSON: [{username, count}, ...]
+    top_passwords = db.Column(db.Text)      # JSON: [{password, count}, ...]
+
+    __table_args__ = (
+        db.UniqueConstraint("date", "protocol", name="uq_daily_stats_date_protocol"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "date": self.date.isoformat() if self.date else None,
+            "protocol": self.protocol,
+            "total_events": self.total_events,
+            "connection_events": self.connection_events,
+            "auth_events": self.auth_events,
+            "unique_source_ips": self.unique_source_ips,
+            "high_severity_events": self.high_severity_events,
+            "blocked_events": self.blocked_events,
+            "top_source_ips": _json_col_to_python(self.top_source_ips),
+            "top_usernames": _json_col_to_python(self.top_usernames),
+            "top_passwords": _json_col_to_python(self.top_passwords),
+        }

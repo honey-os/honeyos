@@ -188,3 +188,67 @@ class TestGetOrStartSession:
             )
             assert created is True
             assert new_session.id != old_session.id
+
+
+class TestReapStaleSessions:
+    def test_reaps_old_active_sessions_with_commands(self, app):
+        with app.app_context():
+            s = Session(
+                id=generate_id(),
+                source_ip="10.0.0.1",
+                protocol="ssh",
+                status="active",
+                start_time=datetime.now(timezone.utc) - timedelta(seconds=600),
+                commands_count=3,
+                commands=json.dumps([{"command": "ls"}]),
+                keystrokes=json.dumps([]),
+                file_transfers=json.dumps([]),
+            )
+            db.session.add(s)
+            db.session.commit()
+
+            count = SessionRecorder.reap_stale_sessions(max_age_seconds=300)
+            assert count == 1
+            refreshed = Session.query.get(s.id)
+            assert refreshed.status == "completed"
+
+    def test_deletes_old_sessions_with_zero_commands(self, app):
+        with app.app_context():
+            s = Session(
+                id=generate_id(),
+                source_ip="10.0.0.1",
+                protocol="mysql",
+                status="active",
+                start_time=datetime.now(timezone.utc) - timedelta(seconds=600),
+                commands_count=0,
+                commands=json.dumps([]),
+                keystrokes=json.dumps([]),
+                file_transfers=json.dumps([]),
+            )
+            db.session.add(s)
+            db.session.commit()
+            sid = s.id
+
+            count = SessionRecorder.reap_stale_sessions(max_age_seconds=300)
+            assert count == 1
+            assert Session.query.get(sid) is None
+
+    def test_does_not_reap_recent_sessions(self, app):
+        with app.app_context():
+            s = Session(
+                id=generate_id(),
+                source_ip="10.0.0.1",
+                protocol="ssh",
+                status="active",
+                start_time=datetime.now(timezone.utc) - timedelta(seconds=60),
+                commands_count=1,
+                commands=json.dumps([{"command": "ls"}]),
+                keystrokes=json.dumps([]),
+                file_transfers=json.dumps([]),
+            )
+            db.session.add(s)
+            db.session.commit()
+
+            count = SessionRecorder.reap_stale_sessions(max_age_seconds=300)
+            assert count == 0
+            assert Session.query.get(s.id).status == "active"

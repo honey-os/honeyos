@@ -115,6 +115,42 @@ class SessionRecorder:
         return session
 
     # ------------------------------------------------------------------
+    # Stale session cleanup
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def reap_stale_sessions(max_age_seconds: int = 300) -> int:
+        """Close all 'active' sessions older than *max_age_seconds*.
+
+        Sessions with 0 commands are deleted; others are marked completed.
+        Returns the number of sessions reaped.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+        stale = Session.query.filter(
+            Session.status == "active",
+            Session.start_time < cutoff,
+        ).all()
+
+        count = 0
+        for session in stale:
+            if (session.commands_count or 0) == 0:
+                db.session.delete(session)
+            else:
+                session.status = "completed"
+                session.end_time = cutoff
+                start = session.start_time
+                if start and start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
+                session.duration_seconds = (cutoff - start).total_seconds() if start else 0
+            count += 1
+
+        if count:
+            db.session.commit()
+            logger.info("Reaped %d stale active sessions (older than %ds)", count, max_age_seconds)
+
+        return count
+
+    # ------------------------------------------------------------------
     # Recording
     # ------------------------------------------------------------------
 

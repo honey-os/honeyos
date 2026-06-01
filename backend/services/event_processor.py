@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from config import Config
-from models import Event, Honeypot, Session, db
+from models import DailyStat, Event, Honeypot, Session, db
 from services.geoip import GeoIPService
 from utils.helpers import generate_id, sanitize_input
 
@@ -26,7 +26,7 @@ class EventProcessor:
     # Public API
     # -----------------------------------------------------------------
 
-    def process_event(self, event_data: dict) -> Event:
+    def process_event(self, event_data: dict) -> Event | None:
         """
         Validate, enrich, persist an event and fire alert checks.
 
@@ -38,8 +38,17 @@ class EventProcessor:
 
         Returns
         -------
-        Event  The persisted ORM instance.
+        Event | None  The persisted ORM instance, or None if the IP is blocked.
         """
+        # Skip persistence for already-blocked IPs — we have enough evidence.
+        # Still count them in daily stats so volume is tracked.
+        if self.connection_throttler:
+            ip = event_data.get("source_ip", "")
+            protocol = event_data.get("protocol", "")
+            if ip and protocol and self.connection_throttler.is_blocked(ip, protocol):
+                self._increment_daily_stat(protocol, blocked=True)
+                return None
+
         event = Event(
             id=event_data.get("id") or generate_id(),
             event_type=sanitize_input(event_data.get("event_type", "unknown")),
@@ -85,6 +94,13 @@ class EventProcessor:
             db.session.rollback()
             logger.exception("Failed to persist event %s", event.id)
             raise
+
+        # Increment real-time daily stats
+        self._increment_daily_stat(
+            event.protocol,
+            event_type=event.event_type,
+            severity=event.severity,
+        )
 
         # Record for connection throttling (after successful commit)
         if self.connection_throttler:
@@ -210,3 +226,57 @@ class EventProcessor:
             "unique_attackers": unique_ips,
             "unique_protocols": unique_protocols,
         }
+
+    # -----------------------------------------------------------------
+    # Real-time daily stats
+    # -----------------------------------------------------------------
+
+    @staticmethod
+    def _increment_daily_stat(
+        protocol: str,
+        *,
+        event_type: str | None = None,
+        severity: str | None = None,
+        blocked: bool = False,
+    ) -> None:
+        """Atomically increment today's DailyStat counters for a protocol.
+
+        Uses INSERT ... ON CONFLICT DO UPDATE so concurrent threads are safe
+        under SQLite WAL mode.
+        """
+        today = datetime.now(timezone.utc).date()
+
+        # Determine which counters to bump
+        total_inc = 0 if blocked else 1
+        conn_inc = 1 if (not blocked and event_type == "connection") else 0
+        auth_inc = 1 if (not blocked and event_type == "authentication") else 0
+        high_inc = 1 if (not blocked and severity in ("high", "critical")) else 0
+        blocked_inc = 1 if blocked else 0
+
+        upsert = db.text("""
+            INSERT INTO daily_stats (id, date, protocol, total_events, connection_events,
+                                     auth_events, high_severity_events, blocked_events)
+            VALUES (:id, :date, :protocol, :total, :conn, :auth, :high_sev, :blocked)
+            ON CONFLICT (date, protocol) DO UPDATE SET
+                total_events = daily_stats.total_events + excluded.total_events,
+                connection_events = daily_stats.connection_events + excluded.connection_events,
+                auth_events = daily_stats.auth_events + excluded.auth_events,
+                high_severity_events = daily_stats.high_severity_events + excluded.high_severity_events,
+                blocked_events = daily_stats.blocked_events + excluded.blocked_events
+        """)
+
+        try:
+            db.session.execute(upsert, {
+                "id": generate_id(),
+                "date": today.isoformat(),
+                "protocol": protocol,
+                "total": total_inc,
+                "conn": conn_inc,
+                "auth": auth_inc,
+                "high_sev": high_inc,
+                "blocked": blocked_inc,
+            })
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.debug("Failed to increment daily stat", exc_info=True)

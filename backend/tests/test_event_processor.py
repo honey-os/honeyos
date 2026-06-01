@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from models import Event, Honeypot, Session, db
+from models import DailyStat, Event, Honeypot, Session, db
 from services.event_processor import EventProcessor
 from utils.helpers import generate_id
 
@@ -105,6 +105,7 @@ class TestProcessEvent:
     def test_records_to_connection_throttler(self, app):
         with app.app_context():
             throttler = MagicMock()
+            throttler.is_blocked.return_value = False
             processor = EventProcessor(connection_throttler=throttler)
             processor.process_event({
                 "event_type": "connection",
@@ -196,3 +197,91 @@ class TestGetThreatLevel:
             assert "recent_events" in result
             assert "unique_attackers" in result
             assert "unique_protocols" in result
+
+
+class TestIncrementDailyStat:
+    def test_creates_row_on_first_event(self, app):
+        with app.app_context():
+            processor = EventProcessor()
+            processor.process_event({
+                "event_type": "connection",
+                "protocol": "ssh",
+                "source_ip": "10.0.0.1",
+                "destination_port": 2222,
+            })
+            today = datetime.now(timezone.utc).date()
+            stat = DailyStat.query.filter_by(date=today, protocol="ssh").first()
+            assert stat is not None
+            assert stat.total_events == 1
+            assert stat.connection_events == 1
+            assert stat.blocked_events == 0
+
+    def test_increments_existing_row(self, app):
+        with app.app_context():
+            processor = EventProcessor()
+            for _ in range(3):
+                processor.process_event({
+                    "event_type": "connection",
+                    "protocol": "ssh",
+                    "source_ip": "10.0.0.1",
+                    "destination_port": 2222,
+                })
+            today = datetime.now(timezone.utc).date()
+            stat = DailyStat.query.filter_by(date=today, protocol="ssh").first()
+            assert stat.total_events == 3
+            assert stat.connection_events == 3
+
+    def test_tracks_auth_and_severity(self, app):
+        with app.app_context():
+            processor = EventProcessor()
+            processor.process_event({
+                "event_type": "authentication",
+                "protocol": "ssh",
+                "source_ip": "10.0.0.1",
+                "destination_port": 2222,
+                "severity": "high",
+            })
+            today = datetime.now(timezone.utc).date()
+            stat = DailyStat.query.filter_by(date=today, protocol="ssh").first()
+            assert stat.auth_events == 1
+            assert stat.high_severity_events == 1
+            assert stat.connection_events == 0
+
+    def test_blocked_ip_increments_blocked_counter(self, app):
+        with app.app_context():
+            throttler = MagicMock()
+            throttler.is_blocked.return_value = True
+            processor = EventProcessor(connection_throttler=throttler)
+            result = processor.process_event({
+                "event_type": "connection",
+                "protocol": "ssh",
+                "source_ip": "10.0.0.1",
+                "destination_port": 2222,
+            })
+            assert result is None  # event not persisted
+            today = datetime.now(timezone.utc).date()
+            stat = DailyStat.query.filter_by(date=today, protocol="ssh").first()
+            assert stat is not None
+            assert stat.blocked_events == 1
+            assert stat.total_events == 0  # not counted as a real event
+
+    def test_separates_protocols(self, app):
+        with app.app_context():
+            processor = EventProcessor()
+            processor.process_event({
+                "event_type": "connection",
+                "protocol": "ssh",
+                "source_ip": "10.0.0.1",
+                "destination_port": 2222,
+            })
+            processor.process_event({
+                "event_type": "connection",
+                "protocol": "telnet",
+                "source_ip": "10.0.0.1",
+                "destination_port": 2323,
+            })
+            today = datetime.now(timezone.utc).date()
+            ssh_stat = DailyStat.query.filter_by(date=today, protocol="ssh").first()
+            telnet_stat = DailyStat.query.filter_by(date=today, protocol="telnet").first()
+            assert ssh_stat.total_events == 1
+            assert telnet_stat.total_events == 1
