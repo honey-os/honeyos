@@ -5,19 +5,147 @@ and file-transfer attempts.
 
 import logging
 import os
+import posixpath
 import socket
 import threading
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Fake directory listing in UNIX ls format
-_DIR_LISTING = (
-    "drwxr-xr-x   2 root  root   4096 Jan 12 08:30 backups\r\n"
-    "drwxr-xr-x   3 root  root   4096 Jan 10 14:22 config\r\n"
-    "-rw-r--r--   1 root  root   2048 Jan 11 09:15 readme.txt\r\n"
-    "-rw-r--r--   1 root  root  15360 Jan 13 16:00 database.sql\r\n"
-)
+# ---------------------------------------------------------------------------
+# Fake filesystem tree
+# ---------------------------------------------------------------------------
+_FAKE_FS: dict = {
+    "/": {
+        "type": "dir",
+        "children": {
+            "backups": {"type": "dir", "children": {
+                "db-2026-05-28.sql.gz": {"type": "file", "size": 245760},
+                "db-2026-05-30.sql.gz": {"type": "file", "size": 251904},
+            }},
+            "config": {"type": "dir", "children": {
+                "app.conf": {"type": "file", "size": 1024},
+                "credentials.txt": {"type": "file", "size": 512},
+            }},
+            "www": {"type": "dir", "children": {
+                "index.html": {"type": "file", "size": 4096},
+                "upload": {"type": "dir", "children": {}},
+            }},
+            "readme.txt": {"type": "file", "size": 2048},
+            "database.sql": {"type": "file", "size": 15360},
+        },
+    },
+}
+
+
+def _resolve_path(cwd: str, arg: str) -> str:
+    """Resolve *arg* relative to *cwd*, returning an absolute POSIX path.
+
+    Handles ``/absolute``, ``relative``, ``.`` and ``..``.  The result is
+    always normalised and never escapes the root ``/``.
+    """
+    if not arg or arg == ".":
+        return cwd
+    if arg.startswith("/"):
+        raw = arg
+    else:
+        raw = cwd.rstrip("/") + "/" + arg
+    resolved = posixpath.normpath(raw)
+    # normpath("//foo") can return "//foo" — force single leading slash
+    if not resolved.startswith("/"):
+        resolved = "/" + resolved
+    return resolved
+
+
+def _get_node(path: str) -> dict | None:
+    """Walk *_FAKE_FS* and return the node at *path*, or ``None``."""
+    path = posixpath.normpath(path)
+    if path == "/":
+        return _FAKE_FS["/"]
+    parts = [p for p in path.split("/") if p]
+    node = _FAKE_FS["/"]
+    for part in parts:
+        if node.get("type") != "dir":
+            return None
+        children = node.get("children", {})
+        if part not in children:
+            return None
+        node = children[part]
+    return node
+
+
+def _format_listing(path: str) -> str:
+    """Return an ``ls -l`` style listing for the directory at *path*."""
+    node = _get_node(path)
+    if node is None or node.get("type") != "dir":
+        return ""
+    lines: list[str] = []
+    children = node.get("children", {})
+    for name, info in sorted(children.items()):
+        if info["type"] == "dir":
+            lines.append(
+                f"drwxr-xr-x   2 root  root   4096 May 28 10:30 {name}"
+            )
+        else:
+            size = info.get("size", 0)
+            lines.append(
+                f"-rw-r--r--   1 root  root  {size:>5} May 28 10:30 {name}"
+            )
+    return "\r\n".join(lines) + "\r\n" if lines else ""
+
+
+def _format_nlst(path: str) -> str:
+    """Return a plain filename listing (NLST) for the directory at *path*."""
+    node = _get_node(path)
+    if node is None or node.get("type") != "dir":
+        return ""
+    names = sorted(node.get("children", {}).keys())
+    return "\r\n".join(names) + "\r\n" if names else ""
+
+
+def _fake_file_content(filename: str, size: int = 0) -> bytes:
+    """Generate plausible fake content based on the file extension."""
+    lower = filename.lower()
+    if lower == "credentials.txt":
+        return (
+            b"# Internal service credentials -- DO NOT SHARE\n"
+            b"admin_user=sysadmin\n"
+            b"admin_pass=Pr0d#Secret!42\n"
+            b"db_host=10.0.3.12\n"
+            b"db_user=app_rw\n"
+            b"db_pass=xK9$mQ2wL7!\n"
+            b"api_key=sk-live-4f8a2b1c9e3d7f6a0b5c8d2e1f4a7b3c\n"
+        )
+    if lower.endswith((".sql", ".sql.gz")):
+        return (
+            b"-- MySQL dump 10.13  Distrib 8.0.36\n"
+            b"-- Host: localhost    Database: production\n\n"
+            b"CREATE TABLE `users` (\n"
+            b"  `id` int NOT NULL AUTO_INCREMENT,\n"
+            b"  `email` varchar(255) DEFAULT NULL,\n"
+            b"  `password_hash` varchar(255) DEFAULT NULL,\n"
+            b"  PRIMARY KEY (`id`)\n"
+            b") ENGINE=InnoDB;\n"
+        )
+    if lower.endswith(".conf"):
+        return (
+            b"[server]\n"
+            b"listen = 0.0.0.0\n"
+            b"port = 8080\n"
+            b"workers = 4\n"
+            b"debug = false\n"
+            b"secret_key = change-me-in-production\n"
+        )
+    if lower.endswith(".html"):
+        return (
+            b"<!DOCTYPE html>\n<html>\n<head><title>Welcome</title></head>\n"
+            b"<body><h1>It works!</h1></body>\n</html>\n"
+        )
+    # Generic fallback
+    target = max(size, 64)
+    line = b"The quick brown fox jumps over the lazy dog.\n"
+    reps = max(target // len(line), 1)
+    return line * reps
 
 
 class FTPHoneypot:
@@ -42,16 +170,41 @@ class FTPHoneypot:
         # Passive-mode data channel settings.
         # pasv_address: IP to advertise in PASV responses.  Inside Docker the
         # socket's local address is the container IP (unreachable from outside),
-        # so set FTP_PASV_ADDRESS to the host/public IP.
+        # so set FTP_PASV_ADDRESS or PUBLIC_IP to the host/public IP.
         self._pasv_address = (
             self.config.get("pasv_address")
             or os.getenv("FTP_PASV_ADDRESS", "")
+            or os.getenv("PUBLIC_IP", "")
         )
+        if not self._pasv_address:
+            self._pasv_address = self._detect_public_ip()
         # Fixed port range for PASV data connections.  These must be mapped
-        # through Docker (e.g. 4400-4404:4400-4404).  Using ephemeral port 0
-        # doesn't work in Docker because the random port isn't exposed.
-        self._pasv_port_min = int(self.config.get("pasv_port_min", 4400))
-        self._pasv_port_max = int(self.config.get("pasv_port_max", 4404))
+        # through Docker (e.g. 40000-40004:40000-40004).  Using ephemeral
+        # port 0 doesn't work in Docker because the random port isn't exposed.
+        self._pasv_port_min = int(self.config.get("pasv_port_min", 40000))
+        self._pasv_port_max = int(self.config.get("pasv_port_max", 40004))
+
+    # ------------------------------------------------------------------
+    # Public IP detection (same pattern as PostgreSQL honeypot)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _detect_public_ip() -> str:
+        """Query ipify for the real public IP.
+
+        Returns the IP string on success, or empty string on failure so
+        the PASV handler can fall back to the socket's local address.
+        """
+        try:
+            import requests as _req
+            resp = _req.get("https://api.ipify.org?format=json", timeout=5)
+            resp.raise_for_status()
+            ip = resp.json().get("ip")
+            if ip:
+                return ip
+        except Exception:
+            pass
+        return ""
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -97,10 +250,6 @@ class FTPHoneypot:
                 pass
 
     # ------------------------------------------------------------------
-    # Connection handler
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
     # Data channel helpers
     # ------------------------------------------------------------------
 
@@ -143,6 +292,26 @@ class FTPHoneypot:
             data_sock.close()
 
     @staticmethod
+    def _recv_via_data(data_sock: socket.socket, max_bytes: int = 1048576) -> bytes:
+        """Accept one connection on *data_sock*, recv up to *max_bytes*, close."""
+        try:
+            conn, _ = data_sock.accept()
+            try:
+                chunks: list[bytes] = []
+                total = 0
+                while total < max_bytes:
+                    chunk = conn.recv(min(8192, max_bytes - total))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    total += len(chunk)
+                return b"".join(chunks)
+            finally:
+                conn.close()
+        finally:
+            data_sock.close()
+
+    @staticmethod
     def _connect_active(host: str, port: int) -> socket.socket | None:
         """Connect to the client's PORT address for active-mode transfers."""
         try:
@@ -161,6 +330,7 @@ class FTPHoneypot:
         from models import db as _db
         session_id = None
         username = ""
+        cwd = "/"
         # Pending PASV listener (socket, port) or None
         pasv_sock: socket.socket | None = None
         # Pending PORT target (host, port) or None
@@ -239,16 +409,53 @@ class FTPHoneypot:
                     client_sock.sendall(f"504 AUTH {auth_type} not supported\r\n".encode())
 
                 elif cmd == "PWD":
-                    reply = '257 "/" is current directory'
-                    client_sock.sendall(b'257 "/" is current directory\r\n')
+                    reply = f'257 "{cwd}" is current directory'
+                    client_sock.sendall(f'257 "{cwd}" is current directory\r\n'.encode())
 
                 elif cmd == "CWD":
-                    reply = "250 Directory changed"
-                    client_sock.sendall(b"250 Directory changed\r\n")
+                    target = _resolve_path(cwd, arg)
+                    node = _get_node(target)
+                    if node and node.get("type") == "dir":
+                        cwd = target
+                        reply = f"250 Directory changed to {cwd}"
+                        client_sock.sendall(f"250 Directory changed to {cwd}\r\n".encode())
+                    else:
+                        reply = "550 No such directory"
+                        client_sock.sendall(b"550 No such directory\r\n")
+
+                elif cmd == "CDUP":
+                    cwd = posixpath.dirname(cwd) or "/"
+                    reply = f'250 Directory changed to {cwd}'
+                    client_sock.sendall(f"250 Directory changed to {cwd}\r\n".encode())
 
                 elif cmd == "TYPE":
                     reply = "200 Type set"
                     client_sock.sendall(b"200 Type set\r\n")
+
+                elif cmd == "SIZE":
+                    target = _resolve_path(cwd, arg)
+                    node = _get_node(target)
+                    if node and node.get("type") == "file":
+                        sz = node.get("size", 0)
+                        reply = f"213 {sz}"
+                        client_sock.sendall(f"213 {sz}\r\n".encode())
+                    else:
+                        reply = "550 File not found"
+                        client_sock.sendall(b"550 File not found\r\n")
+
+                elif cmd == "MDTM":
+                    target = _resolve_path(cwd, arg)
+                    node = _get_node(target)
+                    if node and node.get("type") == "file":
+                        reply = "213 20260528103000"
+                        client_sock.sendall(b"213 20260528103000\r\n")
+                    else:
+                        reply = "550 File not found"
+                        client_sock.sendall(b"550 File not found\r\n")
+
+                elif cmd == "REST":
+                    reply = "350 Restart position accepted"
+                    client_sock.sendall(b"350 Restart position accepted\r\n")
 
                 elif cmd == "PASV":
                     # Close any previous PASV socket
@@ -302,7 +509,12 @@ class FTPHoneypot:
                     )
 
                 elif cmd == "LIST" or cmd == "NLST":
-                    listing = _DIR_LISTING.encode() if cmd == "LIST" else b"backups\r\nconfig\r\nreadme.txt\r\ndatabase.sql\r\n"
+                    # Determine which path to list
+                    list_path = _resolve_path(cwd, arg) if arg else cwd
+                    if cmd == "LIST":
+                        listing = _format_listing(list_path).encode()
+                    else:
+                        listing = _format_nlst(list_path).encode()
                     sent = False
 
                     if pasv_sock:
@@ -340,27 +552,137 @@ class FTPHoneypot:
                             "destination_port": self.port,
                             "severity": "low",
                             "session_id": session_id,
-                            "details": {"command": line},
+                            "details": {"command": line, "path": list_path},
                         })
 
-                elif cmd in ("RETR", "STOR", "DELE", "MKD", "RMD"):
-                    # File-transfer or modification attempt
-                    if cmd == "RETR":
+                elif cmd == "RETR":
+                    target = _resolve_path(cwd, arg)
+                    node = _get_node(target)
+                    if node and node.get("type") == "file":
+                        content = _fake_file_content(
+                            posixpath.basename(target),
+                            node.get("size", 0),
+                        )
+                        sent = False
+                        if pasv_sock:
+                            client_sock.sendall(b"150 Opening data connection\r\n")
+                            try:
+                                self._send_via_data(pasv_sock, content)
+                                sent = True
+                            except OSError:
+                                pass
+                            pasv_sock = None
+                        elif active_addr:
+                            client_sock.sendall(b"150 Opening data connection\r\n")
+                            conn = self._connect_active(*active_addr)
+                            if conn:
+                                try:
+                                    conn.sendall(content)
+                                finally:
+                                    conn.close()
+                                sent = True
+                            active_addr = None
+
+                        if sent:
+                            reply = "150 Opening data connection\n226 Transfer complete"
+                            client_sock.sendall(b"226 Transfer complete\r\n")
+                        else:
+                            reply = "425 Can't open data connection"
+                            client_sock.sendall(b"425 Can't open data connection\r\n")
+
+                        severity = "medium"
+                    else:
                         reply = "550 File not found"
                         client_sock.sendall(b"550 File not found\r\n")
                         severity = "medium"
-                    elif cmd == "STOR":
-                        reply = "553 Permission denied"
-                        client_sock.sendall(b"553 Permission denied\r\n")
-                        severity = "high"
-                    elif cmd == "DELE":
-                        reply = "550 Permission denied"
-                        client_sock.sendall(b"550 Permission denied\r\n")
-                        severity = "high"
+
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "file_operation",
+                            "protocol": "ftp",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": severity,
+                            "session_id": session_id,
+                            "details": {"command": "RETR", "argument": arg},
+                        })
+
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_file_transfer(
+                            session_id, arg, "download"
+                        )
+
+                elif cmd == "STOR":
+                    # Accept upload — this is the highest-value capture
+                    uploaded = b""
+                    sent = False
+                    if pasv_sock:
+                        client_sock.sendall(b"150 Opening data connection\r\n")
+                        try:
+                            uploaded = self._recv_via_data(pasv_sock)
+                            sent = True
+                        except OSError:
+                            pass
+                        pasv_sock = None
+                    elif active_addr:
+                        client_sock.sendall(b"150 Opening data connection\r\n")
+                        conn = self._connect_active(*active_addr)
+                        if conn:
+                            try:
+                                chunks: list[bytes] = []
+                                total = 0
+                                max_bytes = 1048576
+                                while total < max_bytes:
+                                    chunk = conn.recv(min(8192, max_bytes - total))
+                                    if not chunk:
+                                        break
+                                    chunks.append(chunk)
+                                    total += len(chunk)
+                                uploaded = b"".join(chunks)
+                                sent = True
+                            finally:
+                                conn.close()
+                        active_addr = None
+
+                    if sent:
+                        reply = "226 Transfer complete"
+                        client_sock.sendall(b"226 Transfer complete\r\n")
+                        logger.info(
+                            "FTP STOR captured %d bytes from %s: %s",
+                            len(uploaded), addr[0], arg,
+                        )
                     else:
-                        reply = "550 Permission denied"
-                        client_sock.sendall(b"550 Permission denied\r\n")
-                        severity = "medium"
+                        reply = "425 Can't open data connection"
+                        client_sock.sendall(b"425 Can't open data connection\r\n")
+
+                    upload_preview = uploaded[:4096].hex() if uploaded else ""
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "file_operation",
+                            "protocol": "ftp",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "critical",
+                            "session_id": session_id,
+                            "details": {
+                                "command": "STOR",
+                                "argument": arg,
+                                "upload_size": len(uploaded),
+                                "upload_preview": upload_preview,
+                            },
+                        })
+
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_file_transfer(
+                            session_id, arg, "upload"
+                        )
+
+                elif cmd in ("DELE", "MKD", "RMD"):
+                    reply = "550 Permission denied"
+                    client_sock.sendall(b"550 Permission denied\r\n")
+                    severity = "high" if cmd == "DELE" else "medium"
 
                     if self.event_processor:
                         self.event_processor.process_event({
