@@ -650,11 +650,22 @@ class FTPHoneypot:
                         active_addr = None
 
                     if sent:
-                        reply = "226 Transfer complete"
                         client_sock.sendall(b"226 Transfer complete\r\n")
                         logger.info(
                             "FTP STOR captured %d bytes from %s: %s",
                             len(uploaded), addr[0], arg,
+                        )
+                        # Build a readable preview for session replay
+                        text_preview = ""
+                        if uploaded:
+                            try:
+                                text_preview = uploaded[:512].decode("utf-8", errors="replace")
+                            except Exception:
+                                text_preview = uploaded[:256].hex()
+                        reply = (
+                            f"226 Transfer complete\n"
+                            f"[Captured {len(uploaded)} bytes]\n"
+                            f"{text_preview}"
                         )
                     else:
                         reply = "425 Can't open data connection"
