@@ -57,6 +57,7 @@ class Event(db.Model):
     user_agent = db.Column(db.Text)
     raw_payload = db.Column(db.Text)
     geolocation = db.Column(db.Text)  # stored as JSON text
+    throttled = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=_utcnow)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 

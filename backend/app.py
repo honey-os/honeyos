@@ -323,6 +323,9 @@ def create_app(config_class=Config) -> Flask:
                     logger.debug("Failed to aggregate day %s", day, exc_info=True)
                 day += timedelta(days=1)
 
+        # Purge throttled events (already counted in daily stats)
+        deleted_throttled = Event.query.filter(Event.throttled == True).delete()  # noqa: E712
+
         deleted_events = Event.query.filter(Event.timestamp < cutoff).delete()
         deleted_sessions = SessionModel.query.filter(
             SessionModel.status != "active",
@@ -330,6 +333,8 @@ def create_app(config_class=Config) -> Flask:
         ).delete()
         db.session.commit()
 
+        if deleted_throttled:
+            logger.info("Retention: purged %d throttled events", deleted_throttled)
         if deleted_events or deleted_sessions:
             logger.info(
                 "Retention: pruned %d events and %d sessions older than %d days",
@@ -387,6 +392,19 @@ def _run_migrations() -> None:
             ))
             conn.commit()
             logger.info("Migration: added blocked_events column to daily_stats table")
+
+        # Add throttled column to events
+        result = conn.execute(sqlalchemy.text("PRAGMA table_info(events)"))
+        columns = {row[1] for row in result}
+        if "throttled" not in columns:
+            conn.execute(sqlalchemy.text(
+                "ALTER TABLE events ADD COLUMN throttled BOOLEAN DEFAULT 0"
+            ))
+            conn.execute(sqlalchemy.text(
+                "CREATE INDEX IF NOT EXISTS ix_events_throttled ON events (throttled)"
+            ))
+            conn.commit()
+            logger.info("Migration: added throttled column to events table")
 
 
 def _seed_defaults() -> None:
