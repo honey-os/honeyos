@@ -440,14 +440,14 @@ def _seed_defaults() -> None:
                 "protocol": "telnet",
                 "port": Config.TELNET_HONEYPOT_PORT,
                 "description": "Fake telnet server capturing credentials and commands",
-                "config": {},
+                "config": {"banner": "Welcome to Gateway Management Console"},
             },
             {
                 "name": "FTP Honeypot",
                 "protocol": "ftp",
                 "port": Config.FTP_HONEYPOT_PORT,
                 "description": "Fake FTP server logging credentials and file access attempts",
-                "config": {},
+                "config": {"banner": "220 (vsFTPd 3.0.5)"},
             },
             {
                 "name": "MySQL Honeypot",
@@ -501,6 +501,23 @@ def _seed_defaults() -> None:
     if new_honeypots:
         db.session.commit()
         logger.info("Seeded %d default honeypots", len(new_honeypots))
+
+    # Backfill missing banner keys for protocols that were seeded with empty
+    # configs in older versions.
+    _banner_backfill: dict[str, dict[str, str]] = {
+        "ftp": {"banner": "220 (vsFTPd 3.0.5)"},
+        "telnet": {"banner": "Welcome to Gateway Management Console"},
+    }
+    for proto, patch in _banner_backfill.items():
+        hp = Honeypot.query.filter_by(protocol=proto).first()
+        if not hp:
+            continue
+        cfg = json.loads(hp.config) if isinstance(hp.config, str) else (hp.config or {})
+        if any(k in cfg for k in ("banner", "server_header", "version_string", "version")):
+            continue  # already has a banner key — don't overwrite
+        cfg.update(patch)
+        hp.config = json.dumps(cfg)
+    db.session.commit()
 
 
 # ---------------------------------------------------------------------------
