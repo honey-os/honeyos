@@ -193,19 +193,24 @@ def create_app(config_class=Config) -> Flask:
     from config import Config as _config
 
     def _aggregate_day(target_date):
-        """Compute and store daily summary stats for a given date."""
+        """Finalize daily stats for a given date.
+
+        Counters (total_events, connection_events, etc.) are maintained in
+        real-time by EventProcessor._increment_daily_stat().  This function
+        only fills in the fields that require a full-day GROUP BY scan:
+        unique_source_ips, top_source_ips, top_usernames, top_passwords.
+        """
         import json as _json
         from models import DailyStat, Event
 
         day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc)
         day_end = day_start + timedelta(days=1)
 
-        # Skip if already aggregated
-        existing = DailyStat.query.filter_by(date=target_date).first()
-        if existing:
-            return
+        # Get all stat rows for this date (created in real-time)
+        existing_rows = DailyStat.query.filter_by(date=target_date).all()
+        existing_map = {row.protocol: row for row in existing_rows}
 
-        # Get protocols active that day
+        # Also discover protocols from events (in case real-time missed any)
         protocols = [
             row[0] for row in
             db.session.query(db.distinct(Event.protocol))
@@ -215,25 +220,43 @@ def create_app(config_class=Config) -> Flask:
         ]
 
         for protocol in protocols:
-            base = Event.query.filter(
-                Event.timestamp >= day_start,
-                Event.timestamp < day_end,
-                Event.protocol == protocol,
-            )
+            stat = existing_map.get(protocol)
 
-            total = base.count()
-            if total == 0:
+            # If no real-time row exists (e.g. old data from before this feature),
+            # create one with counts computed from events.
+            if not stat:
+                base = Event.query.filter(
+                    Event.timestamp >= day_start,
+                    Event.timestamp < day_end,
+                    Event.protocol == protocol,
+                )
+                total = base.count()
+                if total == 0:
+                    continue
+                stat = DailyStat(
+                    id=generate_id(),
+                    date=target_date,
+                    protocol=protocol,
+                    total_events=total,
+                    connection_events=base.filter(Event.event_type == "connection").count(),
+                    auth_events=base.filter(Event.event_type == "authentication").count(),
+                    high_severity_events=base.filter(Event.severity.in_(["high", "critical"])).count(),
+                    blocked_events=0,
+                )
+                db.session.add(stat)
+
+            # Skip if top-N data already computed (idempotent)
+            if stat.top_source_ips is not None:
                 continue
 
-            connection_count = base.filter(Event.event_type == "connection").count()
-            auth_count = base.filter(Event.event_type == "authentication").count()
-            high_sev = base.filter(Event.severity.in_(["high", "critical"])).count()
+            # Compute unique IPs
             unique_ips = db.session.query(
                 db.func.count(db.distinct(Event.source_ip))
             ).filter(
                 Event.timestamp >= day_start, Event.timestamp < day_end,
                 Event.protocol == protocol,
             ).scalar() or 0
+            stat.unique_source_ips = unique_ips
 
             # Top 10 source IPs
             top_ips = (
@@ -244,7 +267,7 @@ def create_app(config_class=Config) -> Flask:
                 .limit(10)
                 .all()
             )
-            top_ips_json = _json.dumps([{"ip": ip, "count": c} for ip, c in top_ips])
+            stat.top_source_ips = _json.dumps([{"ip": ip, "count": c} for ip, c in top_ips])
 
             # Top 10 usernames (auth events only)
             username_expr = db.func.json_extract(Event.details, "$.username")
@@ -260,7 +283,7 @@ def create_app(config_class=Config) -> Flask:
                 .limit(10)
                 .all()
             )
-            top_users_json = _json.dumps([{"username": u, "count": c} for u, c in top_users])
+            stat.top_usernames = _json.dumps([{"username": u, "count": c} for u, c in top_users])
 
             # Top 10 passwords
             password_expr = db.func.json_extract(Event.details, "$.password")
@@ -276,22 +299,7 @@ def create_app(config_class=Config) -> Flask:
                 .limit(10)
                 .all()
             )
-            top_passwords_json = _json.dumps([{"password": p, "count": c} for p, c in top_passwords])
-
-            stat = DailyStat(
-                id=generate_id(),
-                date=target_date,
-                protocol=protocol,
-                total_events=total,
-                connection_events=connection_count,
-                auth_events=auth_count,
-                unique_source_ips=unique_ips,
-                high_severity_events=high_sev,
-                top_source_ips=top_ips_json,
-                top_usernames=top_users_json,
-                top_passwords=top_passwords_json,
-            )
-            db.session.add(stat)
+            stat.top_passwords = _json.dumps([{"password": p, "count": c} for p, c in top_passwords])
 
         db.session.commit()
 
@@ -369,6 +377,16 @@ def _run_migrations() -> None:
             conn.execute(sqlalchemy.text("ALTER TABLE sessions ADD COLUMN threat_intel TEXT"))
             conn.commit()
             logger.info("Migration: added threat_intel column to sessions table")
+
+        # Add blocked_events column to daily_stats (if table exists already)
+        result = conn.execute(sqlalchemy.text("PRAGMA table_info(daily_stats)"))
+        columns = {row[1] for row in result}
+        if columns and "blocked_events" not in columns:
+            conn.execute(sqlalchemy.text(
+                "ALTER TABLE daily_stats ADD COLUMN blocked_events INTEGER DEFAULT 0"
+            ))
+            conn.commit()
+            logger.info("Migration: added blocked_events column to daily_stats table")
 
 
 def _seed_defaults() -> None:

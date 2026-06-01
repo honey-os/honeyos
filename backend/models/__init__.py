@@ -403,6 +403,7 @@ class DailyStat(db.Model):
     auth_events = db.Column(db.Integer, default=0)
     unique_source_ips = db.Column(db.Integer, default=0)
     high_severity_events = db.Column(db.Integer, default=0)
+    blocked_events = db.Column(db.Integer, default=0)
     top_source_ips = db.Column(db.Text)     # JSON: [{ip, count}, ...]
     top_usernames = db.Column(db.Text)      # JSON: [{username, count}, ...]
     top_passwords = db.Column(db.Text)      # JSON: [{password, count}, ...]
@@ -421,6 +422,7 @@ class DailyStat(db.Model):
             "auth_events": self.auth_events,
             "unique_source_ips": self.unique_source_ips,
             "high_severity_events": self.high_severity_events,
+            "blocked_events": self.blocked_events,
             "top_source_ips": _json_col_to_python(self.top_source_ips),
             "top_usernames": _json_col_to_python(self.top_usernames),
             "top_passwords": _json_col_to_python(self.top_passwords),
