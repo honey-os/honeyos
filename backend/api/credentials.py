@@ -39,7 +39,7 @@ def get_credentials():
 
     # --- Total attempts ---------------------------------------------------
     total_attempts = (
-        db.session.query(db.func.count(Event.id))
+        db.session.query(db.func.count())
         .filter(*base_filters)
         .scalar()
     ) or 0

@@ -33,7 +33,7 @@ def summary():
 
     # Single scan for total_events + connections_per_second
     counts = db.session.query(
-        db.func.count(Event.id),
+        db.func.count(),
         db.func.sum(db.case((Event.timestamp >= rate_since, 1), else_=0)),
     ).filter(Event.timestamp >= since).first()
 

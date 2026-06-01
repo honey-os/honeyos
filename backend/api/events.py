@@ -73,10 +73,10 @@ def list_events():
 
     base_query = _apply_event_filters(Event.query)
 
-    # Use db.func.count() directly to avoid SQLAlchemy wrapping in a
-    # subquery, which is very slow on large SQLite tables.
+    # Use count(*) so SQLite can scan the smallest secondary index rather
+    # than the main table B-tree (which is bloated by large TEXT columns).
     count_query = _apply_event_filters(
-        db.session.query(db.func.count(Event.id))
+        db.session.query(db.func.count()).select_from(Event)
     )
     total = count_query.scalar()
     pages = max((total + per_page - 1) // per_page, 1)
