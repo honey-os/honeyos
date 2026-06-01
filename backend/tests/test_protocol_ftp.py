@@ -194,7 +194,7 @@ class TestFTPHoneypotInit:
     def test_default_pasv_range(self):
         hp = FTPHoneypot(port=2121)
         assert hp._pasv_port_min == 40000
-        assert hp._pasv_port_max == 40004
+        assert hp._pasv_port_max == 40049
 
 
 class TestPasvAddress:

@@ -182,7 +182,7 @@ class FTPHoneypot:
         # through Docker (e.g. 40000-40004:40000-40004).  Using ephemeral
         # port 0 doesn't work in Docker because the random port isn't exposed.
         self._pasv_port_min = int(self.config.get("pasv_port_min", 40000))
-        self._pasv_port_max = int(self.config.get("pasv_port_max", 40004))
+        self._pasv_port_max = int(self.config.get("pasv_port_max", 40049))
 
     # ------------------------------------------------------------------
     # Public IP detection (same pattern as PostgreSQL honeypot)
@@ -253,12 +253,12 @@ class FTPHoneypot:
     # Data channel helpers
     # ------------------------------------------------------------------
 
-    def _open_pasv_socket(self) -> tuple[socket.socket, int]:
+    def _open_pasv_socket(self) -> tuple[socket.socket, int] | tuple[None, int]:
         """Open a TCP listener for PASV data connections.
 
-        Tries each port in the configured fixed range first (required for
-        Docker, where only mapped ports are reachable).  Falls back to an
-        ephemeral port if the entire range is busy.
+        Only uses ports from the configured fixed range (required for Docker,
+        where only mapped ports are reachable).  Returns ``(None, 0)`` if the
+        entire range is busy — callers must handle this gracefully.
         """
         for port in range(self._pasv_port_min, self._pasv_port_max + 1):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -271,13 +271,9 @@ class FTPHoneypot:
             except OSError:
                 s.close()
 
-        # Range exhausted — fall back to ephemeral (works outside Docker)
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("0.0.0.0", 0))
-        s.listen(1)
-        s.settimeout(10)
-        return s, s.getsockname()[1]
+        logger.warning("FTP PASV port range %d-%d exhausted",
+                        self._pasv_port_min, self._pasv_port_max)
+        return None, 0
 
     @staticmethod
     def _send_via_data(data_sock: socket.socket, payload: bytes) -> None:
@@ -466,15 +462,19 @@ class FTPHoneypot:
                             pass
                     active_addr = None
                     pasv_sock, pasv_port = self._open_pasv_socket()
-                    # Use configured address (for Docker) or the socket's
-                    # local address (for bare-metal / dev).
-                    pasv_ip = self._pasv_address or client_sock.getsockname()[0]
-                    ip_parts = pasv_ip.replace(".", ",")
-                    p1, p2 = pasv_port >> 8, pasv_port & 0xFF
-                    reply = f"227 Entering Passive Mode ({ip_parts},{p1},{p2})"
-                    client_sock.sendall(
-                        f"227 Entering Passive Mode ({ip_parts},{p1},{p2})\r\n".encode()
-                    )
+                    if pasv_sock is None:
+                        reply = "425 No data ports available"
+                        client_sock.sendall(b"425 No data ports available\r\n")
+                    else:
+                        # Use configured address (for Docker) or the socket's
+                        # local address (for bare-metal / dev).
+                        pasv_ip = self._pasv_address or client_sock.getsockname()[0]
+                        ip_parts = pasv_ip.replace(".", ",")
+                        p1, p2 = pasv_port >> 8, pasv_port & 0xFF
+                        reply = f"227 Entering Passive Mode ({ip_parts},{p1},{p2})"
+                        client_sock.sendall(
+                            f"227 Entering Passive Mode ({ip_parts},{p1},{p2})\r\n".encode()
+                        )
 
                 elif cmd == "PORT":
                     # Parse PORT h1,h2,h3,h4,p1,p2
@@ -503,10 +503,14 @@ class FTPHoneypot:
                             pass
                     active_addr = None
                     pasv_sock, pasv_port = self._open_pasv_socket()
-                    reply = f"229 Entering Extended Passive Mode (|||{pasv_port}|)"
-                    client_sock.sendall(
-                        f"229 Entering Extended Passive Mode (|||{pasv_port}|)\r\n".encode()
-                    )
+                    if pasv_sock is None:
+                        reply = "425 No data ports available"
+                        client_sock.sendall(b"425 No data ports available\r\n")
+                    else:
+                        reply = f"229 Entering Extended Passive Mode (|||{pasv_port}|)"
+                        client_sock.sendall(
+                            f"229 Entering Extended Passive Mode (|||{pasv_port}|)\r\n".encode()
+                        )
 
                 elif cmd == "LIST" or cmd == "NLST":
                     # Determine which path to list

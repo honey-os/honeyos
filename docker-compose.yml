@@ -40,7 +40,7 @@ services:
       - "53:5353/tcp"  # DNS honeypot (TCP)
       - "445:4450"    # SMB honeypot
       - "3389:3390"   # RDP honeypot
-      - "40000-40004:40000-40004"  # FTP passive data ports
+      - "40000-40049:40000-40049"  # FTP passive data ports
     volumes:
       - ./data:/data
     env_file:
