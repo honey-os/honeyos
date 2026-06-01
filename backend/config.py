@@ -18,11 +18,22 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "honeyos-default-secret-change-me")
     DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
     READ_ONLY = os.getenv("READ_ONLY", "false").lower() in ("true", "1", "yes")
+    READ_ONLY_PASSWORD = os.getenv("READ_ONLY_PASSWORD", "")
 
     # --- Database ---
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///honeyos.db")
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # SQLite connections are cheap file handles — use NullPool to avoid the
+    # QueuePool size limit that causes timeouts under heavy bot traffic.
+    if DATABASE_URL.startswith("sqlite"):
+        from sqlalchemy.pool import NullPool
+        SQLALCHEMY_ENGINE_OPTIONS: dict = {
+            "poolclass": NullPool,
+            "connect_args": {"timeout": 10},
+        }
+    else:
+        SQLALCHEMY_ENGINE_OPTIONS: dict = {}
 
     # --- Network ---
     NETWORK_INTERFACE = os.getenv("NETWORK_INTERFACE", "eth0")
@@ -51,6 +62,12 @@ class Config:
     # --- Rate Limiting ---
     ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
 
+    # --- Connection Throttling ---
+    THROTTLE_EVENT_THRESHOLD = int(os.getenv("THROTTLE_EVENT_THRESHOLD", "1000"))
+    THROTTLE_BLOCK_SECONDS = int(os.getenv("THROTTLE_BLOCK_SECONDS", "3600"))
+    MAX_CONNECTIONS_PER_IP = int(os.getenv("MAX_CONNECTIONS_PER_IP", "20"))
+    MAX_TOTAL_CONNECTIONS = int(os.getenv("MAX_TOTAL_CONNECTIONS", "200"))
+
     # --- Honeypot Defaults ---
     SSH_HONEYPOT_PORT = int(os.getenv("SSH_HONEYPOT_PORT", "2222"))
     HTTP_HONEYPOT_PORT = int(os.getenv("HTTP_HONEYPOT_PORT", "8080"))
@@ -61,6 +78,21 @@ class Config:
     POSTGRESQL_HONEYPOT_PORT = int(os.getenv("POSTGRESQL_HONEYPOT_PORT", "5433"))
     DNS_HONEYPOT_PORT = int(os.getenv("DNS_HONEYPOT_PORT", "5353"))
     SMB_HONEYPOT_PORT = int(os.getenv("SMB_HONEYPOT_PORT", "4450"))
+    RDP_HONEYPOT_PORT = int(os.getenv("RDP_HONEYPOT_PORT", "3390"))
+
+    # --- External Port Mapping ---
+    # The port attackers/scanners see externally (after Docker/firewall NAT).
+    # Defaults match production docker-compose.yml mappings.
+    SSH_EXTERNAL_PORT = int(os.getenv("SSH_EXTERNAL_PORT", "22"))
+    HTTP_EXTERNAL_PORT = int(os.getenv("HTTP_EXTERNAL_PORT", "80"))
+    HTTPS_EXTERNAL_PORT = int(os.getenv("HTTPS_EXTERNAL_PORT", "443"))
+    TELNET_EXTERNAL_PORT = int(os.getenv("TELNET_EXTERNAL_PORT", "23"))
+    FTP_EXTERNAL_PORT = int(os.getenv("FTP_EXTERNAL_PORT", "21"))
+    MYSQL_EXTERNAL_PORT = int(os.getenv("MYSQL_EXTERNAL_PORT", "3306"))
+    POSTGRESQL_EXTERNAL_PORT = int(os.getenv("POSTGRESQL_EXTERNAL_PORT", "5432"))
+    DNS_EXTERNAL_PORT = int(os.getenv("DNS_EXTERNAL_PORT", "53"))
+    SMB_EXTERNAL_PORT = int(os.getenv("SMB_EXTERNAL_PORT", "445"))
+    RDP_EXTERNAL_PORT = int(os.getenv("RDP_EXTERNAL_PORT", "3389"))
 
     # --- Honeypot Enable/Disable ---
     SSH_HONEYPOT_ENABLED = os.getenv("SSH_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -72,6 +104,7 @@ class Config:
     POSTGRESQL_HONEYPOT_ENABLED = os.getenv("POSTGRESQL_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
     DNS_HONEYPOT_ENABLED = os.getenv("DNS_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
     SMB_HONEYPOT_ENABLED = os.getenv("SMB_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
+    RDP_HONEYPOT_ENABLED = os.getenv("RDP_HONEYPOT_ENABLED", "true").lower() in ("true", "1", "yes")
 
     HONEYPOT_ENABLED: dict[str, bool] = {
         "ssh": SSH_HONEYPOT_ENABLED,
@@ -83,10 +116,34 @@ class Config:
         "postgresql": POSTGRESQL_HONEYPOT_ENABLED,
         "dns": DNS_HONEYPOT_ENABLED,
         "smb": SMB_HONEYPOT_ENABLED,
+        "rdp": RDP_HONEYPOT_ENABLED,
     }
+
+    EXTERNAL_PORT: dict[str, int] = {
+        "ssh": SSH_EXTERNAL_PORT,
+        "http": HTTP_EXTERNAL_PORT,
+        "https": HTTPS_EXTERNAL_PORT,
+        "telnet": TELNET_EXTERNAL_PORT,
+        "ftp": FTP_EXTERNAL_PORT,
+        "mysql": MYSQL_EXTERNAL_PORT,
+        "postgresql": POSTGRESQL_EXTERNAL_PORT,
+        "dns": DNS_EXTERNAL_PORT,
+        "smb": SMB_EXTERNAL_PORT,
+        "rdp": RDP_EXTERNAL_PORT,
+    }
+
+    # --- Frontend ---
+    FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "7777"))
 
     # --- Authentication ---
     SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "168"))
 
     # --- Geolocation ---
     GEOIP_ENABLED = os.getenv("GEOIP_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    # --- Threat Intelligence ---
+    ABUSECH_API_KEY = os.getenv("ABUSECH_API_KEY", "")
+
+    # --- Perimeter / Censys ---
+    CENSYS_API_TOKEN = os.getenv("CENSYS_API_TOKEN", "")
+    PUBLIC_IP = os.getenv("PUBLIC_IP", "")

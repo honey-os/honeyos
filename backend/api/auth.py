@@ -5,6 +5,9 @@ Provides Pi-hole-style single-admin authentication:
 - First-run setup (create password)
 - Login / logout
 - Change password
+
+Supports multiple concurrent sessions (e.g. phone + laptop) by storing
+each session as a row in the AuthSession table.
 """
 
 import secrets
@@ -13,16 +16,12 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from models import SystemConfig, db
+from models import SystemConfig, AuthSession, db
 
 auth_bp = Blueprint("auth", __name__)
 
-# Keys stored in SystemConfig for auth state
+# Key stored in SystemConfig for the admin password hash
 _KEY_PASSWORD_HASH = "admin_password_hash"
-_KEY_TOKEN = "auth_token"
-_KEY_TOKEN_CREATED = "auth_token_created_at"
-
-AUTH_INTERNAL_KEYS = {_KEY_PASSWORD_HASH, _KEY_TOKEN, _KEY_TOKEN_CREATED}
 
 SESSION_COOKIE_NAME = "honeyos_session"
 
@@ -46,40 +45,38 @@ def _set_config_value(key: str, value: str) -> None:
         db.session.add(row)
 
 
-def _delete_config_value(key: str) -> None:
-    row = SystemConfig.query.get(key)
-    if row:
-        db.session.delete(row)
-
-
-def _store_token(token: str) -> None:
-    """Store a session token and its creation timestamp in SystemConfig."""
-    _set_config_value(_KEY_TOKEN, token)
-    _set_config_value(_KEY_TOKEN_CREATED, datetime.now(timezone.utc).isoformat())
+def _add_token(token: str) -> None:
+    """Add a new session token and prune expired sessions."""
+    from datetime import timedelta
+    db.session.add(AuthSession(token=token))
+    # Prune expired sessions
+    timeout = _get_session_timeout_hours()
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=timeout)
+    AuthSession.query.filter(AuthSession.created_at < cutoff).delete()
     db.session.commit()
 
 
-def _is_token_expired(created_at_iso: str) -> bool:
-    """Check whether a token has exceeded the session timeout."""
-    try:
-        created = datetime.fromisoformat(created_at_iso)
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        age_hours = (datetime.now(timezone.utc) - created).total_seconds() / 3600
-        return age_hours > _get_session_timeout_hours()
-    except (ValueError, TypeError):
-        return True
+def _remove_token(token: str) -> None:
+    """Remove a specific session token (logout)."""
+    AuthSession.query.filter_by(token=token).delete()
+    db.session.commit()
 
 
 def _set_session_cookie(response, token: str):
     """Set the httpOnly session cookie on a response."""
     max_age = _get_session_timeout_hours() * 3600
+    # Mark cookie Secure when served behind TLS (Caddy, etc.) so browsers
+    # send it back on subsequent HTTPS requests.
+    is_https = (
+        request.is_secure
+        or request.headers.get("X-Forwarded-Proto") == "https"
+    )
     response.set_cookie(
         SESSION_COOKIE_NAME,
         token,
         httponly=True,
         samesite="Lax",
-        secure=False,
+        secure=is_https,
         path="/",
         max_age=max_age,
     )
@@ -92,16 +89,19 @@ def has_admin() -> bool:
 
 
 def is_authenticated(cookie_token: str | None) -> bool:
-    """Check whether the given cookie token matches the stored session."""
+    """Check whether the given cookie token matches any active session."""
     if not cookie_token:
         return False
-    stored_token = _get_config_value(_KEY_TOKEN)
-    if not stored_token or stored_token != cookie_token:
+    session_row = AuthSession.query.get(cookie_token)
+    if session_row is None:
         return False
-    created_at = _get_config_value(_KEY_TOKEN_CREATED)
-    if not created_at or _is_token_expired(created_at):
-        return False
-    return True
+    timeout = _get_session_timeout_hours()
+    now = datetime.now(timezone.utc)
+    created = session_row.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    age_hours = (now - created).total_seconds() / 3600
+    return age_hours <= timeout
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +115,14 @@ def auth_status():
     authenticated."""
     from config import Config
     cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
-    return jsonify({
+    resp: dict = {
         "has_admin": has_admin(),
         "authenticated": is_authenticated(cookie_token),
         "read_only": Config.READ_ONLY,
-    })
+    }
+    if Config.READ_ONLY and Config.READ_ONLY_PASSWORD:
+        resp["readonly_password"] = Config.READ_ONLY_PASSWORD
+    return jsonify(resp)
 
 
 @auth_bp.route("/api/auth/setup", methods=["POST"])
@@ -139,7 +142,7 @@ def auth_setup():
 
     _set_config_value(_KEY_PASSWORD_HASH, generate_password_hash(password))
     token = secrets.token_hex(32)
-    _store_token(token)
+    _add_token(token)
 
     resp = make_response(jsonify({"message": "Admin account created"}), 201)
     _set_session_cookie(resp, token)
@@ -157,7 +160,7 @@ def auth_login():
         return jsonify({"error": "unauthorized", "message": "Invalid password"}), 401
 
     token = secrets.token_hex(32)
-    _store_token(token)
+    _add_token(token)
 
     resp = make_response(jsonify({"message": "Logged in"}))
     _set_session_cookie(resp, token)
@@ -166,10 +169,10 @@ def auth_login():
 
 @auth_bp.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
-    """Clear the stored token and delete the session cookie."""
-    _delete_config_value(_KEY_TOKEN)
-    _delete_config_value(_KEY_TOKEN_CREATED)
-    db.session.commit()
+    """Remove this session's token and delete the cookie."""
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        _remove_token(cookie_token)
 
     resp = make_response(jsonify({"message": "Logged out"}))
     resp.delete_cookie(SESSION_COOKIE_NAME, path="/")
@@ -195,7 +198,7 @@ def auth_change_password():
 
     _set_config_value(_KEY_PASSWORD_HASH, generate_password_hash(new_password))
     token = secrets.token_hex(32)
-    _store_token(token)
+    _add_token(token)
 
     resp = make_response(jsonify({"message": "Password changed"}))
     _set_session_cookie(resp, token)

@@ -45,8 +45,8 @@ jobs:
         working-directory: ./backend
         env:
           FLASK_ENV: testing
-          DATABASE_URL: sqlite:///test.db
-        run: pytest || true
+          DATABASE_URL: sqlite://
+        run: python -m pytest tests/ -v
 
   build-backend:
     needs: build-and-test

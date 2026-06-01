@@ -2,13 +2,27 @@
 Sessions API blueprint.
 """
 
+import json
+from datetime import datetime, timezone
+
 from flask import Blueprint, jsonify, request
 
+from config import Config
 from models import Session, db
 from services.session_recorder import SessionRecorder
+from services.threatfox import ThreatFoxService, extract_iocs
+from services.urlhaus import UrlhausService
 from utils.helpers import parse_json_field
 
 sessions_bp = Blueprint("sessions", __name__)
+
+
+@sessions_bp.route("/api/features", methods=["GET"])
+def get_features():
+    """Return feature flags based on available configuration."""
+    return jsonify({
+        "threatfox": bool(Config.ABUSECH_API_KEY),
+    })
 
 
 @sessions_bp.route("/api/sessions", methods=["GET"])
@@ -26,24 +40,30 @@ def list_sessions():
     page = max(int(request.args.get("page", 1)), 1)
     offset = (page - 1) * per_page
 
-    query = Session.query
+    base_query = Session.query
+    count_query = db.session.query(db.func.count()).select_from(Session)
 
     protocol = request.args.get("protocol")
     if protocol:
-        query = query.filter(Session.protocol == protocol)
+        base_query = base_query.filter(Session.protocol == protocol)
+        count_query = count_query.filter(Session.protocol == protocol)
 
     status = request.args.get("status")
     if status:
-        query = query.filter(Session.status == status)
+        base_query = base_query.filter(Session.status == status)
+        count_query = count_query.filter(Session.status == status)
 
     active_only = request.args.get("active_only", "false").lower() in ("true", "1", "yes")
     if active_only and not status:
-        query = query.filter(Session.status == "active")
+        base_query = base_query.filter(Session.status == "active")
+        count_query = count_query.filter(Session.status == "active")
 
-    total = query.count()
+    # Use count(*) so SQLite scans a small secondary index, not the full
+    # table B-tree (which is bloated by large JSON TEXT columns).
+    total = count_query.scalar()
     pages = max((total + per_page - 1) // per_page, 1)
     sessions = (
-        query
+        base_query
         .order_by(Session.start_time.desc())
         .offset(offset)
         .limit(per_page)
@@ -84,3 +104,35 @@ def replay_session(session_id: str):
         return jsonify({"error": "Session not found"}), 404
 
     return jsonify(replay)
+
+
+@sessions_bp.route("/api/sessions/<session_id>/identify-malware", methods=["POST"])
+def identify_malware(session_id: str):
+    """Query ThreatFox and URLhaus for IOCs extracted from the session."""
+    session = Session.query.get(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    if not Config.ABUSECH_API_KEY:
+        return jsonify({"error": "abuse.ch API key not configured"}), 503
+
+    iocs = extract_iocs(session)
+
+    threatfox = ThreatFoxService(Config.ABUSECH_API_KEY)
+    urlhaus = UrlhausService(Config.ABUSECH_API_KEY)
+
+    all_matches: list[dict] = []
+    for ioc in iocs:
+        all_matches.extend(threatfox.search_ioc(ioc))
+    all_matches.extend(urlhaus.analyze_iocs(iocs))
+
+    result = {
+        "iocs_searched": iocs,
+        "matches": all_matches,
+        "analyzed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+    session.threat_intel = json.dumps(result)
+    db.session.commit()
+
+    return jsonify(result)

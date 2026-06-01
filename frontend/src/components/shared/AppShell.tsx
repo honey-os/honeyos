@@ -41,7 +41,13 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
-  const setSelectedSession = useStore((s) => s.setSelectedSession);
+  const fetchDashboard = useStore((s) => s.fetchDashboard);
+
+  const handleActiveNavClick = (href: string) => {
+    if (href === '/dashboard') {
+      fetchDashboard();
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
@@ -91,15 +97,13 @@ export default function AppShell({ children }: AppShellProps) {
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => {
-                  if (item.href === '/sessions') setSelectedSession(null);
-                }}
+                onClick={isActive ? () => handleActiveNavClick(item.href) : undefined}
                 className={clsx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                   isActive

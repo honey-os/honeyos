@@ -29,9 +29,11 @@ from utils.helpers import generate_id
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+_log_level = getattr(logging, Config.LOG_LEVEL, logging.INFO)
 logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
+    level=_log_level,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
 )
 logger = logging.getLogger("honeyos")
 
@@ -47,10 +49,14 @@ def create_app(config_class=Config) -> Flask:
     application = Flask(__name__)
     application.config.from_object(config_class)
 
+    # Trust X-Forwarded-* headers from Caddy (TLS termination proxy)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    application.wsgi_app = ProxyFix(application.wsgi_app, x_proto=1)
+
     # --- Extensions -------------------------------------------------------
     db.init_app(application)
-    CORS(application, resources={r"/api/*": {"origins": "*"}})
-    socketio.init_app(application, cors_allowed_origins="*", async_mode="threading")
+    CORS(application, resources={r"/api/*": {"origins": r".*"}}, supports_credentials=True)
+    socketio.init_app(application, cors_allowed_origins=r".*", async_mode="threading")
 
     # --- Blueprints -------------------------------------------------------
     from api.events import events_bp
@@ -63,6 +69,8 @@ def create_app(config_class=Config) -> Flask:
     from api.attackers import attackers_bp
     from api.credentials import credentials_bp
     from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
+    from api.throttle import throttle_bp
+    from api.perimeter import perimeter_bp
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -74,6 +82,8 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(attackers_bp)
     application.register_blueprint(credentials_bp)
     application.register_blueprint(auth_bp)
+    application.register_blueprint(throttle_bp)
+    application.register_blueprint(perimeter_bp)
 
     # --- Auth middleware --------------------------------------------------
     AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
@@ -105,6 +115,8 @@ def create_app(config_class=Config) -> Flask:
             return None
         if request.path in READ_ONLY_ALLOWLIST:
             return None
+        if request.path.endswith("/identify-malware"):
+            return None
         return jsonify({
             "error": "read_only",
             "message": "This instance is in read-only mode",
@@ -126,7 +138,20 @@ def create_app(config_class=Config) -> Flask:
 
     # --- Database initialisation ------------------------------------------
     with application.app_context():
+        # Enable WAL mode for SQLite — allows concurrent reads during writes
+        # and dramatically reduces "database is locked" under heavy bot traffic.
+        if config_class.DATABASE_URL.startswith("sqlite"):
+            from sqlalchemy import event as sa_event
+
+            @sa_event.listens_for(db.engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
+
         db.create_all()
+        _run_migrations()
         _seed_defaults()
 
     # --- Start honeypot listeners -----------------------------------------
@@ -134,18 +159,30 @@ def create_app(config_class=Config) -> Flask:
     from services.session_recorder import SessionRecorder
     from services.honeypot_manager import HoneypotManager
     from services.alert_service import AlertService
+    from services.connection_throttle import ConnectionThrottler
+    from services.perimeter import PerimeterService
 
     alert_service = AlertService(config=config_class)
-    event_processor = EventProcessor(alert_service=alert_service)
+    connection_throttler = ConnectionThrottler(app=application)
+    event_processor = EventProcessor(
+        alert_service=alert_service,
+        connection_throttler=connection_throttler,
+    )
     session_recorder = SessionRecorder()
     manager = HoneypotManager(
         app=application,
         event_processor=event_processor,
         session_recorder=session_recorder,
+        connection_throttler=connection_throttler,
     )
     application.honeypot_manager = manager
+    application.connection_throttler = connection_throttler
+
+    perimeter_service = PerimeterService(app=application)
+    application.perimeter_service = perimeter_service
 
     with application.app_context():
+        perimeter_service.sync_honeypot_ports()
         manager.start_all_enabled()
 
     return application
@@ -154,6 +191,21 @@ def create_app(config_class=Config) -> Flask:
 # ---------------------------------------------------------------------------
 # Seed defaults
 # ---------------------------------------------------------------------------
+
+def _run_migrations() -> None:
+    """Apply schema migrations that db.create_all() cannot handle
+    (e.g. adding columns to existing tables)."""
+    import sqlalchemy
+
+    with db.engine.connect() as conn:
+        # Check if sessions.threat_intel column exists
+        result = conn.execute(sqlalchemy.text("PRAGMA table_info(sessions)"))
+        columns = {row[1] for row in result}
+        if "threat_intel" not in columns:
+            conn.execute(sqlalchemy.text("ALTER TABLE sessions ADD COLUMN threat_intel TEXT"))
+            conn.commit()
+            logger.info("Migration: added threat_intel column to sessions table")
+
 
 def _seed_defaults() -> None:
     """Populate default honeypot configs and system settings if the tables
@@ -224,6 +276,13 @@ def _seed_defaults() -> None:
                 "port": Config.SMB_HONEYPOT_PORT,
                 "description": "Fake SMB/CIFS file server capturing authentication and share access attempts",
                 "config": {"server_name": "FILESERVER", "domain": "WORKGROUP"},
+            },
+            {
+                "name": "RDP Honeypot",
+                "protocol": "rdp",
+                "port": Config.RDP_HONEYPOT_PORT,
+                "description": "Fake RDP server capturing connection and authentication attempts",
+                "config": {"server_name": "DESKTOP-HOS7890"},
             },
         ]
     new_honeypots = [hp for hp in defaults if hp["protocol"] not in existing_protocols]

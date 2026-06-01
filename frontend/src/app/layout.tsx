@@ -25,11 +25,22 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Runtime API URL override — NOT a NEXT_PUBLIC_ var, so it's read at
+  // request time by this server component rather than baked in at build.
+  const apiUrl = process.env.API_URL || '';
+
   return (
     <html lang="en" className="dark">
       <body
         className={`${inter.variable} font-sans antialiased bg-[#0a0a0f] text-gray-200`}
       >
+        {apiUrl && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.__HONEYOS_API_URL__=${JSON.stringify(apiUrl)};`,
+            }}
+          />
+        )}
         <AuthGate>{children}</AuthGate>
       </body>
     </html>

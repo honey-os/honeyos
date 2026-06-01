@@ -6,6 +6,7 @@ services:
     command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
+      - "7778:7778"
     volumes:
       - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs
@@ -38,6 +39,7 @@ services:
       - "53:5353/udp"  # DNS honeypot (UDP)
       - "53:5353/tcp"  # DNS honeypot (TCP)
       - "445:4450"    # SMB honeypot
+      - "3389:3390"   # RDP honeypot
       - "4400-4404:4400-4404"  # FTP passive data ports
     volumes:
       - ./data:/data
@@ -61,7 +63,7 @@ services:
     container_name: honeyos-frontend
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:7778
+      - API_URL=${API_URL:-}
     depends_on:
       backend:
         condition: service_healthy

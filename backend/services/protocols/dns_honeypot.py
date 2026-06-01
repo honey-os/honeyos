@@ -188,7 +188,8 @@ class DNSHoneypot:
     """
 
     def __init__(self, port: int, config: dict | None = None,
-                 event_processor=None, session_recorder=None, app=None):
+                 event_processor=None, session_recorder=None, app=None,
+                 connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
@@ -551,8 +552,8 @@ class DNSHoneypot:
                 tcp_response = struct.pack("!H", len(response)) + response
                 client_sock.sendall(tcp_response)
 
-        except (ConnectionResetError, BrokenPipeError):
-            pass
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("DNS TCP connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("DNS TCP handler error for %s", addr)
         finally:

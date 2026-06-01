@@ -3,10 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Zap,
   Activity,
   Radio,
   Server,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -88,9 +90,18 @@ export default function DashboardPage() {
   }, [fetchDashboard, timelineHours]);
 
   const summary = dashboardSummary;
+  const initialLoading = dashboardLoading && !summary;
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {initialLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm rounded-lg">
+          <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
+            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+            Loading dashboard...
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -114,6 +125,14 @@ export default function DashboardPage() {
               {h}h
             </button>
           ))}
+          <button
+            onClick={() => fetchDashboard(timelineHours)}
+            disabled={dashboardLoading}
+            className="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] border border-[#2a2a3a] transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${dashboardLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
@@ -124,7 +143,13 @@ export default function DashboardPage() {
       )}
 
       {/* Metrics cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <MetricsCard
+          icon={Zap}
+          label="Conn/sec"
+          value={summary?.connections_per_second?.toFixed(1) ?? '0'}
+          iconColor="text-purple-500"
+        />
         <MetricsCard
           icon={Activity}
           label="Total Events"
@@ -336,7 +361,7 @@ export default function DashboardPage() {
                     >
                       <td className="px-5 py-3 font-mono text-sm whitespace-nowrap">
                         <Link
-                          href={`/attackers?ip=${encodeURIComponent(attacker.ip)}`}
+                          href={`/attackers/${encodeURIComponent(attacker.ip)}`}
                           className="text-amber-400 hover:text-amber-300"
                         >
                           {attacker.ip}

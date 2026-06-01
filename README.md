@@ -12,7 +12,7 @@ An open-source, self-hosted alternative to commercial honeypot appliances. No cl
 
 When an attacker compromises a device on your network, they scan for other targets — file servers, databases, admin panels. HoneyOS creates convincing fake versions of these services that no legitimate user would ever touch. Any interaction is an immediate indicator of compromise.
 
-**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL, DNS (with SMB and RDP planned)
+**Supported Protocols**: SSH, HTTP, HTTPS, Telnet, FTP, MySQL, PostgreSQL, DNS, SMB, RDP
 
 **Key Capabilities**:
 - Catches ransomware, lateral movement, and insider threats
@@ -101,6 +101,8 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 |----------|---------|-------------|
 | `SECRET_KEY` | `honeyos-default-secret-change-me` | Flask secret key. Generate with `openssl rand -hex 32` |
 | `DEBUG` | `false` | Enable Flask debug mode |
+| `READ_ONLY` | `false` | Lock dashboard to read-only mode. Login/logout still works; manage honeypots via `*_HONEYPOT_ENABLED` env vars instead |
+| `READ_ONLY_PASSWORD` | *(empty)* | When `READ_ONLY` is true, display this password on the login screen so visitors can log in |
 | `DATABASE_URL` | `sqlite:///honeyos.db` | SQLAlchemy database URI |
 | `BIND_HOST` | `0.0.0.0` | Address the backend binds to |
 | `API_PORT` | `7778` | Backend API port |
@@ -113,9 +115,37 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `MYSQL_HONEYPOT_PORT` | `3307` | Internal MySQL honeypot port |
 | `POSTGRESQL_HONEYPOT_PORT` | `5433` | Internal PostgreSQL honeypot port |
 | `DNS_HONEYPOT_PORT` | `5353` | Internal DNS honeypot port |
+| `SMB_HONEYPOT_PORT` | `4450` | Internal SMB honeypot port |
+| `RDP_HONEYPOT_PORT` | `3390` | Internal RDP honeypot port |
+| `SSH_EXTERNAL_PORT` | `22` | External-facing SSH port (after Docker/firewall NAT) |
+| `HTTP_EXTERNAL_PORT` | `80` | External-facing HTTP port |
+| `HTTPS_EXTERNAL_PORT` | `443` | External-facing HTTPS port |
+| `TELNET_EXTERNAL_PORT` | `23` | External-facing Telnet port |
+| `FTP_EXTERNAL_PORT` | `21` | External-facing FTP port |
+| `MYSQL_EXTERNAL_PORT` | `3306` | External-facing MySQL port |
+| `POSTGRESQL_EXTERNAL_PORT` | `5432` | External-facing PostgreSQL port |
+| `DNS_EXTERNAL_PORT` | `53` | External-facing DNS port |
+| `SMB_EXTERNAL_PORT` | `445` | External-facing SMB port |
+| `RDP_EXTERNAL_PORT` | `3389` | External-facing RDP port |
+| `SSH_HONEYPOT_ENABLED` | `true` | Enable SSH honeypot on startup |
+| `HTTP_HONEYPOT_ENABLED` | `true` | Enable HTTP honeypot on startup |
+| `HTTPS_HONEYPOT_ENABLED` | `true` | Enable HTTPS honeypot on startup |
+| `TELNET_HONEYPOT_ENABLED` | `true` | Enable Telnet honeypot on startup |
+| `FTP_HONEYPOT_ENABLED` | `true` | Enable FTP honeypot on startup |
+| `MYSQL_HONEYPOT_ENABLED` | `true` | Enable MySQL honeypot on startup |
+| `POSTGRESQL_HONEYPOT_ENABLED` | `true` | Enable PostgreSQL honeypot on startup |
+| `DNS_HONEYPOT_ENABLED` | `true` | Enable DNS honeypot on startup |
+| `SMB_HONEYPOT_ENABLED` | `true` | Enable SMB honeypot on startup |
+| `RDP_HONEYPOT_ENABLED` | `true` | Enable RDP honeypot on startup |
+| `ABUSECH_API_KEY` | *(empty)* | abuse.ch API key for ThreatFox/URLhaus threat intelligence lookups |
+| `CENSYS_API_TOKEN` | *(empty)* | Censys API personal access token for perimeter monitoring |
+| `PUBLIC_IP` | *(empty)* | Override public IP detection (auto-detected if empty) |
 | `GEOIP_ENABLED` | `true` | Enable GeoIP lookups via ip-api.com (free, no key needed) |
 | `RETENTION_DAYS` | `90` | Days to retain event data |
 | `ALERT_COOLDOWN_SECONDS` | `300` | Minimum seconds between repeated alerts |
+| `THROTTLE_EVENT_THRESHOLD` | `5000` | Events from one IP on one protocol before blocking new connections |
+| `THROTTLE_BLOCK_SECONDS` | `3600` | Duration (seconds) to block an IP after threshold is exceeded |
+| `MAX_CONNECTIONS_PER_IP` | `100` | Max concurrent connections from a single IP before blocking |
 | `LOG_LEVEL` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `SMTP_HOST` | *(empty)* | SMTP server for email alerts |
 | `SMTP_PORT` | `587` | SMTP server port |
@@ -124,11 +154,13 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SMTP_USE_TLS` | `true` | Use TLS for SMTP |
 | `SMTP_FROM_ADDRESS` | `honeyos@localhost` | From address for alert emails |
 | `SLACK_WEBHOOK_URL` | *(empty)* | Slack incoming webhook URL for alerts |
+| `WEBHOOK_URL` | *(empty)* | Generic webhook URL for alerts (receives JSON POST) |
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
 | `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:7778` | API URL used by the frontend |
+| `API_URL` | *(auto-detected)* | Backend API URL the browser uses. Runtime — no rebuild needed. Only set if the default `https://<hostname>:7778` doesn't work |
 | `TLS_CERT` | `internal` | TLS certificate: `internal` (self-signed), a file path, or a domain for Let's Encrypt |
 | `TLS_KEY` | *(empty)* | TLS private key file path (used with custom certs only) |
+| `FTP_PASV_ADDRESS` | *(empty)* | IP to advertise in FTP PASV responses (set to host/public IP in Docker) |
 
 ## Default Honeypot Ports
 
@@ -144,6 +176,8 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 | MySQL | 3306 | 3307 | MySQL 8.0 database |
 | PostgreSQL | 5432 | 5433 | PostgreSQL 14.5 database |
 | DNS | 53 | 5353 | Misconfigured DNS server (UDP + TCP) |
+| SMB | 445 | 4450 | Windows file server |
+| RDP | 3389 | 3390 | Windows Remote Desktop |
 
 In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
 
@@ -236,6 +270,41 @@ TLS_CERT=off
 ### Development Mode
 
 `make dev` bypasses Caddy entirely and serves plain HTTP on ports 7777/7778 directly.
+
+## Censys Integration (Optional)
+
+HoneyOS can check your public IP against [Censys](https://search.censys.io) to detect perimeter drift — ports that are unexpectedly open or missing compared to what you've declared. This is optional; without it the Network page still tracks declared ports but can't compare them against what's actually visible externally.
+
+### Setup
+
+1. Create a free account at [search.censys.io](https://search.censys.io)
+2. Go to [Account > API](https://app.censys.io/account/api) and copy your **Personal Access Token**
+3. Add it to your `.env` file:
+
+```
+CENSYS_API_TOKEN=your-token-here
+```
+
+4. Optionally set your public IP if auto-detection doesn't work:
+
+```
+PUBLIC_IP=203.0.113.50
+```
+
+5. Restart HoneyOS:
+
+```bash
+docker compose up -d
+```
+
+6. Open the Network page and click **Check Now** to run your first scan
+
+### What it checks
+
+- **Drift detection** — compares your declared honeypot ports against what Censys sees externally. Unexpected ports may indicate unauthorized services; missing ports may indicate firewall misconfiguration.
+- **Host overview** — shows your IP's organization, ISP, OS, and hostnames as seen by Censys.
+- **Banner comparison** — checks whether the banners Censys captured match what your honeypots are configured to send. Mismatches may mean your honeypots are being fingerprinted.
+- **Honeypot flagging** — warns you if Censys has tagged your IP as a known honeypot.
 
 ## Troubleshooting
 

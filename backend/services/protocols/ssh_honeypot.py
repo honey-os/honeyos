@@ -112,12 +112,13 @@ class SSHHoneypot:
     }
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
 
@@ -142,6 +143,12 @@ class SSHHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "ssh")
+                    or not self.connection_throttler.track_connect(addr[0], "ssh")
+                ):
+                    client.close()
+                    continue
                 t = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
                 t.start()
             except socket.timeout:
@@ -164,10 +171,15 @@ class SSHHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
         transport = None
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             transport = paramiko.Transport(client_sock)
+            transport.local_version = "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6"
             transport.add_server_key(_HOST_KEY)
             server = _ServerInterface(
                 self.event_processor, self.session_recorder, addr, self.app, self.port
@@ -179,10 +191,9 @@ class SSHHoneypot:
                 return
 
             # Start a session record
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "ssh")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "ssh")
+                session_id = sess.id
 
             # Send banner
             channel.send(f"Welcome to {self.FAKE_BANNER}\r\n")
@@ -202,11 +213,10 @@ class SSHHoneypot:
                     char = chr(byte)
 
                     # Record keystroke
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_keystroke(
-                                session_id, char, datetime.now(timezone.utc)
-                            )
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_keystroke(
+                            session_id, char, datetime.now(timezone.utc)
+                        )
 
                     if char in ("\r", "\n"):
                         channel.send("\r\n")
@@ -229,42 +239,41 @@ class SSHHoneypot:
                         command_buffer += char
                         channel.send(char)
 
+        except (paramiko.SSHException, EOFError, ConnectionResetError, BrokenPipeError, OSError):
+            logger.debug("SSH connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("SSH handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
             if transport:
                 try:
                     transport.close()
                 except Exception:
                     pass
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
 
     def _execute_fake_command(self, channel, command: str, addr: tuple, session_id: str | None) -> None:
         """Process a command and send a fake response."""
         logger.info("SSH command from %s: %s", addr[0], command)
-
-        # Record the command
-        if self.session_recorder and session_id and self.app:
-            with self.app.app_context():
-                self.session_recorder.record_command(
-                    session_id, command, datetime.now(timezone.utc)
-                )
+        cmd_time = datetime.now(timezone.utc)
 
         # Log as event
-        if self.event_processor and self.app:
-            with self.app.app_context():
-                self.event_processor.process_event({
-                    "event_type": "command",
-                    "protocol": "ssh",
-                    "source_ip": addr[0],
-                    "source_port": addr[1],
-                    "destination_port": self.port,
-                    "severity": "medium",
-                    "session_id": session_id,
-                    "details": {"command": command},
-                })
+        if self.event_processor:
+            self.event_processor.process_event({
+                "event_type": "command",
+                "protocol": "ssh",
+                "source_ip": addr[0],
+                "source_port": addr[1],
+                "destination_port": self.port,
+                "severity": "medium",
+                "session_id": session_id,
+                "details": {"command": command},
+            })
 
         if command in ("exit", "quit", "logout"):
             channel.send("logout\r\n")
@@ -285,3 +294,10 @@ class SSHHoneypot:
                 response = f"bash: {command}: command not found\n"
 
         channel.send(response.replace("\n", "\r\n"))
+
+        # Record command with server response
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id, command, cmd_time,
+                output=response.rstrip("\n") or None,
+            )

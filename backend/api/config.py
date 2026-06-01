@@ -17,7 +17,7 @@ config_bp = Blueprint("config", __name__)
 _start_time = time.time()
 
 # Keys whose values should be masked in the response
-_SENSITIVE_KEYS = {"SECRET_KEY", "SMTP_PASSWORD", "SLACK_WEBHOOK_URL"}
+_SENSITIVE_KEYS = {"SECRET_KEY", "SMTP_PASSWORD", "SLACK_WEBHOOK_URL", "CENSYS_API_TOKEN"}
 
 _MASK = "\u2022" * 8  # ••••••••
 
@@ -68,6 +68,29 @@ _SECTIONS = [
             ("POSTGRESQL_HONEYPOT_PORT", "PostgreSQL", "int"),
             ("DNS_HONEYPOT_PORT", "DNS", "int"),
             ("SMB_HONEYPOT_PORT", "SMB", "int"),
+        ],
+    },
+    {
+        "id": "external_ports",
+        "label": "External Ports",
+        "settings": [
+            ("SSH_EXTERNAL_PORT", "SSH", "int"),
+            ("HTTP_EXTERNAL_PORT", "HTTP", "int"),
+            ("HTTPS_EXTERNAL_PORT", "HTTPS", "int"),
+            ("TELNET_EXTERNAL_PORT", "Telnet", "int"),
+            ("FTP_EXTERNAL_PORT", "FTP", "int"),
+            ("MYSQL_EXTERNAL_PORT", "MySQL", "int"),
+            ("POSTGRESQL_EXTERNAL_PORT", "PostgreSQL", "int"),
+            ("DNS_EXTERNAL_PORT", "DNS", "int"),
+            ("SMB_EXTERNAL_PORT", "SMB", "int"),
+        ],
+    },
+    {
+        "id": "perimeter",
+        "label": "Perimeter / Censys",
+        "settings": [
+            ("CENSYS_API_TOKEN", "Censys API Token", "string"),
+            ("PUBLIC_IP", "Public IP Override", "string"),
         ],
     },
     {

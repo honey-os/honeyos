@@ -54,7 +54,7 @@ interface AlertFormData {
 }
 
 const protocolOptions = [
-  '', 'ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb',
+  '', 'ssh', 'http', 'https', 'telnet', 'ftp', 'mysql', 'postgresql', 'dns', 'smb', 'rdp',
 ];
 
 const severityOptions = ['low', 'medium', 'high', 'critical'];
@@ -84,6 +84,7 @@ const configFieldsByType: Record<string, { key: string; label: string; placehold
 
 export default function AlertsPage() {
   const { alerts, alertsLoading, alertsError, fetchAlerts } = useStore();
+  const readOnly = useStore((s) => s.readOnly);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState<AlertFormData>({
@@ -175,7 +176,8 @@ export default function AlertsPage() {
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="btn-primary flex items-center gap-2 text-sm"
+          disabled={readOnly}
+          className="btn-primary flex items-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus className="w-4 h-4" />
           Add Alert
@@ -206,7 +208,8 @@ export default function AlertsPage() {
           </p>
           <button
             onClick={() => setShowAddModal(true)}
-            className="btn-primary inline-flex items-center gap-2 text-sm"
+            disabled={readOnly}
+            className="btn-primary inline-flex items-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             Add Alert
@@ -346,7 +349,7 @@ export default function AlertsPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleTest(alert)}
-                      disabled={testingId === alert.id || !alert.enabled}
+                      disabled={readOnly || testingId === alert.id || !alert.enabled}
                       className="btn-secondary flex items-center gap-1.5 text-xs disabled:opacity-40"
                     >
                       <Send className="w-3.5 h-3.5" />
@@ -354,7 +357,7 @@ export default function AlertsPage() {
                     </button>
                     <button
                       onClick={() => handleToggle(alert)}
-                      disabled={togglingId === alert.id}
+                      disabled={readOnly || togglingId === alert.id}
                       className={clsx(
                         'p-2 rounded-md transition-colors',
                         alert.enabled
@@ -576,7 +579,7 @@ export default function AlertsPage() {
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={readOnly || saving}
                   className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
                 >
                   {saving ? 'Creating...' : 'Create Alert'}

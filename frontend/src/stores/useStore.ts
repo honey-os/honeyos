@@ -10,6 +10,9 @@ import {
   type TimelinePoint,
   type NetworkScan,
   type SettingsResponse,
+  type PerimeterStatus,
+  type DeclaredPort,
+  type CensysSnapshot,
   getEvents,
   getSessions,
   getHoneypots,
@@ -20,6 +23,9 @@ import {
   getDashboardTimeline,
   getNetworkScans,
   getSettings,
+  getPerimeterStatus,
+  getDeclaredPorts,
+  getCensysSnapshot,
 } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +33,10 @@ import {
 // ---------------------------------------------------------------------------
 
 interface HoneyStore {
+  // Read-only mode
+  readOnly: boolean;
+  setReadOnly: (val: boolean) => void;
+
   // Sidebar
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -63,8 +73,6 @@ interface HoneyStore {
   sessionsPages: number;
   sessionsLoading: boolean;
   sessionsError: string | null;
-  selectedSession: Session | null;
-  setSelectedSession: (session: Session | null) => void;
   fetchSessions: (params?: Record<string, unknown>) => Promise<void>;
 
   // Honeypots
@@ -98,6 +106,17 @@ interface HoneyStore {
   settingsLoading: boolean;
   settingsError: string | null;
   fetchSettings: () => Promise<void>;
+
+  // Perimeter
+  perimeterStatus: PerimeterStatus | null;
+  perimeterStatusLoading: boolean;
+  declaredPorts: DeclaredPort[];
+  declaredPortsLoading: boolean;
+  censysSnapshot: CensysSnapshot | null;
+  censysLoading: boolean;
+  fetchPerimeterStatus: () => Promise<void>;
+  fetchDeclaredPorts: () => Promise<void>;
+  fetchCensysSnapshot: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +124,10 @@ interface HoneyStore {
 // ---------------------------------------------------------------------------
 
 export const useStore = create<HoneyStore>((set) => ({
+  // Read-only mode
+  readOnly: false,
+  setReadOnly: (val) => set({ readOnly: val }),
+
   // Sidebar
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -186,8 +209,6 @@ export const useStore = create<HoneyStore>((set) => ({
   sessionsPages: 1,
   sessionsLoading: false,
   sessionsError: null,
-  selectedSession: null,
-  setSelectedSession: (session) => set({ selectedSession: session }),
   fetchSessions: async (params = {}) => {
     set({ sessionsLoading: true, sessionsError: null });
     try {
@@ -302,6 +323,41 @@ export const useStore = create<HoneyStore>((set) => ({
         settingsLoading: false,
         settingsError: err instanceof Error ? err.message : 'Failed to fetch settings',
       });
+    }
+  },
+
+  // Perimeter
+  perimeterStatus: null,
+  perimeterStatusLoading: false,
+  declaredPorts: [],
+  declaredPortsLoading: false,
+  censysSnapshot: null,
+  censysLoading: false,
+  fetchPerimeterStatus: async () => {
+    set({ perimeterStatusLoading: true });
+    try {
+      const data = await getPerimeterStatus();
+      set({ perimeterStatus: data, perimeterStatusLoading: false });
+    } catch {
+      set({ perimeterStatusLoading: false });
+    }
+  },
+  fetchDeclaredPorts: async () => {
+    set({ declaredPortsLoading: true });
+    try {
+      const data = await getDeclaredPorts();
+      set({ declaredPorts: data.items || [], declaredPortsLoading: false });
+    } catch {
+      set({ declaredPortsLoading: false });
+    }
+  },
+  fetchCensysSnapshot: async () => {
+    set({ censysLoading: true });
+    try {
+      const data = await getCensysSnapshot();
+      set({ censysSnapshot: data, censysLoading: false });
+    } catch {
+      set({ censysLoading: false });
     }
   },
 }));

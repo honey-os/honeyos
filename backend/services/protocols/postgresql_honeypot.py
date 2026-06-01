@@ -7,6 +7,7 @@ simple clients (psql, pgAdmin, scanners).
 """
 
 import logging
+import re
 import socket
 import struct
 import threading
@@ -79,6 +80,34 @@ def _make_empty_result(tag: str = "SELECT 0") -> bytes:
     return row_desc + cmd_complete
 
 
+def _make_row_result(columns: list[tuple[str, str | None]],
+                     tag: str = "SELECT 1") -> bytes:
+    """Return a result set with one row.
+
+    *columns* is a list of ``(column_name, value)`` pairs.
+    A value of ``None`` sends a SQL NULL.
+    """
+    num_fields = len(columns)
+    # -- RowDescription --
+    fields = b""
+    for col_name, _ in columns:
+        fields += col_name.encode() + b"\x00"
+        # table_oid=0  col_attr=0  type_oid=25(text)  typlen=-1  typmod=-1  fmt=0
+        fields += struct.pack("!IhIhih", 0, 0, 25, -1, -1, 0)
+    row_desc = _make_msg(ROW_DESCRIPTION, struct.pack("!H", num_fields) + fields)
+    # -- DataRow --
+    row_data = struct.pack("!H", num_fields)
+    for _, value in columns:
+        if value is None:
+            row_data += struct.pack("!i", -1)
+        else:
+            val_bytes = value.encode()
+            row_data += struct.pack("!i", len(val_bytes)) + val_bytes
+    data_row = _make_msg(DATA_ROW, row_data)
+    # -- CommandComplete --
+    return row_desc + data_row + _make_command_complete(tag)
+
+
 # Map of statement-leading keywords to their CommandComplete tag.
 # These are statements that do NOT return a result set — the correct
 # response is just CommandComplete(<tag>) + ReadyForQuery.
@@ -114,19 +143,63 @@ _COMMAND_TAGS: dict[str, str] = {
 }
 
 
-def _query_response(query: str) -> bytes:
-    """Build the correct pre-ReadyForQuery response for *query*.
+# Patterns for SELECT queries that must return realistic data to avoid
+# fingerprinting.  Returning 0 rows for scalar functions like
+# inet_server_addr() is a dead giveaway that this isn't real Postgres.
+_RE_INET_SERVER = re.compile(r"inet_server_addr", re.IGNORECASE)
+_RE_VERSION_FUNC = re.compile(r"\bversion\s*\(\s*\)", re.IGNORECASE)
+_RE_CURRENT_USER = re.compile(r"\bcurrent_user\b", re.IGNORECASE)
+_RE_CURRENT_DB = re.compile(r"\bcurrent_database\s*\(\s*\)", re.IGNORECASE)
+_RE_COPY_SUBQUERY = re.compile(r"^COPY\s*\(", re.IGNORECASE)
 
-    Statements that return rows (SELECT, SHOW, EXPLAIN, …) get an empty
-    result set.  Everything else gets a bare CommandComplete with the
-    appropriate tag — no RowDescription.
+
+def _query_response(query: str, *, server_addr: str = "127.0.0.1",
+                    version: str = "14.5", username: str = "postgres",
+                    database: str = "postgres") -> tuple[bytes, str]:
+    """Build the wire response and human-readable reply text for *query*.
+
+    Returns ``(wire_bytes, reply_text)`` where *wire_bytes* is everything
+    before the ReadyForQuery message and *reply_text* is a short string
+    for the session recorder.
     """
     keyword = query.split(None, 1)[0].upper().rstrip(";") if query else ""
+
+    # COPY with a sub-SELECT (e.g. COPY (SELECT '') TO PROGRAM '…')
+    # pipes at least 1 row.  Real Postgres returns COPY 1.
+    if keyword == "COPY" and _RE_COPY_SUBQUERY.match(query):
+        tag = "COPY 1"
+        return _make_command_complete(tag), tag
+
+    # Non-row-returning statements (SET, BEGIN, INSERT, plain COPY, …)
     tag = _COMMAND_TAGS.get(keyword)
     if tag is not None:
-        return _make_command_complete(tag)
-    # Default: treat as a row-returning statement.
-    return _make_empty_result()
+        return _make_command_complete(tag), tag
+
+    # -- Row-returning statements (SELECT, SHOW, EXPLAIN, …) -----------
+
+    # inet_server_addr() — must return at least 1 row on real PG.
+    if _RE_INET_SERVER.search(query):
+        ip = server_addr
+        if "host(" in query.lower():
+            return _make_row_result([("host", ip)]), ip
+        return _make_row_result([("inet_server_addr", f"{ip}/32")]), f"{ip}/32"
+
+    # version()
+    if _RE_VERSION_FUNC.search(query):
+        full = (f"PostgreSQL {version} on x86_64-pc-linux-gnu, "
+                "compiled by gcc (GCC) 12.2.0, 64-bit")
+        return _make_row_result([("version", full)]), f"PostgreSQL {version}"
+
+    # current_user
+    if _RE_CURRENT_USER.search(query):
+        return _make_row_result([("current_user", username)]), username
+
+    # current_database()
+    if _RE_CURRENT_DB.search(query):
+        return _make_row_result([("current_database", database)]), database
+
+    # Unknown SELECT → empty result set
+    return _make_empty_result(), "SELECT 0"
 
 
 def _read_message(sock: socket.socket) -> tuple[str, bytes] | None:
@@ -221,15 +294,41 @@ class PostgreSQLHoneypot:
     """Fake PostgreSQL server that captures authentication and query attempts."""
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
         self._conn_counter = 0
+        self._host_ip = self._detect_host_ip()
+
+    @staticmethod
+    def _detect_host_ip() -> str:
+        """Return the IP that inet_server_addr() should report.
+
+        Prefers the PUBLIC_IP env var (explicit override), then queries
+        ipify for the real public IP.  Falls back to a generic private
+        address rather than using the default-route interface (which in
+        Docker returns the container bridge IP, e.g. 172.18.0.2).
+        """
+        import os
+        import requests as _req
+        public = os.getenv("PUBLIC_IP", "")
+        if public:
+            return public
+        try:
+            resp = _req.get("https://api.ipify.org?format=json", timeout=5)
+            resp.raise_for_status()
+            ip = resp.json().get("ip")
+            if ip:
+                return ip
+        except Exception:
+            pass
+        return "10.0.0.1"
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -251,6 +350,12 @@ class PostgreSQLHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "postgresql")
+                    or not self.connection_throttler.track_connect(addr[0], "postgresql")
+                ):
+                    client.close()
+                    continue
                 self._conn_counter += 1
                 t = threading.Thread(
                     target=self._handle_client,
@@ -279,9 +384,14 @@ class PostgreSQLHoneypot:
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple,
                        conn_id: int) -> None:
+        from models import db as _db
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(60)
+            server_addr = self._host_ip
 
             # Read startup message
             params = _read_startup(client_sock)
@@ -310,37 +420,43 @@ class PostgreSQLHoneypot:
             # Request cleartext password
             client_sock.sendall(_make_msg(AUTH_REQUEST, struct.pack("!I", AUTH_CLEARTEXT)))
 
-            # Read password message (tag 'p')
+            # Read password message (tag 'p') with a short timeout so scanners
+            # that don't send a password still get the version info.
             password = ""
-            result = _read_message(client_sock)
-            if result and result[0] == "p":
-                # Password payload is null-terminated string
-                password = result[1].rstrip(b"\x00").decode("utf-8", errors="replace")
+            prev_timeout = client_sock.gettimeout()
+            client_sock.settimeout(5)
+            try:
+                result = _read_message(client_sock)
+                if result and result[0] == "p":
+                    password = result[1].rstrip(b"\x00").decode("utf-8", errors="replace")
+            except (socket.timeout, OSError):
+                pass
+            finally:
+                client_sock.settimeout(prev_timeout)
 
             # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "postgresql",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "details": {
-                            "username": username,
-                            "database": database,
-                            "password": password,
-                        },
-                    })
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "postgresql",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "details": {
+                        "username": username,
+                        "database": database,
+                        "password": password,
+                    },
+                })
 
             # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "postgresql")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "postgresql")
+                session_id = sess.id
 
-            # Send AuthenticationOk
+            # Send AuthenticationOk -- always sent, even if no password was
+            # received, so scanners can read the ParameterStatus messages.
             client_sock.sendall(_make_msg(AUTH_REQUEST, struct.pack("!I", AUTH_OK)))
 
             # Send parameter status messages (mimics a real server)
@@ -379,32 +495,37 @@ class PostgreSQLHoneypot:
                 if tag == "Q":  # Simple Query
                     query = payload.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
                     logger.info("PostgreSQL query from %s: %s", addr[0], query)
+                    cmd_time = datetime.now(timezone.utc)
 
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_command(
-                                session_id, query, datetime.now(timezone.utc)
-                            )
-
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "query",
-                                "protocol": "postgresql",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "medium",
-                                "session_id": session_id,
-                                "details": {"query": query},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "query",
+                            "protocol": "postgresql",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "medium",
+                            "session_id": session_id,
+                            "details": {"query": query},
+                        })
 
                     # Respond with the right message shape for the
                     # statement type, then signal ReadyForQuery so the
                     # client knows it can send the next command.
-                    client_sock.sendall(
-                        _query_response(query) + _make_ready_for_query()
+                    response, reply_text = _query_response(
+                        query,
+                        server_addr=server_addr,
+                        version=version,
+                        username=username,
+                        database=database,
                     )
+                    client_sock.sendall(response + _make_ready_for_query())
+
+                    # Record command with human-readable response
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_command(
+                            session_id, query, cmd_time, output=reply_text,
+                        )
 
                 else:
                     # Unknown/unsupported message -- send error and stay alive
@@ -413,13 +534,19 @@ class PostgreSQLHoneypot:
                         + _make_ready_for_query()
                     )
 
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("PostgreSQL connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("PostgreSQL handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
             try:
                 client_sock.close()
             except OSError:
                 pass
+            if ctx:
+                _db.session.remove()
+                ctx.pop()

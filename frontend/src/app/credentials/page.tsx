@@ -13,7 +13,7 @@ import { formatNumber } from '@/utils/formatters';
 import { useUrlFilters } from '@/utils/useUrlFilters';
 import clsx from 'clsx';
 
-const PROTOCOLS = ['ssh', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb'];
+const PROTOCOLS = ['ssh', 'telnet', 'ftp', 'mysql', 'postgresql', 'smb', 'rdp'];
 
 export default function CredentialsPage() {
   const {

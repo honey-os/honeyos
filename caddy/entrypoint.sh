@@ -10,9 +10,10 @@ if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
     # Plain HTTP mode
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	reverse_proxy backend:7778
 }
 EOF
 
@@ -32,9 +33,11 @@ elif [ "$TLS_CERT" = "internal" ]; then
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
 	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
+	reverse_proxy backend:7778
 }
 EOF
 
@@ -43,9 +46,11 @@ else
     cat > /tmp/Caddyfile <<EOF
 :7777 {
 	tls ${TLS_CERT} ${TLS_KEY}
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	tls ${TLS_CERT} ${TLS_KEY}
+	reverse_proxy backend:7778
 }
 EOF
 fi

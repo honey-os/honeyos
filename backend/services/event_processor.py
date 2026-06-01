@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class EventProcessor:
     """Central event ingestion pipeline."""
 
-    def __init__(self, alert_service=None):
+    def __init__(self, alert_service=None, connection_throttler=None):
         self.alert_service = alert_service
+        self.connection_throttler = connection_throttler
         self.geoip_service = GeoIPService()
 
     # -----------------------------------------------------------------
@@ -78,7 +79,16 @@ class EventProcessor:
             honeypot.total_interactions = (honeypot.total_interactions or 0) + 1
             honeypot.last_activity = event.timestamp
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception("Failed to persist event %s", event.id)
+            raise
+
+        # Record for connection throttling (after successful commit)
+        if self.connection_throttler:
+            self.connection_throttler.record_event(event.source_ip, event.protocol)
 
         logger.info(
             "Event %s persisted  type=%s  src=%s  port=%s",
@@ -140,29 +150,21 @@ class EventProcessor:
         now = datetime.now(timezone.utc)
         one_hour_ago = now - timedelta(hours=1)
 
-        recent_count = Event.query.filter(
-            Event.timestamp >= one_hour_ago,
-        ).count()
+        # Single scan for volume, unique IPs, and unique protocols
+        stats = db.session.query(
+            db.func.count(Event.id),
+            db.func.count(db.distinct(Event.source_ip)),
+            db.func.count(db.distinct(Event.protocol)),
+        ).filter(Event.timestamp >= one_hour_ago).first()
 
-        unique_ips = (
-            db.session.query(Event.source_ip)
-            .filter(Event.timestamp >= one_hour_ago)
-            .distinct()
-            .count()
-        )
-
-        unique_protocols = (
-            db.session.query(Event.protocol)
-            .filter(Event.timestamp >= one_hour_ago)
-            .distinct()
-            .count()
-        )
+        recent_count = stats[0] or 0
+        unique_ips = stats[1] or 0
+        unique_protocols = stats[2] or 0
 
         # High-severity events capped at 5 per source IP so a single bot
         # brute-forcing one service can't push us to critical on its own.
         high_sev_by_ip = (
             db.session.query(
-                Event.source_ip,
                 db.func.min(db.func.count(), 5).label("capped"),
             )
             .filter(

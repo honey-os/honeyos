@@ -122,6 +122,7 @@ services:
     command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
+      - "7778:7778"
     volumes:
       - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
       - ./data/certs:/data/certs
@@ -150,6 +151,7 @@ services:
       - "53:5353/udp"
       - "53:5353/tcp"
       - "445:4450"
+      - "3389:3390"
       - "4400-4404:4400-4404"
     volumes:
       - ./data:/data
@@ -171,7 +173,7 @@ services:
     container_name: honeyos-frontend
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:7778
+      - API_URL=\${API_URL:-}
     depends_on:
       backend:
         condition: service_healthy
@@ -207,9 +209,10 @@ CERT_DIR="/data/certs"
 if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	reverse_proxy backend:7778
 }
 EOF
 elif [ "$TLS_CERT" = "internal" ]; then
@@ -226,18 +229,22 @@ elif [ "$TLS_CERT" = "internal" ]; then
     cat > /tmp/Caddyfile <<'EOF'
 :7777 {
 	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
+	reverse_proxy backend:7778
 }
 EOF
 else
     cat > /tmp/Caddyfile <<EOF
 :7777 {
 	tls ${TLS_CERT} ${TLS_KEY}
-	reverse_proxy /health backend:7778
-	reverse_proxy /api/* backend:7778
 	reverse_proxy frontend:7777
+}
+:7778 {
+	tls ${TLS_CERT} ${TLS_KEY}
+	reverse_proxy backend:7778
 }
 EOF
 fi
@@ -280,7 +287,7 @@ wait_healthy() {
 # Port conflict check
 # -------------------------------------------------------------------
 check_ports() {
-    local ports=(22 23 80 443 21 3306 5432 53 445 7777)
+    local ports=(22 23 80 443 21 3306 5432 53 445 3389 7777)
     local conflicts=()
     for port in "${ports[@]}"; do
         if ss -tulnp 2>/dev/null | grep -q ":${port} " || \
@@ -334,7 +341,7 @@ main() {
     echo -e "  TLS:        Self-signed certificate (accept browser warning)"
     echo -e "              Custom certs: place in ${CYAN}${HONEYOS_DIR}/data/certs/${NC} and update .env"
     echo ""
-    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)  445 (SMB)${NC}"
+    echo -e "  Honeypots listening on ports: ${YELLOW}22 (SSH)  80 (HTTP)  443 (HTTPS)  23 (Telnet)  21 (FTP)  3306 (MySQL)  5432 (PostgreSQL)  53 (DNS)  445 (SMB)  3389 (RDP)${NC}"
     echo ""
     echo -e "  Manage:     ${CYAN}cd ${HONEYOS_DIR} && docker compose logs -f${NC}"
     echo -e "  Stop:       ${CYAN}cd ${HONEYOS_DIR} && docker compose down${NC}"

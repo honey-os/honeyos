@@ -254,6 +254,23 @@ def _query_resultset(query: str, seq: int, status_flags: int,
     return None
 
 
+def _describe_query_result(query: str, database: str) -> str:
+    """Return a human-readable description of the result set for replay."""
+    upper = query.upper().strip().rstrip(";").strip()
+    if upper in ("SHOW DATABASES", "SHOW SCHEMAS"):
+        return "information_schema, mysql, performance_schema, sys"
+    if upper.startswith("SHOW TABLES"):
+        return f"(empty set — no tables in {database or 'mysql'})"
+    m = _RE_SELECT_VAR.match(query)
+    if m:
+        var = m.group(1).lower()
+        val = _SYSTEM_VARIABLES.get(var, "")
+        return f"{m.group(1)} = {val}"
+    if _RE_SELECT_DATABASE.match(query):
+        return database or "(NULL)"
+    return "OK"
+
+
 def _read_packet(sock: socket.socket) -> tuple[int, bytes] | None:
     """Read one MySQL packet.  Returns (sequence_id, payload) or None."""
     header = b""
@@ -308,12 +325,13 @@ class MySQLHoneypot:
     """
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
         self._conn_counter = 0
@@ -338,6 +356,12 @@ class MySQLHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "mysql")
+                    or not self.connection_throttler.track_connect(addr[0], "mysql")
+                ):
+                    client.close()
+                    continue
                 self._conn_counter += 1
                 t = threading.Thread(
                     target=self._handle_client,
@@ -366,7 +390,13 @@ class MySQLHoneypot:
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple,
                        conn_id: int) -> None:
+        from models import db as _db
+
         session_id = None
+        clean_exit = False
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(60)
 
@@ -385,27 +415,32 @@ class MySQLHoneypot:
 
             logger.info("MySQL auth  user=%s  db=%s  from=%s", username, database, addr[0])
 
-            # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "mysql",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "details": {
-                            "username": username,
-                            "database": database,
-                        },
-                    })
+            # Get or reuse session (before event so we can link the auth event)
+            if self.session_recorder:
+                sess, _ = self.session_recorder.get_or_start_session(addr[0], "mysql")
+                session_id = sess.id
+                self.session_recorder.record_command(
+                    session_id,
+                    f"AUTH user={username} db={database}",
+                    datetime.now(timezone.utc),
+                    output="OK (authentication accepted)",
+                )
 
-            # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "mysql")
-                    session_id = sess.id
+            # Log credential attempt
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "mysql",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "session_id": session_id,
+                    "details": {
+                        "username": username,
+                        "database": database,
+                    },
+                })
 
             # Per-connection server status (starts with autocommit on,
             # matching the greeting packet we already sent).
@@ -418,40 +453,37 @@ class MySQLHoneypot:
             while not self._stop_event.is_set():
                 result = _read_packet(client_sock)
                 if result is None:
+                    clean_exit = True
                     break
                 seq, payload = result
 
                 if not payload:
+                    clean_exit = True
                     break
 
                 cmd_type = payload[0]
                 cmd_data = payload[1:].decode("utf-8", errors="replace")
 
                 if cmd_type == 0x01:  # COM_QUIT
+                    clean_exit = True
                     break
 
                 if cmd_type == 0x03:  # COM_QUERY
                     query = cmd_data.strip()
                     logger.info("MySQL query from %s: %s", addr[0], query)
+                    cmd_time = datetime.now(timezone.utc)
 
-                    if self.session_recorder and session_id and self.app:
-                        with self.app.app_context():
-                            self.session_recorder.record_command(
-                                session_id, query, datetime.now(timezone.utc)
-                            )
-
-                    if self.event_processor and self.app:
-                        with self.app.app_context():
-                            self.event_processor.process_event({
-                                "event_type": "query",
-                                "protocol": "mysql",
-                                "source_ip": addr[0],
-                                "source_port": addr[1],
-                                "destination_port": self.port,
-                                "severity": "medium",
-                                "session_id": session_id,
-                                "details": {"query": query},
-                            })
+                    if self.event_processor:
+                        self.event_processor.process_event({
+                            "event_type": "query",
+                            "protocol": "mysql",
+                            "source_ip": addr[0],
+                            "source_port": addr[1],
+                            "destination_port": self.port,
+                            "severity": "medium",
+                            "session_id": session_id,
+                            "details": {"query": query},
+                        })
 
                     # Track SET AUTOCOMMIT so the status flags in the
                     # OK response reflect the new state -- bots check this.
@@ -470,8 +502,15 @@ class MySQLHoneypot:
                     )
                     if resultset is not None:
                         client_sock.sendall(resultset)
+                        reply_text = _describe_query_result(query, database)
                     else:
                         client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
+                        reply_text = "OK"
+
+                    if self.session_recorder and session_id:
+                        self.session_recorder.record_command(
+                            session_id, query, cmd_time, output=reply_text,
+                        )
 
                 elif cmd_type == 0x02:  # COM_INIT_DB
                     client_sock.sendall(_build_ok_packet(seq + 1, status_flags))
@@ -485,12 +524,21 @@ class MySQLHoneypot:
                         _build_error_packet(seq + 1, 1047, "Unknown command")
                     )
 
+        except (ConnectionResetError, BrokenPipeError, TimeoutError, OSError):
+            logger.debug("MySQL connection lost for %s (scanner/probe)", addr[0])
         except Exception:
             logger.exception("MySQL handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
+            # Only end session on clean exit (COM_QUIT / EOF).  Scanners
+            # that reset the connection leave the session active so the
+            # next connection from the same IP reuses it.
+            if clean_exit and session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
             try:
                 client_sock.close()
             except OSError:

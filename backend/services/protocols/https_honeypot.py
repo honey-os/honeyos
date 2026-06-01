@@ -31,12 +31,13 @@ class HTTPSHoneypot:
     """
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server: HTTPServer | None = None
         self._stop_event = threading.Event()
 
@@ -50,7 +51,17 @@ class HTTPSHoneypot:
             def log_message(self, format, *args):
                 logger.debug("HTTPS %s", format % args)
 
+            def _check_throttle(self):
+                if honeypot.connection_throttler and honeypot.connection_throttler.is_blocked(
+                    self.client_address[0], "https"
+                ):
+                    self._send(429, "Too Many Requests", content_type="text/plain")
+                    return True
+                return False
+
             def do_GET(self):
+                if self._check_throttle():
+                    return
                 honeypot._log_request(self, body=None)
                 if self.path in ("/", "/index.html"):
                     self._send(200, _DIRECTORY_LISTING)
@@ -67,6 +78,8 @@ class HTTPSHoneypot:
                     self._send(404, _NOT_FOUND)
 
             def do_POST(self):
+                if self._check_throttle():
+                    return
                 content_length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(content_length) if content_length else b""
                 honeypot._log_request(self, body=body)
@@ -76,12 +89,16 @@ class HTTPSHoneypot:
                     self._send(404, _NOT_FOUND)
 
             def do_PUT(self):
+                if self._check_throttle():
+                    return
                 content_length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(content_length) if content_length else b""
                 honeypot._log_request(self, body=body)
                 self._send(403, "<h1>403 Forbidden</h1>")
 
             def do_DELETE(self):
+                if self._check_throttle():
+                    return
                 honeypot._log_request(self, body=None)
                 self._send(403, "<h1>403 Forbidden</h1>")
 

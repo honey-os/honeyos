@@ -61,12 +61,13 @@ class SMBHoneypot:
     """
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self.server_name = self.config.get("server_name", "FILESERVER")
         self.domain = self.config.get("domain", "WORKGROUP")
         self._server_socket: socket.socket | None = None
@@ -93,6 +94,12 @@ class SMBHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "smb")
+                    or not self.connection_throttler.track_connect(addr[0], "smb")
+                ):
+                    client.close()
+                    continue
                 t = threading.Thread(
                     target=self._handle_client, args=(client, addr), daemon=True
                 )
@@ -117,10 +124,14 @@ class SMBHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
         # session_id is created lazily on first auth/share event so that
         # bare negotiate-only connections don't produce 0-command sessions.
         ctx: dict = {"session_id": None}
         smb_version = "unknown"
+        app_ctx = self.app.app_context() if self.app else None
+        if app_ctx:
+            app_ctx.push()
         try:
             client_sock.settimeout(30)
 
@@ -161,20 +172,23 @@ class SMBHoneypot:
         except Exception:
             logger.exception("SMB handler error for %s", addr)
         finally:
-            if ctx["session_id"] and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(ctx["session_id"])
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
+            if ctx["session_id"] and self.session_recorder:
+                self.session_recorder.end_session(ctx["session_id"])
             try:
                 client_sock.close()
             except OSError:
                 pass
+            if app_ctx:
+                _db.session.remove()
+                app_ctx.pop()
 
     def _ensure_session(self, addr: tuple, ctx: dict) -> str | None:
         """Lazily create a session on first meaningful interaction."""
-        if ctx["session_id"] is None and self.session_recorder and self.app:
-            with self.app.app_context():
-                sess = self.session_recorder.start_session(addr[0], "smb")
-                ctx["session_id"] = sess.id
+        if ctx["session_id"] is None and self.session_recorder:
+            sess = self.session_recorder.start_session(addr[0], "smb")
+            ctx["session_id"] = sess.id
         return ctx["session_id"]
 
     # ------------------------------------------------------------------
@@ -589,21 +603,20 @@ class SMBHoneypot:
 
     def _emit_connection_event(self, addr: tuple, ctx: dict,
                                smb_version: str) -> None:
-        if self.event_processor and self.app:
-            with self.app.app_context():
-                self.event_processor.process_event({
-                    "event_type": "connection",
-                    "protocol": "smb",
-                    "source_ip": addr[0],
-                    "source_port": addr[1],
-                    "destination_port": self.port,
-                    "severity": "low",
-                    "session_id": ctx["session_id"],
-                    "details": {
-                        "smb_version": smb_version,
-                        "server_name": self.server_name,
-                    },
-                })
+        if self.event_processor:
+            self.event_processor.process_event({
+                "event_type": "connection",
+                "protocol": "smb",
+                "source_ip": addr[0],
+                "source_port": addr[1],
+                "destination_port": self.port,
+                "severity": "low",
+                "session_id": ctx["session_id"],
+                "details": {
+                    "smb_version": smb_version,
+                    "server_name": self.server_name,
+                },
+            })
 
     def _emit_auth_event(self, addr: tuple, session_id: str | None,
                          creds: dict) -> None:
@@ -615,47 +628,53 @@ class SMBHoneypot:
             addr[0],
         )
 
-        if self.event_processor and self.app:
-            with self.app.app_context():
-                self.event_processor.process_event({
-                    "event_type": "authentication",
-                    "protocol": "smb",
-                    "source_ip": addr[0],
-                    "source_port": addr[1],
-                    "destination_port": self.port,
-                    "severity": "high",
-                    "session_id": session_id,
-                    "details": {
-                        "domain": creds.get("domain", ""),
-                        "username": creds.get("username", ""),
-                        "workstation": creds.get("workstation", ""),
-                    },
-                })
+        if self.event_processor:
+            self.event_processor.process_event({
+                "event_type": "authentication",
+                "protocol": "smb",
+                "source_ip": addr[0],
+                "source_port": addr[1],
+                "destination_port": self.port,
+                "severity": "high",
+                "session_id": session_id,
+                "details": {
+                    "domain": creds.get("domain", ""),
+                    "username": creds.get("username", ""),
+                    "workstation": creds.get("workstation", ""),
+                },
+            })
 
-        if self.session_recorder and session_id and self.app:
-            with self.app.app_context():
-                self.session_recorder.record_command(
-                    session_id,
-                    f"NTLMSSP_AUTH domain={creds.get('domain', '')} user={creds.get('username', '')}",
-                    datetime.now(timezone.utc),
-                )
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id,
+                f"NTLMSSP_AUTH domain={creds.get('domain', '')} user={creds.get('username', '')}",
+                datetime.now(timezone.utc),
+                output="STATUS_LOGON_FAILURE (0xC000006D)",
+            )
 
     def _emit_share_event(self, addr: tuple, session_id: str | None,
                           share_name: str) -> None:
         logger.info("SMB share access  share=%s  from=%s", share_name, addr[0])
 
-        if self.event_processor and self.app:
-            with self.app.app_context():
-                self.event_processor.process_event({
-                    "event_type": "share_access",
-                    "protocol": "smb",
-                    "source_ip": addr[0],
-                    "source_port": addr[1],
-                    "destination_port": self.port,
-                    "severity": "medium",
-                    "session_id": session_id,
-                    "details": {"share_name": share_name},
-                })
+        if self.event_processor:
+            self.event_processor.process_event({
+                "event_type": "share_access",
+                "protocol": "smb",
+                "source_ip": addr[0],
+                "source_port": addr[1],
+                "destination_port": self.port,
+                "severity": "medium",
+                "session_id": session_id,
+                "details": {"share_name": share_name},
+            })
+
+        if self.session_recorder and session_id:
+            self.session_recorder.record_command(
+                session_id,
+                f"TREE_CONNECT {share_name}",
+                datetime.now(timezone.utc),
+                output="STATUS_BAD_NETWORK_NAME (0xC00000CC)",
+            )
 
     # ------------------------------------------------------------------
     # Helpers

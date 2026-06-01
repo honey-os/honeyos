@@ -71,7 +71,7 @@ _COMMAND_RESPONSES = {
 }
 
 # Commands that succeed silently (exit code 0, no output)
-_SILENT_OK_PREFIXES = ("cd", "chmod", "rm", "cp", "mv", "mkdir", "touch")
+_SILENT_OK_PREFIXES = ("cd", "rm", "cp", "mv", "mkdir", "touch")
 
 # Valid 52-byte ARM 32-bit little-endian ELF header.
 # Bots read this via cat/hexdump/dd to determine CPU architecture before
@@ -118,6 +118,33 @@ def _interpret_escapes(text: str) -> str:
     return re.sub(r"\\x[0-9a-fA-F]{2}|\\[ntrba\\]", _replace, text)
 
 
+
+# ---------------------------------------------------------------------------
+# Telnet IAC (Interpret As Command) constants
+# ---------------------------------------------------------------------------
+_IAC = bytes([255])   # Interpret As Command
+_WILL = bytes([251])
+_WONT = bytes([252])
+_DO = bytes([253])
+_DONT = bytes([254])
+
+# Telnet options
+_OPT_ECHO = bytes([1])
+_OPT_SUPPRESS_GO_AHEAD = bytes([3])
+_OPT_LINEMODE = bytes([34])
+_OPT_NAWS = bytes([31])   # Negotiate About Window Size
+_OPT_TTYPE = bytes([24])  # Terminal Type
+
+# Standard IAC negotiation sent on connect -- mimics a BusyBox/Linux telnetd
+_IAC_NEGOTIATION = (
+    _IAC + _WILL + _OPT_ECHO
+    + _IAC + _WILL + _OPT_SUPPRESS_GO_AHEAD
+    + _IAC + _WONT + _OPT_LINEMODE
+    + _IAC + _DO + _OPT_NAWS
+    + _IAC + _DO + _OPT_TTYPE
+)
+
+
 class TelnetHoneypot:
     """Fake telnet server recording credentials and commands."""
 
@@ -125,12 +152,13 @@ class TelnetHoneypot:
     FAKE_HOSTNAME = "gateway"
 
     def __init__(self, port, config=None, event_processor=None,
-                 session_recorder=None, app=None):
+                 session_recorder=None, app=None, connection_throttler=None):
         self.port = port
         self.config = config or {}
         self.event_processor = event_processor
         self.session_recorder = session_recorder
         self.app = app
+        self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
 
@@ -154,6 +182,12 @@ class TelnetHoneypot:
         while not self._stop_event.is_set():
             try:
                 client, addr = self._server_socket.accept()
+                if self.connection_throttler and (
+                    self.connection_throttler.is_blocked(addr[0], "telnet")
+                    or not self.connection_throttler.track_connect(addr[0], "telnet")
+                ):
+                    client.close()
+                    continue
                 t = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
                 t.start()
             except socket.timeout:
@@ -176,9 +210,20 @@ class TelnetHoneypot:
     # ------------------------------------------------------------------
 
     def _handle_client(self, client_sock: socket.socket, addr: tuple) -> None:
+        from models import db as _db
+
         session_id = None
+        ctx = self.app.app_context() if self.app else None
+        if ctx:
+            ctx.push()
         try:
             client_sock.settimeout(120)
+
+            # IAC option negotiation (required for scanners to identify as telnet)
+            client_sock.sendall(_IAC_NEGOTIATION)
+
+            # Drain any IAC responses the client sends back (DO/DONT/WILL/WONT)
+            self._drain_iac(client_sock)
 
             # Banner
             client_sock.sendall(self.BANNER.encode())
@@ -188,23 +233,21 @@ class TelnetHoneypot:
             password = self._readline(client_sock, prompt="Password: ", echo=False)
 
             # Log credential attempt
-            if self.event_processor and self.app:
-                with self.app.app_context():
-                    self.event_processor.process_event({
-                        "event_type": "authentication",
-                        "protocol": "telnet",
-                        "source_ip": addr[0],
-                        "source_port": addr[1],
-                        "destination_port": self.port,
-                        "severity": "high",
-                        "details": {"username": username, "password": password},
-                    })
+            if self.event_processor:
+                self.event_processor.process_event({
+                    "event_type": "authentication",
+                    "protocol": "telnet",
+                    "source_ip": addr[0],
+                    "source_port": addr[1],
+                    "destination_port": self.port,
+                    "severity": "high",
+                    "details": {"username": username, "password": password},
+                })
 
             # Start session
-            if self.session_recorder and self.app:
-                with self.app.app_context():
-                    sess = self.session_recorder.start_session(addr[0], "telnet")
-                    session_id = sess.id
+            if self.session_recorder:
+                sess = self.session_recorder.start_session(addr[0], "telnet")
+                session_id = sess.id
 
             client_sock.sendall(b"\r\nLogin successful.\r\n")
             prompt = f"{self.FAKE_HOSTNAME}> ".encode()
@@ -225,25 +268,19 @@ class TelnetHoneypot:
                     client_sock.sendall(prompt)
                     continue
 
-                # Record the raw line
-                if self.session_recorder and session_id and self.app:
-                    with self.app.app_context():
-                        self.session_recorder.record_command(
-                            session_id, cmd, datetime.now(timezone.utc)
-                        )
+                cmd_time = datetime.now(timezone.utc)
 
-                if self.event_processor and self.app:
-                    with self.app.app_context():
-                        self.event_processor.process_event({
-                            "event_type": "command",
-                            "protocol": "telnet",
-                            "source_ip": addr[0],
-                            "source_port": addr[1],
-                            "destination_port": self.port,
-                            "severity": "medium",
-                            "session_id": session_id,
-                            "details": {"command": cmd},
-                        })
+                if self.event_processor:
+                    self.event_processor.process_event({
+                        "event_type": "command",
+                        "protocol": "telnet",
+                        "source_ip": addr[0],
+                        "source_port": addr[1],
+                        "destination_port": self.port,
+                        "severity": "medium",
+                        "session_id": session_id,
+                        "details": {"command": cmd},
+                    })
 
                 if cmd in ("exit", "quit", "logout"):
                     client_sock.sendall(b"Goodbye.\r\n")
@@ -252,16 +289,31 @@ class TelnetHoneypot:
                 response = self._execute_line(cmd)
                 if isinstance(response, bytes):
                     client_sock.sendall(response + b"\r\n")
+                    response_text = response.decode("utf-8", errors="replace")
                 else:
                     client_sock.sendall((response + "\r\n").encode())
+                    response_text = response
                 client_sock.sendall(prompt)
 
+                # Record command with server response
+                if self.session_recorder and session_id:
+                    self.session_recorder.record_command(
+                        session_id, cmd, cmd_time,
+                        output=response_text or None,
+                    )
+
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            logger.debug("Telnet connection lost for %s", addr[0])
         except Exception:
             logger.exception("Telnet handler error for %s", addr)
         finally:
-            if session_id and self.session_recorder and self.app:
-                with self.app.app_context():
-                    self.session_recorder.end_session(session_id)
+            if self.connection_throttler:
+                self.connection_throttler.track_disconnect(addr[0])
+            if session_id and self.session_recorder:
+                self.session_recorder.end_session(session_id)
+            if ctx:
+                _db.session.remove()
+                ctx.pop()
             try:
                 client_sock.close()
             except OSError:
@@ -352,12 +404,20 @@ class TelnetHoneypot:
         if cmd.startswith("printf "):
             return self._handle_printf(cmd), True
 
-        # --- Silent-success commands: cd, chmod, rm, cp, mv, mkdir, touch ---
+        # --- Silent-success commands: cd, rm, cp, mv, mkdir, touch ---
         base = cmd.split()[0] if cmd.split() else cmd
         # strip any path prefix on the command name (e.g. /bin/rm -> rm)
         base_name = base.rsplit("/", 1)[-1]
         if base_name in _SILENT_OK_PREFIXES:
             return "", True
+
+        # --- Built-in: cat (file-not-found for unknown files) ---
+        if base_name == "cat":
+            return self._handle_cat(cmd)
+
+        # --- Built-in: chmod (error on missing files) ---
+        if base_name == "chmod":
+            return self._handle_chmod(cmd)
 
         # --- Download commands: log the URL, return realistic failure ---
         if base_name in ("wget", "curl", "tftp"):
@@ -375,7 +435,11 @@ class TelnetHoneypot:
             if response is not None:
                 return response, True
 
-        # --- Unknown command ---
+        # --- Unknown command / file execution ---
+        # Preserve the typed path (e.g. "./i" not "i") and use the
+        # correct error for path-based execution attempts.
+        if "/" in base:
+            return f"-sh: {base}: No such file or directory", False
         return f"-sh: {base_name}: not found", False
 
     # ------------------------------------------------------------------
@@ -423,6 +487,45 @@ class TelnetHoneypot:
         ):
             text = text[1:-1]
         return _interpret_escapes(text)
+
+    def _handle_cat(self, cmd: str) -> tuple[str | bytes, bool]:
+        """Handle ``cat`` with realistic file-not-found errors.
+
+        Known files (from the static response table and arch probes) return
+        their content; everything else returns the standard BusyBox error.
+        """
+        # Check static responses first (e.g. "cat /etc/passwd")
+        response = _COMMAND_RESPONSES.get(cmd)
+        if response is not None:
+            return response, True
+
+        # Arch probes handled separately (returns bytes)
+        arch_result = self._handle_arch_probe(cmd)
+        if arch_result is not None:
+            return arch_result
+
+        # Extract the filename argument, stripping any output redirect
+        args = cmd.split(None, 1)[1] if " " in cmd else ""
+        if ">" in args:
+            args = args[:args.index(">")].strip()
+        if not args:
+            return "", True
+
+        return f"cat: {args}: No such file or directory", False
+
+    @staticmethod
+    def _handle_chmod(cmd: str) -> tuple[str, bool]:
+        """Handle ``chmod`` with error on missing files.
+
+        Real BusyBox chmod returns an error and exit code 1 when the
+        target doesn't exist, which is important for ``||`` fallback
+        chains in bot loaders.
+        """
+        parts = cmd.split()
+        if len(parts) >= 3:
+            target = parts[-1]
+            return f"chmod: cannot access '{target}': No such file or directory", False
+        return "", True
 
     def _handle_arch_probe(self, cmd: str) -> tuple[str | bytes, bool] | None:
         """Handle ELF architecture-probe commands.
@@ -499,6 +602,46 @@ class TelnetHoneypot:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _drain_iac(sock: socket.socket) -> None:
+        """Consume any IAC responses the client sends after negotiation.
+
+        Reads with a short timeout so we don't block if the client sends
+        nothing (e.g. a scanner that just reads the banner).  IAC sequences
+        are 3 bytes each (IAC + verb + option).  Subnegotiation (IAC SB ...)
+        is consumed until IAC SE.
+        """
+        sock.settimeout(0.5)
+        try:
+            while True:
+                b = sock.recv(1)
+                if not b:
+                    break
+                if b[0] == 255:  # IAC
+                    verb = sock.recv(1)
+                    if not verb:
+                        break
+                    if verb[0] == 250:  # SB (subnegotiation)
+                        # Read until IAC SE (255, 240)
+                        while True:
+                            c = sock.recv(1)
+                            if not c:
+                                return
+                            if c[0] == 255:
+                                se = sock.recv(1)
+                                if not se or se[0] == 240:
+                                    break
+                    else:
+                        # WILL/WONT/DO/DONT + option byte
+                        sock.recv(1)
+                else:
+                    # Non-IAC data before login — ignore
+                    break
+        except (socket.timeout, OSError):
+            pass
+        finally:
+            sock.settimeout(120)
 
     @staticmethod
     def _readline(sock: socket.socket, prompt: str = "", echo: bool = True) -> str | None:

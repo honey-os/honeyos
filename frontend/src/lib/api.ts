@@ -1,9 +1,11 @@
 /**
  * HoneyOS API Client
  *
- * Communicates with the Flask backend API. Base URL is determined by
- * the NEXT_PUBLIC_API_URL environment variable or defaults to the
- * current origin (which uses Next.js rewrites to proxy /api/* requests).
+ * The browser talks directly to the backend on port 7778.
+ * getBaseUrl() auto-detects the backend URL from the current hostname.
+ * Caddy terminates TLS on both :7777 (frontend) and :7778 (backend)
+ * so HTTPS works without the backend needing its own certs.
+ * Set NEXT_PUBLIC_API_URL to override for non-standard setups.
  */
 
 // ---------------------------------------------------------------------------
@@ -28,6 +30,23 @@ export interface Event {
   updated_at: string | null;
 }
 
+export interface ThreatIntelMatch {
+  ioc: string;
+  threat_type: string;
+  malware: string;
+  confidence_level: number;
+  first_seen: string;
+  tags: string[];
+  reference: string | null;
+  source: string;
+}
+
+export interface ThreatIntel {
+  iocs_searched: string[];
+  matches: ThreatIntelMatch[];
+  analyzed_at: string;
+}
+
 export interface Session {
   id: string;
   source_ip: string;
@@ -40,6 +59,7 @@ export interface Session {
   commands: Array<{ timestamp: string; command: string; output?: string }> | null;
   file_transfers: Array<{ filename: string; direction: string; size: number }> | null;
   status: string;
+  threat_intel: ThreatIntel | null;
 }
 
 export interface Honeypot {
@@ -86,6 +106,7 @@ export interface ThreatLevel {
 }
 
 export interface DashboardSummary {
+  connections_per_second: number;
   total_events: number;
   active_sessions: number;
   active_honeypots: number;
@@ -126,6 +147,11 @@ export interface SettingsResponse {
   system: SettingsSystem;
 }
 
+export interface ThrottleEntry {
+  protocol: string;
+  expires_in: number;
+}
+
 export interface Attacker {
   ip: string;
   event_count: number;
@@ -139,6 +165,7 @@ export interface Attacker {
   isp: string | null;
   lat: number | null;
   lon: number | null;
+  throttled: ThrottleEntry[];
 }
 
 export interface AttackerParams {
@@ -188,6 +215,75 @@ export interface CredentialsParams {
   limit?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Perimeter / Censys
+// ---------------------------------------------------------------------------
+
+export interface DeclaredPort {
+  id: number;
+  port: number;
+  transport: string;
+  label: string;
+  source: "honeypot" | "user";
+  created_at: string;
+}
+
+export interface PerimeterScan {
+  id: string;
+  public_ip: string;
+  scan_source: string;
+  censys_status?: string;
+  declared_snapshot: DeclaredPort[];
+  actual_ports: number[];
+  unexpected_ports: number[];
+  missing_ports: number[];
+  drift_detected: boolean;
+  timestamp: string;
+}
+
+export interface CensysPort {
+  port: number;
+  transport: string;
+  service: string;
+  product: string;
+  version: string;
+  banner: string;
+}
+
+export interface CensysSnapshot {
+  id: string;
+  ip: string;
+  ports_data: CensysPort[];
+  tags: string[];
+  honeypot_flagged: boolean;
+  vulns: string[];
+  hostnames: string[];
+  org: string | null;
+  isp: string | null;
+  os_name: string | null;
+  censys_updated: string | null;
+  timestamp: string;
+}
+
+export interface BannerComparison {
+  port: number;
+  protocol: string;
+  configured_banner: string | null;
+  censys_banner: string | null;
+  match: boolean;
+}
+
+export interface PerimeterStatus {
+  public_ip: string | null;
+  censys_configured: boolean;
+  drift_detected: boolean;
+  honeypot_flagged: boolean;
+  last_scan: string | null;
+  declared_count: number;
+  unexpected_count: number;
+  missing_count: number;
+}
+
 export interface ApiError {
   error: string;
   message: string;
@@ -197,17 +293,27 @@ export interface AuthStatus {
   has_admin: boolean;
   authenticated: boolean;
   read_only: boolean;
+  readonly_password?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Base URL & fetch helper
 // ---------------------------------------------------------------------------
 
-function getBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
+declare global {
+  interface Window {
+    __HONEYOS_API_URL__?: string;
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+}
+
+export function getBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.__HONEYOS_API_URL__) {
+    return window.__HONEYOS_API_URL__;
+  }
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:7778`;
+  }
+  return 'http://backend:7778';
 }
 
 async function fetchApi<T>(
@@ -222,6 +328,7 @@ async function fetchApi<T>(
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -305,6 +412,10 @@ export async function getAttackers(params: AttackerParams = {}): Promise<Paginat
   return fetchApi<PaginatedResponse<Attacker>>(`/attackers${query ? `?${query}` : ''}`);
 }
 
+export async function getAttacker(ip: string): Promise<Attacker> {
+  return fetchApi<Attacker>(`/attackers/${ip}`);
+}
+
 export async function getAttackerEvents(ip: string, params: EventParams = {}): Promise<PaginatedResponse<Event>> {
   return getEvents({ source_ip: ip, ...params });
 }
@@ -353,6 +464,16 @@ export async function getSession(id: string): Promise<Session> {
 
 export async function getSessionReplay(id: string): Promise<{ commands: Session['commands'] }> {
   return fetchApi<{ commands: Session['commands'] }>(`/sessions/${id}/replay`);
+}
+
+export async function getFeatures(): Promise<{ threatfox: boolean }> {
+  return fetchApi<{ threatfox: boolean }>('/features');
+}
+
+export async function identifyMalware(sessionId: string): Promise<ThreatIntel> {
+  return fetchApi<ThreatIntel>(`/sessions/${sessionId}/identify-malware`, {
+    method: 'POST',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +575,7 @@ export async function getSettings(): Promise<SettingsResponse> {
 
 export async function getAuthStatus(): Promise<AuthStatus> {
   const url = `${getBaseUrl()}/api/auth/status`;
-  const res = await fetch(url, { credentials: 'same-origin' });
+  const res = await fetch(url, { credentials: 'include' });
   return res.json();
 }
 
@@ -463,12 +584,18 @@ export async function authSetup(password: string): Promise<void> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Setup failed');
+    let message = 'Setup failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
 }
 
@@ -477,12 +604,18 @@ export async function authLogin(password: string): Promise<void> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Login failed');
+    let message = 'Login failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
 }
 
@@ -490,7 +623,7 @@ export async function authLogout(): Promise<void> {
   const url = `${getBaseUrl()}/api/auth/logout`;
   await fetch(url, {
     method: 'POST',
-    credentials: 'same-origin',
+    credentials: 'include',
   });
 }
 
@@ -502,11 +635,75 @@ export async function authChangePassword(
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message || 'Password change failed');
+    let message = 'Password change failed';
+    try {
+      const data = await res.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON (e.g., proxy returned HTML error page)
+    }
+    throw new Error(message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Perimeter
+// ---------------------------------------------------------------------------
+
+export async function getPerimeterStatus(): Promise<PerimeterStatus> {
+  return fetchApi<PerimeterStatus>('/perimeter/status');
+}
+
+export async function getDeclaredPorts(): Promise<{ items: DeclaredPort[] }> {
+  return fetchApi<{ items: DeclaredPort[] }>('/perimeter/declared-ports');
+}
+
+export async function addDeclaredPort(data: { port: number; transport?: string; label: string }): Promise<DeclaredPort> {
+  return fetchApi<DeclaredPort>('/perimeter/declared-ports', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function removeDeclaredPort(id: number): Promise<void> {
+  return fetchApi<void>(`/perimeter/declared-ports/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function syncDeclaredPorts(): Promise<{ items: DeclaredPort[] }> {
+  return fetchApi<{ items: DeclaredPort[] }>('/perimeter/declared-ports/sync', {
+    method: 'POST',
+  });
+}
+
+export async function getPerimeterScans(params: { page?: number; per_page?: number } = {}): Promise<PaginatedResponse<PerimeterScan>> {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return fetchApi<PaginatedResponse<PerimeterScan>>(`/perimeter/scans${query ? `?${query}` : ''}`);
+}
+
+export async function triggerPerimeterScan(): Promise<PerimeterScan> {
+  return fetchApi<PerimeterScan>('/perimeter/scan', { method: 'POST' });
+}
+
+export async function getCensysSnapshot(): Promise<CensysSnapshot | null> {
+  return fetchApi<CensysSnapshot | null>('/perimeter/censys');
+}
+
+export async function refreshCensys(): Promise<CensysSnapshot> {
+  return fetchApi<CensysSnapshot>('/perimeter/censys/refresh', { method: 'POST' });
+}
+
+export async function getBannerComparison(): Promise<{ items: BannerComparison[] }> {
+  return fetchApi<{ items: BannerComparison[] }>('/perimeter/banners');
 }

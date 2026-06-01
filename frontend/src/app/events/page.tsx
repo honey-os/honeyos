@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import {
-  Activity,
   Filter,
   Download,
   ChevronLeft,
@@ -14,7 +14,7 @@ import SeverityBadge from '@/components/ui/SeverityBadge';
 import ProtocolBadge from '@/components/ui/ProtocolBadge';
 import { formatDate, formatRelativeTime, truncateText } from '@/utils/formatters';
 import { useUrlFilters } from '@/utils/useUrlFilters';
-import { getEvent } from '@/lib/api';
+import { getEvent, getBaseUrl } from '@/lib/api';
 import type { Event } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -43,9 +43,10 @@ export default function EventsPage() {
 
   const { searchParams, getParam, setParam, clearParams } = useUrlFilters();
   const linkedEventId = searchParams.get('event');
-  const [expandedEvent, setExpandedEvent] = useState<string | null>(linkedEventId);
-  const [linkedEvent, setLinkedEvent] = useState<Event | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const filterEventType = getParam('event_type');
   const filterProtocol = getParam('protocol');
@@ -72,16 +73,40 @@ export default function EventsPage() {
     loadEvents(1);
   }, [loadEvents]);
 
-  // Fetch the specific linked event so it displays even if not on the current page
+  // Fetch and open the linked event from ?event=id
   useEffect(() => {
-    if (!linkedEventId) {
-      setLinkedEvent(null);
-      return;
-    }
+    if (!linkedEventId) return;
     getEvent(linkedEventId)
-      .then((e) => setLinkedEvent(e))
-      .catch(() => setLinkedEvent(null));
+      .then((e) => {
+        setSelectedEvent(e);
+        setPanelOpen(true);
+      })
+      .catch(() => {});
   }, [linkedEventId]);
+
+  // Close panel on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePanel();
+    };
+    if (panelOpen) {
+      document.addEventListener('keydown', handleKey);
+      return () => document.removeEventListener('keydown', handleKey);
+    }
+  }, [panelOpen]);
+
+  const openPanel = (event: Event) => {
+    setSelectedEvent(event);
+    setPanelOpen(true);
+  };
+
+  const closePanel = () => {
+    setPanelOpen(false);
+    // Clear the ?event= param if present
+    if (linkedEventId) {
+      setParam('event', '');
+    }
+  };
 
   const handleFilterChange = (key: string, value: string) => {
     setParam(key, value);
@@ -94,28 +119,14 @@ export default function EventsPage() {
   const hasActiveFilters = filterEventType || filterProtocol || filterSeverity || filterStartDate || filterEndDate;
 
   const handleExport = () => {
-    const csv = [
-      ['Time', 'Type', 'Protocol', 'Source IP', 'Port', 'Severity', 'Details'].join(','),
-      ...events.map((e) =>
-        [
-          e.timestamp,
-          e.event_type,
-          e.protocol,
-          e.source_ip,
-          e.destination_port,
-          e.severity,
-          JSON.stringify(e.details || ''),
-        ].join(',')
-      ),
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `honeyos-events-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const params = new URLSearchParams();
+    if (filterEventType) params.set('event_type', filterEventType);
+    if (filterProtocol) params.set('protocol', filterProtocol);
+    if (filterSeverity) params.set('severity', filterSeverity);
+    if (filterStartDate) params.set('start_date', filterStartDate);
+    if (filterEndDate) params.set('end_date', filterEndDate);
+    const qs = params.toString();
+    window.open(`${getBaseUrl()}/api/events/export${qs ? `?${qs}` : ''}`, '_blank');
   };
 
   return (
@@ -239,66 +250,24 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Linked event (from ?event=id, when not on the current page) */}
-      {linkedEvent && !events.some((e) => e.id === linkedEvent.id) && (
-        <div className="card overflow-hidden border-amber-500/20">
-          <div className="px-4 py-2 bg-amber-500/5 border-b border-amber-500/20">
-            <span className="text-xs font-medium text-amber-400">Linked Event</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <tbody>
-                <tr
-                  className="cursor-pointer hover:bg-[#1c1c28] transition-colors"
-                  onClick={() =>
-                    setExpandedEvent(
-                      expandedEvent === linkedEvent.id ? null : linkedEvent.id
-                    )
-                  }
-                >
-                  <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
-                    {formatDate(linkedEvent.timestamp, 'MMM d, HH:mm:ss')}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">
-                    {linkedEvent.event_type.replace('_', ' ')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <ProtocolBadge protocol={linkedEvent.protocol} />
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono text-amber-400">
-                    {linkedEvent.source_ip}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-400">
-                    {linkedEvent.destination_port || '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <SeverityBadge severity={linkedEvent.severity} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
-                    {linkedEvent.details
-                      ? truncateText(JSON.stringify(linkedEvent.details), 60)
-                      : '-'}
-                  </td>
-                </tr>
-                {expandedEvent === linkedEvent.id && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-4 bg-[#111118]">
-                      <EventDetails event={linkedEvent} />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden relative">
+        {eventsLoading && events.length > 0 && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
+              <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              Loading events...
+            </div>
+          </div>
+        )}
         {eventsLoading && events.length === 0 ? (
           <div className="p-12 text-center">
             <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
             <p className="mt-3 text-sm text-gray-500">Loading events...</p>
+          </div>
+        ) : events.length === 0 ? (
+          <div className="p-12 text-center">
+            <p className="text-sm text-gray-500">No events match your filters</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -329,62 +298,40 @@ export default function EventsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a2a3a]/50">
-                {events.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-sm text-gray-600"
-                    >
-                      No events match your filters
-                    </td>
-                  </tr>
-                ) : (
-                  events.map((event) => (
-                    <React.Fragment key={event.id}>
-                      <tr
-                        className="cursor-pointer hover:bg-[#1c1c28] transition-colors"
-                        onClick={() =>
-                          setExpandedEvent(
-                            expandedEvent === event.id ? null : event.id
-                          )
-                        }
-                      >
-                        <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
-                          {formatDate(event.timestamp, 'MMM d, HH:mm:ss')}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-300">
-                          {event.event_type.replace('_', ' ')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <ProtocolBadge protocol={event.protocol} />
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono text-amber-400">
-                          {event.source_ip}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono text-gray-400">
-                          {event.destination_port || '-'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <SeverityBadge severity={event.severity} />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
-                          {event.details
-                            ? truncateText(JSON.stringify(event.details), 60)
-                            : '-'}
-                        </td>
-                      </tr>
-
-                      {/* Expanded details */}
-                      {expandedEvent === event.id && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-4 bg-[#111118]">
-                            <EventDetails event={event} />
-                          </td>
-                        </tr>
+                {events.map((event) => (
+                    <tr
+                      key={event.id}
+                      className={clsx(
+                        'cursor-pointer hover:bg-[#1c1c28] transition-colors',
+                        panelOpen && selectedEvent?.id === event.id && 'bg-[#1c1c28]'
                       )}
-                    </React.Fragment>
-                  ))
-                )}
+                      onClick={() => openPanel(event)}
+                    >
+                      <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
+                        {formatDate(event.timestamp, 'MMM d, HH:mm:ss')}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {event.event_type.replace('_', ' ')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ProtocolBadge protocol={event.protocol} />
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-amber-400">
+                        {event.source_ip}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-400">
+                        {event.destination_port || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <SeverityBadge severity={event.severity} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
+                        {event.details
+                          ? truncateText(JSON.stringify(event.details), 60)
+                          : '-'}
+                      </td>
+                    </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -417,67 +364,109 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Event details sub-component
-// ---------------------------------------------------------------------------
+      {/* Slide-over panel */}
+      {panelOpen && selectedEvent && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 z-40 transition-opacity"
+            onClick={closePanel}
+          />
 
-function EventDetails({ event }: { event: Event }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-3">
-        <DetailRow label="Event ID" value={event.id} mono />
-        <DetailRow label="Event Type" value={event.event_type} />
-        <DetailRow label="Protocol" value={event.protocol.toUpperCase()} />
-        <DetailRow label="Source IP" value={event.source_ip} mono />
-        <DetailRow label="Source Port" value={event.source_port?.toString() || 'N/A'} mono />
-        <DetailRow label="Destination Port" value={event.destination_port?.toString() || 'N/A'} mono />
-        <DetailRow label="Timestamp" value={formatDate(event.timestamp)} />
-        {event.session_id && (
-          <DetailRow label="Session ID" value={event.session_id} mono />
-        )}
-        {event.user_agent && (
-          <DetailRow label="User Agent" value={event.user_agent} />
-        )}
-      </div>
-      <div className="space-y-3">
-        {event.details && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Details
-            </span>
-            <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3 overflow-auto max-h-48">
-              {JSON.stringify(event.details, null, 2)}
-            </pre>
-          </div>
-        )}
-        {event.raw_payload && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Raw Payload
-            </span>
-            <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3 overflow-auto max-h-32">
-              {event.raw_payload}
-            </pre>
-          </div>
-        )}
-        {event.geolocation && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Geolocation
-            </span>
-            <div className="mt-1 text-sm text-gray-400 bg-[#0a0a0f] rounded-lg p-3 space-y-1">
-              <GeoDisplay geo={event.geolocation} />
+          {/* Panel */}
+          <div
+            ref={panelRef}
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-[#12121a] border-l border-[#2a2a3a] shadow-2xl overflow-y-auto animate-slide-in-right"
+          >
+            {/* Panel header */}
+            <div className="sticky top-0 bg-[#12121a] border-b border-[#2a2a3a] px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-100">Event Detail</h2>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">
+                  {selectedEvent.id}
+                </p>
+              </div>
+              <button
+                onClick={closePanel}
+                className="p-1.5 rounded-lg hover:bg-[#2a2a3a] text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Panel body */}
+            <div className="px-6 py-5 space-y-6">
+              {/* Summary badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <ProtocolBadge protocol={selectedEvent.protocol} />
+                <SeverityBadge severity={selectedEvent.severity} />
+                <span className="text-xs text-gray-500">
+                  {formatRelativeTime(selectedEvent.timestamp)}
+                </span>
+              </div>
+
+              {/* Fields */}
+              <div className="space-y-3">
+                <DetailRow label="Event Type" value={selectedEvent.event_type.replace(/_/g, ' ')} />
+                <DetailRow label="Source IP" value={selectedEvent.source_ip} mono link={`/attackers/${selectedEvent.source_ip}`} />
+                <DetailRow label="Source Port" value={selectedEvent.source_port?.toString() || 'N/A'} mono />
+                <DetailRow label="Destination Port" value={selectedEvent.destination_port?.toString() || 'N/A'} mono />
+                <DetailRow label="Timestamp" value={formatDate(selectedEvent.timestamp)} />
+                {selectedEvent.session_id && (
+                  <DetailRow label="Session" value={selectedEvent.session_id} mono link={`/sessions/${selectedEvent.session_id}`} />
+                )}
+                {selectedEvent.user_agent && (
+                  <DetailRow label="User Agent" value={selectedEvent.user_agent} />
+                )}
+              </div>
+
+              {/* Details JSON */}
+              {selectedEvent.details && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Details
+                  </span>
+                  <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3 overflow-auto max-h-48">
+                    {JSON.stringify(selectedEvent.details, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Raw payload */}
+              {selectedEvent.raw_payload && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Raw Payload
+                  </span>
+                  <pre className="mt-1 text-sm font-mono text-gray-400 bg-[#0a0a0f] rounded-lg p-3 overflow-auto max-h-32">
+                    {selectedEvent.raw_payload}
+                  </pre>
+                </div>
+              )}
+
+              {/* Geolocation */}
+              {selectedEvent.geolocation && (
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Geolocation
+                  </span>
+                  <div className="mt-1 text-sm text-gray-400 bg-[#0a0a0f] rounded-lg p-3 space-y-1">
+                    <GeoDisplay geo={selectedEvent.geolocation} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function countryFlag(code?: string): string {
   if (!code || code.length !== 2) return '';
@@ -523,19 +512,27 @@ function DetailRow({
   label,
   value,
   mono = false,
+  link,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  link?: string;
 }) {
   return (
     <div>
       <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
         {label}
       </span>
-      <p className={clsx('text-sm text-gray-300 mt-0.5', mono && 'font-mono')}>
-        {value}
-      </p>
+      {link ? (
+        <Link href={link} className={clsx('text-sm text-amber-400 hover:text-amber-300 mt-0.5 block transition-colors', mono && 'font-mono')}>
+          {value}
+        </Link>
+      ) : (
+        <p className={clsx('text-sm text-gray-300 mt-0.5', mono && 'font-mono')}>
+          {value}
+        </p>
+      )}
     </div>
   );
 }
