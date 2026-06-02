@@ -102,7 +102,7 @@ export interface ThreatLevel {
   recent_events: number;
   high_severity_events: number;
   unique_attackers: number;
-  unique_protocols: number;
+  recon_ips: number;
 }
 
 export interface DashboardSummary {

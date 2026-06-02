@@ -154,7 +154,7 @@ class EventProcessor:
 
         The score prioritises *breadth* and *intent* over raw volume:
         - Multiple unique source IPs (breadth of attack)
-        - Multiple protocols from the same IP (reconnaissance)
+        - IPs probing 2+ distinct protocols (reconnaissance)
         - High-severity events capped per-IP (one bot can't dominate)
         - Total event volume with logarithmic scaling (diminishing returns)
 
@@ -166,16 +166,29 @@ class EventProcessor:
         now = datetime.now(timezone.utc)
         one_hour_ago = now - timedelta(hours=1)
 
-        # Single scan for volume, unique IPs, and unique protocols
+        # Single scan for volume and unique IPs
         stats = db.session.query(
             db.func.count(Event.id),
             db.func.count(db.distinct(Event.source_ip)),
-            db.func.count(db.distinct(Event.protocol)),
         ).filter(Event.timestamp >= one_hour_ago).first()
 
         recent_count = stats[0] or 0
         unique_ips = stats[1] or 0
-        unique_protocols = stats[2] or 0
+
+        # Recon signal: count IPs that probed 2+ distinct protocols.
+        # A single IP scanning SSH, FTP, and MySQL is reconnaissance;
+        # nine different IPs each hitting one protocol is not.
+        recon_ips = (
+            db.session.query(db.func.count())
+            .select_from(
+                db.session.query(Event.source_ip)
+                .filter(Event.timestamp >= one_hour_ago)
+                .group_by(Event.source_ip)
+                .having(db.func.count(db.distinct(Event.protocol)) >= 2)
+                .subquery()
+            )
+            .scalar()
+        ) or 0
 
         # High-severity events capped at 5 per source IP so a single bot
         # brute-forcing one service can't push us to critical on its own.
@@ -195,20 +208,20 @@ class EventProcessor:
         # Scoring components:
         #   volume  : log2(events+1) * 2       — 100 events ≈ 13 pts, 1000 ≈ 20
         #   breadth : sqrt(unique_ips) * 4     — diminishing returns per IP
-        #   recon   : unique_protocols * 3     — multi-protocol probing
+        #   recon   : sqrt(recon_ips) * 5      — IPs scanning 2+ protocols
         #   severity: sqrt(capped_high_sev) * 3 — diminishing returns on severity
         volume_score = math.log2(recent_count + 1) * 2
         breadth_score = math.sqrt(unique_ips) * 4
-        recon_score = unique_protocols * 3
+        recon_score = math.sqrt(recon_ips) * 5
         severity_score = math.sqrt(capped_high_sev) * 3
 
         score = min(100, int(volume_score + breadth_score + recon_score + severity_score))
 
         # Thresholds:
-        #   2 IPs, 1 protocol, low sev, 5 events    → ~18 (low)
-        #   8 IPs, 4 protocols, 27 events, some sev  → ~43 (medium)
-        #   30 IPs, 5 protocols, 500 events, high sev → ~71 (high)
-        #   50+ IPs, 7 protocols, 1000+ events        → ~90 (critical)
+        #   2 IPs, 0 recon, low sev, 5 events          → ~14 (low)
+        #   8 IPs, 3 recon, 27 events, some sev         → ~42 (medium)
+        #   30 IPs, 10 recon, 500 events, high sev      → ~70 (high)
+        #   50+ IPs, 20+ recon, 1000+ events             → ~90 (critical)
         if score >= 80:
             level = "critical"
         elif score >= 50:
@@ -224,7 +237,7 @@ class EventProcessor:
             "recent_events": recent_count,
             "high_severity_events": capped_high_sev,
             "unique_attackers": unique_ips,
-            "unique_protocols": unique_protocols,
+            "recon_ips": recon_ips,
         }
 
     # -----------------------------------------------------------------

@@ -124,7 +124,9 @@ export default function ThreatLevelPage() {
   const breadthPoints = threat
     ? Math.round(Math.sqrt(threat.unique_attackers) * 4)
     : 0;
-  const reconPoints = threat ? threat.unique_protocols * 3 : 0;
+  const reconPoints = threat
+    ? Math.round(Math.sqrt(threat.recon_ips) * 5)
+    : 0;
   const severityPoints = threat
     ? Math.round(Math.sqrt(threat.high_severity_events) * 3)
     : 0;
@@ -228,11 +230,11 @@ export default function ThreatLevelPage() {
             />
             <FactorCard
               icon={Radio}
-              label="Protocol Diversity"
-              value={threat?.unique_protocols ?? 0}
-              formula="unique protocols &times; 3"
+              label="Multi-Protocol Scanners"
+              value={threat?.recon_ips ?? 0}
+              formula="&radic;(IPs scanning 2+ protocols) &times; 5"
               points={reconPoints}
-              maxDescription="Multi-protocol probing signals recon"
+              maxDescription="Same IP probing multiple services signals recon"
             />
             <FactorCard
               icon={Flame}
