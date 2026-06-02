@@ -197,6 +197,10 @@ class PerimeterService:
                 dns_data = svc["dns"]
                 version = dns_data.get("version", "")
                 banner = version
+            elif proto_key == "postgresql" and "postgresql" in svc:
+                pg = svc["postgresql"]
+                version = pg.get("server_version", "")
+                banner = version
             elif proto_key == "smb" and "smb" in svc:
                 smb = svc["smb"]
                 version = smb.get("version", "")

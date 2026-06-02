@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 import socket
+import ssl
 import struct
 import threading
 from datetime import datetime, timezone
@@ -25,6 +26,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import (
     rsa_crt_dmq1,
     rsa_crt_iqmp,
 )
+
+from utils.tls import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
 
@@ -243,12 +246,26 @@ def _build_sc_security(server_random: bytes, rsa_key) -> bytes:
     return header + data
 
 
-def _build_sc_core() -> bytes:
+def _build_sc_core(selected_protocol: int = _PROTOCOL_RDP) -> bytes:
     """SC_CORE block: RDP version 5.0+."""
     data = struct.pack("<I", 0x00080004)  # version (5.0+)
-    data += struct.pack("<I", 0)  # clientRequestedProtocols
+    data += struct.pack("<I", selected_protocol)  # clientRequestedProtocols
     data += struct.pack("<I", 0)  # earlyCapabilityFlags
     header = struct.pack("<HH", 0x0C01, len(data) + 4)
+    return header + data
+
+
+def _build_sc_security_none() -> bytes:
+    """SC_SECURITY block with no encryption (for TLS path).
+
+    When TLS wraps the connection, the RDP-level encryption is disabled:
+    ENCRYPTION_METHOD_NONE (0) and ENCRYPTION_LEVEL_NONE (0), with zero-
+    length server random and certificate.
+    """
+    data = struct.pack("<II", 0x00000000, 0x00000000)  # method=NONE, level=NONE
+    data += struct.pack("<I", 0)  # serverRandomLen
+    data += struct.pack("<I", 0)  # serverCertLen
+    header = struct.pack("<HH", 0x0C02, len(data) + 4)
     return header + data
 
 
@@ -301,10 +318,20 @@ def _build_gcc_conference_response(sc_core: bytes, sc_security: bytes,
 
 
 def _build_mcs_connect_response(server_random: bytes, rsa_key,
-                                 channel_ids: list[int]) -> bytes:
-    """Full TPKT + X.224 Data + BER MCS Connect-Response."""
-    sc_core = _build_sc_core()
-    sc_security = _build_sc_security(server_random, rsa_key)
+                                 channel_ids: list[int],
+                                 tls_mode: bool = False) -> bytes:
+    """Full TPKT + X.224 Data + BER MCS Connect-Response.
+
+    When *tls_mode* is True the response uses ``_PROTOCOL_SSL`` in SC_CORE
+    and ``_build_sc_security_none()`` instead of the RSA certificate, since
+    TLS handles all transport-level encryption.
+    """
+    if tls_mode:
+        sc_core = _build_sc_core(_PROTOCOL_SSL)
+        sc_security = _build_sc_security_none()
+    else:
+        sc_core = _build_sc_core()
+        sc_security = _build_sc_security(server_random, rsa_key)
     sc_net = _build_sc_net(channel_ids)
     gcc = _build_gcc_conference_response(sc_core, sc_security, sc_net)
 
@@ -582,6 +609,58 @@ def _parse_client_info(data: bytes, decrypt_key: bytes) -> dict | None:
         return None
 
 
+def _parse_client_info_tls(data: bytes) -> dict | None:
+    """Parse a TLS-mode Client Info PDU for credentials.
+
+    In the TLS path there is no RC4 encryption and the security header
+    is only 4 bytes (flags + flagsHi) with **no** 8-byte MAC signature.
+    The payload after the security header is a cleartext TS_INFO_PACKET.
+    """
+    if len(data) < 15:
+        return None
+
+    offset = 7  # TPKT(4) + X.224(3)
+
+    try:
+        # Skip MCS SendDataRequest: tag(1) + initiator(2) + channelId(2) +
+        # priority/seg(1) + userData PER length (variable)
+        sec_offset = offset + 1 + 2 + 2 + 1
+        if sec_offset >= len(data):
+            return None
+        # PER length
+        if data[sec_offset] & 0x80:
+            sec_offset += 2
+        else:
+            sec_offset += 1
+
+        # Security header: flags(2) + flagsHi(2) -- NO MAC in TLS mode
+        if sec_offset + 4 > len(data):
+            return None
+        flags = struct.unpack_from("<H", data, sec_offset)[0]
+
+        # SEC_INFO_PKT = 0x0040
+        if flags & 0x0040 == 0:
+            for alt in range(offset + 6, min(offset + 20, len(data) - 4)):
+                f = struct.unpack_from("<H", data, alt)[0]
+                if f & 0x0040:
+                    sec_offset = alt
+                    flags = f
+                    break
+            else:
+                return None
+
+        sec_offset += 4  # skip flags + flagsHi (no MAC to skip)
+
+        cleartext = data[sec_offset:]
+        if len(cleartext) < 18:
+            return None
+
+        return _parse_ts_info_packet(cleartext)
+
+    except Exception:
+        return None
+
+
 def _parse_ts_info_packet(data: bytes) -> dict | None:
     """Parse a decrypted TS_INFO_PACKET for domain, username, password.
 
@@ -662,6 +741,15 @@ class RDPHoneypot:
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
         self._rsa_key = _generate_rsa_512()
+        self._tls_context = self._create_tls_context()
+
+    @staticmethod
+    def _create_tls_context() -> ssl.SSLContext:
+        """Create a TLS server context using the shared self-signed cert."""
+        cert_path, key_path = ensure_self_signed_cert()
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert_path, key_path)
+        return ctx
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -716,6 +804,8 @@ class RDPHoneypot:
         from models import db as _db
 
         session_id: str | None = None
+        sock: socket.socket = client_sock  # may be replaced by TLS socket
+        use_tls = False
         app_ctx = self.app.app_context() if self.app else None
         if app_ctx:
             app_ctx.push()
@@ -740,6 +830,10 @@ class RDPHoneypot:
             if cr_info is None:
                 return
 
+            # Decide negotiation path based on requested protocols
+            req_protocols = cr_info.get("requested_protocols") or 0
+            use_tls = bool(req_protocols & _PROTOCOL_SSL)
+
             # Create session
             if self.session_recorder:
                 sess = self.session_recorder.start_session(addr[0], "rdp")
@@ -747,6 +841,15 @@ class RDPHoneypot:
 
             # Emit connection event (mstshash username, protocols)
             self._emit_connection_event(addr, session_id, cr_info)
+
+            if use_tls:
+                # --- TLS negotiation path ---
+                selected_protocol = _PROTOCOL_SSL
+                cc_output = "X224_CC PROTOCOL_SSL"
+            else:
+                # --- Standard RDP security path ---
+                selected_protocol = _PROTOCOL_RDP
+                cc_output = "X224_CC PROTOCOL_RDP"
 
             # Record command if we have a session
             if self.session_recorder and session_id:
@@ -758,15 +861,35 @@ class RDPHoneypot:
                     session_id,
                     " ".join(parts),
                     datetime.now(timezone.utc),
-                    output="X224_CC PROTOCOL_RDP",
+                    output=cc_output,
                 )
 
-            # Send X.224 Connection Confirm (selecting standard RDP security)
-            response = self._build_x224_cc()
+            # Send X.224 Connection Confirm
+            response = self._build_x224_cc(selected_protocol)
             client_sock.sendall(response)
 
+            # ---- TLS handshake (if TLS path) ----
+            if use_tls:
+                try:
+                    sock = self._tls_context.wrap_socket(
+                        client_sock, server_side=True,
+                    )
+                except (ssl.SSLError, OSError):
+                    logger.debug(
+                        "RDP TLS handshake failed for %s", addr[0],
+                    )
+                    return
+
+                if self.session_recorder and session_id:
+                    self.session_recorder.record_command(
+                        session_id,
+                        "TLS handshake",
+                        datetime.now(timezone.utc),
+                        output="TLS handshake complete",
+                    )
+
             # ---- Phase 2: MCS Connect Initial / Response ----
-            pdu = _recv_tpkt_pdu(client_sock)
+            pdu = _recv_tpkt_pdu(sock)
             if pdu is None:
                 # Client disconnected -- scanner that only does X.224
                 return
@@ -787,9 +910,10 @@ class RDPHoneypot:
             server_random = secrets.token_bytes(32)
             channel_ids = [1004, 1005, 1006]  # virtual channels
             mcs_resp = _build_mcs_connect_response(
-                server_random, self._rsa_key, channel_ids
+                server_random, self._rsa_key, channel_ids,
+                tls_mode=use_tls,
             )
-            client_sock.sendall(mcs_resp)
+            sock.sendall(mcs_resp)
 
             if self.session_recorder and session_id:
                 self.session_recorder.record_command(
@@ -800,23 +924,23 @@ class RDPHoneypot:
                 )
 
             # ---- Phase 3: Erect Domain Request (discard) ----
-            pdu = _recv_tpkt_pdu(client_sock)
+            pdu = _recv_tpkt_pdu(sock)
             if pdu is None:
                 return
 
             # ---- Phase 4: Attach User Request → Confirm ----
-            pdu = _recv_tpkt_pdu(client_sock)
+            pdu = _recv_tpkt_pdu(sock)
             if pdu is None:
                 return
 
             user_channel = _USER_CHANNEL_BASE
             confirm = _build_mcs_attach_user_confirm(user_channel)
-            client_sock.sendall(confirm)
+            sock.sendall(confirm)
 
             # ---- Phase 5: Channel Join loop ----
             all_channels = [_IO_CHANNEL] + channel_ids + [user_channel]
             for _ in range(len(all_channels) + 5):  # generous limit
-                pdu = _recv_tpkt_pdu(client_sock)
+                pdu = _recv_tpkt_pdu(sock)
                 if pdu is None:
                     return
 
@@ -830,32 +954,45 @@ class RDPHoneypot:
                     cj_confirm = _build_mcs_channel_join_confirm(
                         user_channel, req_channel
                     )
-                    client_sock.sendall(cj_confirm)
+                    sock.sendall(cj_confirm)
                 else:
-                    # Not a Channel Join Request -- must be Security Exchange
+                    # Not a Channel Join Request -- next phase
                     break
 
-            # ---- Phase 6: Security Exchange (RSA-encrypted client_random) ----
-            # 'pdu' may already be the Security Exchange if the loop broke
-            client_random = _parse_security_exchange(pdu, self._rsa_key)
-            if client_random is None:
-                # Try reading one more PDU
-                pdu = _recv_tpkt_pdu(client_sock)
-                if pdu is None:
-                    return
+            if use_tls:
+                # ---- TLS path: Client Info PDU (cleartext, no Security Exchange) ----
+                # 'pdu' from the channel join loop break is the Client Info PDU
+                creds = _parse_client_info_tls(pdu)
+                if creds is None:
+                    # Try reading one more PDU
+                    pdu = _recv_tpkt_pdu(sock)
+                    if pdu is None:
+                        return
+                    creds = _parse_client_info_tls(pdu)
+            else:
+                # ---- Standard RDP path: Security Exchange → Client Info ----
+                # Phase 6: Security Exchange (RSA-encrypted client_random)
+                # 'pdu' may already be the Security Exchange if the loop broke
                 client_random = _parse_security_exchange(pdu, self._rsa_key)
                 if client_random is None:
+                    # Try reading one more PDU
+                    pdu = _recv_tpkt_pdu(sock)
+                    if pdu is None:
+                        return
+                    client_random = _parse_security_exchange(pdu, self._rsa_key)
+                    if client_random is None:
+                        return
+
+                # Phase 7: Derive session keys
+                _mac_key, decrypt_key = _derive_keys(client_random, server_random)
+
+                # Phase 8: Client Info PDU (RC4-encrypted credentials)
+                pdu = _recv_tpkt_pdu(sock)
+                if pdu is None:
                     return
 
-            # ---- Phase 7: Derive session keys ----
-            _mac_key, decrypt_key = _derive_keys(client_random, server_random)
+                creds = _parse_client_info(pdu, decrypt_key)
 
-            # ---- Phase 8: Client Info PDU (RC4-encrypted credentials) ----
-            pdu = _recv_tpkt_pdu(client_sock)
-            if pdu is None:
-                return
-
-            creds = _parse_client_info(pdu, decrypt_key)
             if creds:
                 self._emit_auth_event(
                     addr, session_id,
@@ -872,7 +1009,8 @@ class RDPHoneypot:
                         output="(credentials captured, connection closed)",
                     )
 
-        except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
+        except (ssl.SSLError, socket.timeout, ConnectionResetError,
+                BrokenPipeError, OSError):
             pass
         except Exception:
             logger.exception("RDP handler error for %s", addr)
@@ -882,7 +1020,7 @@ class RDPHoneypot:
             if session_id and self.session_recorder:
                 self.session_recorder.end_session(session_id)
             try:
-                client_sock.close()
+                sock.close()
             except OSError:
                 pass
             if app_ctx:
@@ -972,14 +1110,14 @@ class RDPHoneypot:
 
         return None
 
-    def _build_x224_cc(self) -> bytes:
+    def _build_x224_cc(self, selected_protocol: int = _PROTOCOL_RDP) -> bytes:
         """Build a complete TPKT + X.224 Connection Confirm + RDP Negotiation
-        Response selecting standard RDP security.
+        Response.
 
         Total: 19 bytes
           TPKT header:    4 bytes (version=3, reserved=0, length=19)
           X.224 CC:       7 bytes (length=14, type=0xD0, dst/src/class)
-          RDP Neg RSP:    8 bytes (type=0x02, flags=0, length=8, protocol=0)
+          RDP Neg RSP:    8 bytes (type=0x02, flags=0, length=8, protocol)
         """
         pkt = bytearray(19)
 
@@ -1001,7 +1139,7 @@ class RDPHoneypot:
         pkt[11] = _RDP_NEG_RSP  # type
         pkt[12] = 0x00          # flags
         struct.pack_into("<H", pkt, 13, 8)  # length
-        struct.pack_into("<I", pkt, 15, _PROTOCOL_RDP)  # selected protocol: standard RDP
+        struct.pack_into("<I", pkt, 15, selected_protocol)
 
         return bytes(pkt)
 

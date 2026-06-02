@@ -18,7 +18,7 @@ services:
 #      - "5353:5353/udp"  # DNS honeypot (UDP)
 #      - "5353:5353/tcp"  # DNS honeypot (TCP)
       - "4450:4450"   # SMB honeypot
-      - "4400-4404:4400-4404"  # FTP passive data ports
+      - "40000-40049:40000-40049"  # FTP passive data ports
     volumes:
       - ./backend:/app
       - ./data:/data

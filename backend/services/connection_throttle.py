@@ -102,6 +102,7 @@ class ConnectionThrottler:
             )
 
             new_blocks = 0
+            newly_blocked: list[tuple[str, str]] = []
             for ip, protocol, _count in high_volume:
                 key = (ip, protocol)
                 if key not in self._blocked_until:
@@ -112,6 +113,7 @@ class ConnectionThrottler:
                             ip=ip, protocol=protocol, expires_at=expires_at
                         )
                     )
+                    newly_blocked.append((ip, protocol))
                     new_blocks += 1
 
             if new_blocks:
@@ -120,6 +122,16 @@ class ConnectionThrottler:
                     "Created %d throttle blocks from recent event history",
                     new_blocks,
                 )
+
+            # Mark existing events from all blocked IPs as throttled
+            all_blocked_ips = set(self._blocked_until.keys())
+            for ip, protocol in all_blocked_ips:
+                Event.query.filter_by(
+                    source_ip=ip, protocol=protocol,
+                ).filter(
+                    Event.throttled != True,  # noqa: E712
+                ).update({"throttled": True})
+            db.session.commit()
 
     def _persist_block(self, ip: str, protocol: str, duration: int) -> None:
         """Upsert a throttle block row in the database."""
@@ -148,6 +160,27 @@ class ConnectionThrottler:
                 ip,
                 protocol,
                 exc_info=True,
+            )
+
+    def _mark_events_throttled(self, ip: str, protocol: str) -> None:
+        """Flag all existing events from this IP/protocol as throttled so
+        they can be bulk-purged during retention."""
+        if self._app is None:
+            return
+        try:
+            with self._app.app_context():
+                from models import Event, db
+
+                Event.query.filter_by(
+                    source_ip=ip, protocol=protocol,
+                ).filter(
+                    Event.throttled != True,  # noqa: E712
+                ).update({"throttled": True})
+                db.session.commit()
+        except Exception:
+            logger.debug(
+                "Failed to mark events throttled for %s/%s",
+                ip, protocol, exc_info=True,
             )
 
     def _remove_block(self, ip: str, protocol: str) -> None:
@@ -199,6 +232,7 @@ class ConnectionThrottler:
 
         if persist:
             self._persist_block(ip, protocol, duration)
+            self._mark_events_throttled(ip, protocol)
 
     def is_blocked(self, ip: str, protocol: str) -> bool:
         """Return True if the IP is currently blocked on this protocol."""
@@ -277,6 +311,7 @@ class ConnectionThrottler:
 
         if persist:
             self._persist_block(ip, protocol, duration)
+            self._mark_events_throttled(ip, protocol)
 
         return allowed
 

@@ -323,6 +323,9 @@ def create_app(config_class=Config) -> Flask:
                     logger.debug("Failed to aggregate day %s", day, exc_info=True)
                 day += timedelta(days=1)
 
+        # Purge throttled events (already counted in daily stats)
+        deleted_throttled = Event.query.filter(Event.throttled == True).delete()  # noqa: E712
+
         deleted_events = Event.query.filter(Event.timestamp < cutoff).delete()
         deleted_sessions = SessionModel.query.filter(
             SessionModel.status != "active",
@@ -330,6 +333,8 @@ def create_app(config_class=Config) -> Flask:
         ).delete()
         db.session.commit()
 
+        if deleted_throttled:
+            logger.info("Retention: purged %d throttled events", deleted_throttled)
         if deleted_events or deleted_sessions:
             logger.info(
                 "Retention: pruned %d events and %d sessions older than %d days",
@@ -388,6 +393,19 @@ def _run_migrations() -> None:
             conn.commit()
             logger.info("Migration: added blocked_events column to daily_stats table")
 
+        # Add throttled column to events
+        result = conn.execute(sqlalchemy.text("PRAGMA table_info(events)"))
+        columns = {row[1] for row in result}
+        if "throttled" not in columns:
+            conn.execute(sqlalchemy.text(
+                "ALTER TABLE events ADD COLUMN throttled BOOLEAN DEFAULT 0"
+            ))
+            conn.execute(sqlalchemy.text(
+                "CREATE INDEX IF NOT EXISTS ix_events_throttled ON events (throttled)"
+            ))
+            conn.commit()
+            logger.info("Migration: added throttled column to events table")
+
 
 def _seed_defaults() -> None:
     """Populate default honeypot configs and system settings if the tables
@@ -422,14 +440,14 @@ def _seed_defaults() -> None:
                 "protocol": "telnet",
                 "port": Config.TELNET_HONEYPOT_PORT,
                 "description": "Fake telnet server capturing credentials and commands",
-                "config": {},
+                "config": {"banner": "Welcome to Gateway Management Console"},
             },
             {
                 "name": "FTP Honeypot",
                 "protocol": "ftp",
                 "port": Config.FTP_HONEYPOT_PORT,
                 "description": "Fake FTP server logging credentials and file access attempts",
-                "config": {},
+                "config": {"banner": "220 (vsFTPd 3.0.5)"},
             },
             {
                 "name": "MySQL Honeypot",
@@ -483,6 +501,23 @@ def _seed_defaults() -> None:
     if new_honeypots:
         db.session.commit()
         logger.info("Seeded %d default honeypots", len(new_honeypots))
+
+    # Backfill missing banner keys for protocols that were seeded with empty
+    # configs in older versions.
+    _banner_backfill: dict[str, dict[str, str]] = {
+        "ftp": {"banner": "220 (vsFTPd 3.0.5)"},
+        "telnet": {"banner": "Welcome to Gateway Management Console"},
+    }
+    for proto, patch in _banner_backfill.items():
+        hp = Honeypot.query.filter_by(protocol=proto).first()
+        if not hp:
+            continue
+        cfg = json.loads(hp.config) if isinstance(hp.config, str) else (hp.config or {})
+        if any(k in cfg for k in ("banner", "server_header", "version_string", "version")):
+            continue  # already has a banner key — don't overwrite
+        cfg.update(patch)
+        hp.config = json.dumps(cfg)
+    db.session.commit()
 
 
 # ---------------------------------------------------------------------------
