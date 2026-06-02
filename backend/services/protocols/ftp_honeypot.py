@@ -10,6 +10,8 @@ import socket
 import threading
 from datetime import datetime, timezone
 
+from utils.helpers import classify_auth_severity
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -386,7 +388,7 @@ class FTPHoneypot:
                             "source_ip": addr[0],
                             "source_port": addr[1],
                             "destination_port": self.port,
-                            "severity": "high",
+                            "severity": classify_auth_severity(username, password),
                             "session_id": session_id,
                             "details": {"username": username, "password": password},
                         })

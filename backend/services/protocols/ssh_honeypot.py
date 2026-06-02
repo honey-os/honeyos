@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 import paramiko
 
+from utils.helpers import classify_auth_severity
+
 logger = logging.getLogger(__name__)
 
 # Generate a persistent host key once at module load.
@@ -45,7 +47,7 @@ class _ServerInterface(paramiko.ServerInterface):
                     "source_ip": self.client_addr[0],
                     "source_port": self.client_addr[1],
                     "destination_port": self.port,
-                    "severity": "high",
+                    "severity": classify_auth_severity(username, password),
                     "details": {"username": username, "password": password},
                 })
 

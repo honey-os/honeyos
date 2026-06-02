@@ -13,6 +13,8 @@ import struct
 import threading
 from datetime import datetime, timezone
 
+from utils.helpers import classify_auth_severity
+
 logger = logging.getLogger(__name__)
 
 # SMB protocol magic bytes
@@ -635,7 +637,7 @@ class SMBHoneypot:
                 "source_ip": addr[0],
                 "source_port": addr[1],
                 "destination_port": self.port,
-                "severity": "high",
+                "severity": classify_auth_severity(creds.get("username", ""), None),
                 "session_id": session_id,
                 "details": {
                     "domain": creds.get("domain", ""),
