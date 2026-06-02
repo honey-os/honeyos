@@ -26,7 +26,7 @@ When an attacker compromises a device on your network, they scan for other targe
 ### Docker (any Linux host)
 
 ```bash
-git clone https://github.com/your-repo/honeyos.git
+git clone https://github.com/honey-os/honeyos.git
 cd honeyos
 make setup    # creates .env from template
 make prod     # builds and starts everything
@@ -37,7 +37,7 @@ Open `https://localhost:7777` in your browser (accept the self-signed certificat
 ### Raspberry Pi
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-repo/honeyos/main/bin/setup-pi.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/honey-os/honeyos/main/bin/setup-pi.sh | sudo bash
 ```
 
 Access at `https://honeyos.local:7777` after setup completes (accept the self-signed certificate warning).
