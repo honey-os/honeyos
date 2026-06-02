@@ -1,10 +1,13 @@
 """Tests for backend/services/protocols/rdp_honeypot.py"""
 
+import datetime
 import socket
+import ssl as _ssl_mod
 import struct
 import threading
 import time
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from services.protocols.rdp_honeypot import (
@@ -13,15 +16,76 @@ from services.protocols.rdp_honeypot import (
     _build_mcs_channel_join_confirm,
     _build_mcs_connect_response,
     _build_proprietary_cert,
+    _build_sc_security_none,
     _derive_keys,
     _generate_rsa_512,
     _parse_client_info,
+    _parse_client_info_tls,
     _parse_security_exchange,
     _parse_ts_info_packet,
     _rc4,
     _INFO_UNICODE,
+    _PROTOCOL_RDP,
+    _PROTOCOL_SSL,
     _TPKT_VERSION,
 )
+
+
+def _generate_temp_cert(tmp_dir):
+    """Generate a temporary self-signed cert for testing."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, "test"),
+    ])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
+        .not_valid_after(
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=1)
+        )
+        .sign(key, hashes.SHA256())
+    )
+
+    cert_path = str(tmp_dir / "test.pem")
+    key_path = str(tmp_dir / "test.key")
+
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+    with open(key_path, "wb") as f:
+        f.write(key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        ))
+
+    return cert_path, key_path
+
+
+# Cache cert paths so we only generate once per test session
+_cached_cert = None
+
+
+@pytest.fixture(autouse=True)
+def _mock_tls_cert(tmp_path, monkeypatch):
+    """Monkeypatch ensure_self_signed_cert so RDPHoneypot.__init__ works
+    without /data access."""
+    global _cached_cert
+    if _cached_cert is None:
+        _cached_cert = _generate_temp_cert(tmp_path)
+    monkeypatch.setattr(
+        "services.protocols.rdp_honeypot.ensure_self_signed_cert",
+        lambda: _cached_cert,
+    )
 
 
 def _make_rdp():
@@ -562,3 +626,158 @@ class TestClientInfoParsing:
 
     def test_too_short_returns_none(self):
         assert _parse_ts_info_packet(b"\x00" * 10) is None
+
+
+# ======================================================================
+# TLS path tests
+# ======================================================================
+
+class TestBuildX224CCWithProtocol:
+    """Test parameterized X.224 CC builder."""
+
+    def test_selects_protocol_ssl(self):
+        hp = _make_rdp()
+        cc = hp._build_x224_cc(selected_protocol=_PROTOCOL_SSL)
+        selected = struct.unpack_from("<I", cc, 15)[0]
+        assert selected == _PROTOCOL_SSL
+
+    def test_default_is_protocol_rdp(self):
+        hp = _make_rdp()
+        cc = hp._build_x224_cc()
+        selected = struct.unpack_from("<I", cc, 15)[0]
+        assert selected == _PROTOCOL_RDP
+
+
+class TestBuildScSecurityNone:
+    """Test SC_SECURITY block with no encryption (TLS path)."""
+
+    def test_encryption_method_none(self):
+        block = _build_sc_security_none()
+        # Skip header (4 bytes): type(2) + length(2)
+        method = struct.unpack_from("<I", block, 4)[0]
+        level = struct.unpack_from("<I", block, 8)[0]
+        assert method == 0  # ENCRYPTION_METHOD_NONE
+        assert level == 0   # ENCRYPTION_LEVEL_NONE
+
+    def test_no_server_random_or_cert(self):
+        block = _build_sc_security_none()
+        random_len = struct.unpack_from("<I", block, 12)[0]
+        cert_len = struct.unpack_from("<I", block, 16)[0]
+        assert random_len == 0
+        assert cert_len == 0
+
+
+class TestMCSConnectResponseTLS:
+    """Test MCS Connect Response in TLS mode."""
+
+    def test_valid_tpkt_header(self):
+        key = _generate_rsa_512()
+        sr = b"\x11" * 32
+        resp = _build_mcs_connect_response(sr, key, [1004, 1005], tls_mode=True)
+        assert resp[0] == _TPKT_VERSION
+        pkt_len = struct.unpack(">H", resp[2:4])[0]
+        assert pkt_len == len(resp)
+
+    def test_does_not_contain_rsa_modulus(self):
+        key = _generate_rsa_512()
+        pub = key.public_key().public_numbers()
+        modulus_le = pub.n.to_bytes(64, "little")
+        sr = b"\x00" * 32
+        resp = _build_mcs_connect_response(sr, key, [1004], tls_mode=True)
+        assert modulus_le not in resp
+
+
+class TestParseClientInfoTLS:
+    """Test TLS-mode Client Info PDU parsing (no RC4, no MAC)."""
+
+    def _build_ts_info_packet(self, domain="WORKGROUP", username="admin",
+                               password="pass123", unicode=True):
+        """Build a raw TS_INFO_PACKET."""
+        flags = _INFO_UNICODE if unicode else 0x0000
+        encoding = "utf-16-le" if unicode else "ascii"
+        null = b"\x00\x00" if unicode else b"\x00"
+
+        domain_bytes = domain.encode(encoding)
+        username_bytes = username.encode(encoding)
+        password_bytes = password.encode(encoding)
+        alt_shell = b""
+        working_dir = b""
+
+        header = struct.pack("<I", 0)  # codePage
+        header += struct.pack("<I", flags)
+        header += struct.pack("<H", len(domain_bytes))
+        header += struct.pack("<H", len(username_bytes))
+        header += struct.pack("<H", len(password_bytes))
+        header += struct.pack("<H", len(alt_shell))
+        header += struct.pack("<H", len(working_dir))
+
+        body = domain_bytes + null
+        body += username_bytes + null
+        body += password_bytes + null
+        body += alt_shell + null
+        body += working_dir + null
+
+        return header + body
+
+    def _build_tls_client_info_pdu(self, ts_info):
+        """Wrap a TS_INFO_PACKET in a TLS-mode Client Info PDU.
+
+        TLS mode: security header is 4 bytes (flags + flagsHi) with no MAC.
+        Payload is cleartext (no RC4 encryption).
+        """
+        # Security header: SEC_INFO_PKT (0x0040) + flagsHi, NO 8-byte MAC
+        sec_header = struct.pack("<H", 0x0040)
+        sec_header += struct.pack("<H", 0x0000)
+
+        # MCS SendDataRequest header
+        mcs_header = bytearray()
+        mcs_header.append(0x64)  # SendDataRequest
+        mcs_header += struct.pack(">H", 6)  # initiator
+        mcs_header += struct.pack(">H", 1003)  # channelId
+        mcs_header.append(0x70)  # priority/segmentation
+
+        payload = sec_header + ts_info
+        ud_len = len(payload)
+        if ud_len >= 0x80:
+            mcs_header += struct.pack(">H", ud_len | 0x8000)
+        else:
+            mcs_header.append(ud_len)
+
+        inner = bytes(mcs_header) + payload
+        x224_data = b"\x02\xf0\x80"
+        total_len = 4 + len(x224_data) + len(inner)
+        tpkt = struct.pack(">BBH", _TPKT_VERSION, 0, total_len)
+        return tpkt + x224_data + inner
+
+    def test_cleartext_credentials(self):
+        ts_info = self._build_ts_info_packet(
+            domain="CORP", username="admin", password="P@ssw0rd", unicode=True
+        )
+        pdu = self._build_tls_client_info_pdu(ts_info)
+        result = _parse_client_info_tls(pdu)
+        assert result is not None
+        assert result["username"] == "admin"
+        assert result["password"] == "P@ssw0rd"
+        assert result["domain"] == "CORP"
+
+    def test_unicode_and_ascii(self):
+        for use_unicode in (True, False):
+            ts_info = self._build_ts_info_packet(
+                domain="TEST", username="user1", password="secret",
+                unicode=use_unicode,
+            )
+            pdu = self._build_tls_client_info_pdu(ts_info)
+            result = _parse_client_info_tls(pdu)
+            assert result is not None, f"Failed for unicode={use_unicode}"
+            assert result["username"] == "user1"
+            assert result["password"] == "secret"
+            assert result["domain"] == "TEST"
+
+
+class TestTLSContext:
+    """Test TLS context creation on RDPHoneypot."""
+
+    def test_context_created(self):
+        """Verify _tls_context is an ssl.SSLContext instance."""
+        hp = _make_rdp()
+        assert isinstance(hp._tls_context, _ssl_mod.SSLContext)
