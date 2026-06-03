@@ -411,9 +411,20 @@ class FTPHoneypot:
                     client_sock.sendall(b"215 UNIX Type: L8\r\n")
 
                 elif cmd == "FEAT":
-                    feat_lines = ["211-Features:", " PASV", " UTF8"]
+                    feat_lines = ["211-Features:"]
                     if self._tls_context:
                         feat_lines.append(" AUTH TLS")
+                        feat_lines.append(" PBSZ")
+                        feat_lines.append(" PROT")
+                    feat_lines.extend([
+                        " EPSV",
+                        " MDTM",
+                        " PASV",
+                        " REST STREAM",
+                        " SIZE",
+                        " TVFS",
+                        " UTF8",
+                    ])
                     feat_lines.append("211 End")
                     reply = "\n".join(feat_lines)
                     client_sock.sendall(("\r\n".join(feat_lines) + "\r\n").encode())
