@@ -7,10 +7,12 @@ import logging
 import os
 import posixpath
 import socket
+import ssl
 import threading
 from datetime import datetime, timezone
 
 from utils.helpers import classify_auth_severity
+from utils.tls import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +170,7 @@ class FTPHoneypot:
         self.connection_throttler = connection_throttler
         self._server_socket: socket.socket | None = None
         self._stop_event = threading.Event()
+        self._tls_context: ssl.SSLContext | None = None
 
         # Passive-mode data channel settings.
         # pasv_address: IP to advertise in PASV responses.  Inside Docker the
@@ -213,6 +216,16 @@ class FTPHoneypot:
     # ------------------------------------------------------------------
 
     def run(self) -> None:
+        # Prepare a TLS context for AUTH TLS (explicit FTPS) upgrades.
+        try:
+            cert_path, key_path = ensure_self_signed_cert()
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert_path, key_path)
+            self._tls_context = ctx
+        except Exception as exc:
+            logger.warning("FTP: TLS context unavailable, AUTH TLS will be refused: %s", exc)
+            self._tls_context = None
+
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.settimeout(1.0)
@@ -398,8 +411,12 @@ class FTPHoneypot:
                     client_sock.sendall(b"215 UNIX Type: L8\r\n")
 
                 elif cmd == "FEAT":
-                    reply = "211-Features:\n PASV\n UTF8\n211 End"
-                    client_sock.sendall(b"211-Features:\r\n PASV\r\n UTF8\r\n211 End\r\n")
+                    feat_lines = ["211-Features:", " PASV", " UTF8"]
+                    if self._tls_context:
+                        feat_lines.append(" AUTH TLS")
+                    feat_lines.append("211 End")
+                    reply = "\n".join(feat_lines)
+                    client_sock.sendall(("\r\n".join(feat_lines) + "\r\n").encode())
 
                 elif cmd == "OPTS":
                     reply = f"200 {arg} OK"
@@ -407,8 +424,33 @@ class FTPHoneypot:
 
                 elif cmd == "AUTH":
                     auth_type = arg.upper()
-                    reply = f"504 AUTH {auth_type} not supported"
-                    client_sock.sendall(f"504 AUTH {auth_type} not supported\r\n".encode())
+                    if auth_type in ("TLS", "SSL") and self._tls_context:
+                        reply = f"234 Using authentication type {auth_type}"
+                        client_sock.sendall(f"234 Using authentication type {auth_type}\r\n".encode())
+                        try:
+                            client_sock = self._tls_context.wrap_socket(
+                                client_sock, server_side=True,
+                            )
+                            logger.debug("FTP control connection upgraded to TLS for %s", addr[0])
+                        except (ssl.SSLError, OSError) as exc:
+                            logger.debug("FTP TLS handshake failed for %s: %s", addr[0], exc)
+                            break
+                    else:
+                        reply = f"504 AUTH {auth_type} not supported"
+                        client_sock.sendall(f"504 AUTH {auth_type} not supported\r\n".encode())
+
+                elif cmd == "PBSZ":
+                    reply = "200 PBSZ=0"
+                    client_sock.sendall(b"200 PBSZ=0\r\n")
+
+                elif cmd == "PROT":
+                    prot_level = arg.upper()
+                    if prot_level in ("P", "C"):
+                        reply = f"200 Protection level set to {prot_level}"
+                        client_sock.sendall(f"200 Protection level set to {prot_level}\r\n".encode())
+                    else:
+                        reply = f"504 Protection level {prot_level} not supported"
+                        client_sock.sendall(f"504 Protection level {prot_level} not supported\r\n".encode())
 
                 elif cmd == "PWD":
                     reply = f'257 "{cwd}" is current directory'
