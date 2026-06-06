@@ -22,7 +22,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
-THROTTLE_EVENT_THRESHOLD = int(os.getenv("THROTTLE_EVENT_THRESHOLD", "500"))
 
 
 def generate_id():
@@ -249,52 +248,6 @@ def main():
     print(f"  Scanned {days_scanned} days, created {total_created} stat rows")
     print()
 
-    # --- Step 5: Identify throttled + high-volume events ---
-    # First: check for the throttled column (present after latest migration)
-    cols = {row["name"] for row in conn.execute("PRAGMA table_info(events)")}
-    has_throttled_col = "throttled" in cols
-
-    throttled_count = 0
-    if has_throttled_col:
-        throttled_count = conn.execute(
-            "SELECT COUNT(*) FROM events WHERE throttled = 1"
-        ).fetchone()[0]
-
-    # Also find high-volume IPs that weren't flagged yet (pre-migration data)
-    if has_throttled_col:
-        heavy_hitters = conn.execute("""
-            SELECT source_ip, protocol, COUNT(*) as cnt
-            FROM events
-            WHERE throttled != 1
-            GROUP BY source_ip, protocol
-            HAVING cnt >= ?
-            ORDER BY cnt DESC
-        """, (THROTTLE_EVENT_THRESHOLD,)).fetchall()
-    else:
-        heavy_hitters = conn.execute("""
-            SELECT source_ip, protocol, COUNT(*) as cnt
-            FROM events
-            GROUP BY source_ip, protocol
-            HAVING cnt >= ?
-            ORDER BY cnt DESC
-        """, (THROTTLE_EVENT_THRESHOLD,)).fetchall()
-
-    heavy_total = sum(r["cnt"] for r in heavy_hitters)
-    total_purgeable = throttled_count + heavy_total
-
-    if throttled_count:
-        print(f"Events flagged as throttled:  {throttled_count:,}")
-    if heavy_hitters:
-        print(f"Unflagged IPs with >= {THROTTLE_EVENT_THRESHOLD} events:")
-        for r in heavy_hitters:
-            print(f"  {r['source_ip']:>15}  {r['protocol']:<10}  {r['cnt']:>10,} events")
-        print(f"  {'':>15}  {'SUBTOTAL':<10}  {heavy_total:>10,} events")
-    if total_purgeable:
-        print(f"Total purgeable:             {total_purgeable:,}")
-    else:
-        print("No throttled/high-volume events to purge.")
-    print()
-
     if dry_run:
         old_events = conn.execute(
             "SELECT COUNT(*) FROM events WHERE timestamp < ?", (cutoff_str,)
@@ -308,7 +261,6 @@ def main():
             (cutoff_str,),
         ).fetchone()[0]
         print(f"DRY RUN -- would delete:")
-        print(f"  Throttled / high-volume IP events:         {total_purgeable:,}")
         print(f"  Events older than {RETENTION_DAYS} days:            {old_events:,}")
         print(f"  Completed sessions older than {RETENTION_DAYS} days: {old_sessions:,}")
         print(f"  Stale active sessions:                     {stale_active:,}")
@@ -317,28 +269,7 @@ def main():
         conn.close()
         return
 
-    # --- Step 6: Purge throttled events ---
-    purged = 0
-    if throttled_count:
-        print("Purging events flagged as throttled...")
-        conn.execute("DELETE FROM events WHERE throttled = 1")
-        purged += conn.execute("SELECT changes()").fetchone()[0]
-        conn.commit()
-        print(f"  Purged {purged:,} throttled events")
-
-    if heavy_hitters:
-        print("Purging unflagged high-volume IP events...")
-        for r in heavy_hitters:
-            conn.execute(
-                "DELETE FROM events WHERE source_ip = ? AND protocol = ?",
-                (r["source_ip"], r["protocol"]),
-            )
-            purged += conn.execute("SELECT changes()").fetchone()[0]
-        conn.commit()
-        print(f"  Total purged: {purged:,}")
-    print()
-
-    # --- Step 7: Delete old events ---
+    # --- Step 5: Delete old events ---
     print("Deleting events older than retention cutoff...")
     conn.execute("DELETE FROM events WHERE timestamp < ?", (cutoff_str,))
     deleted_events = conn.execute("SELECT changes()").fetchone()[0]
