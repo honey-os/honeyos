@@ -14,12 +14,12 @@ RUN npm run build
 # ── Stage 2: Runtime (Caddy + Python + Node) ────────────────────────
 FROM node:20-slim
 
+ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv gcc libffi-dev \
-    curl debian-keyring debian-archive-keyring apt-transport-https openssl \
-    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
-    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list \
-    && apt-get update && apt-get install -y --no-install-recommends caddy \
+    python3 python3-pip python3-venv gcc libffi-dev curl openssl \
+    && CADDY_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") \
+    && curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" -o /usr/local/bin/caddy \
+    && chmod +x /usr/local/bin/caddy \
     && rm -rf /var/lib/apt/lists/*
 
 # Python venv + dependencies
