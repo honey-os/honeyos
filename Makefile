@@ -16,7 +16,7 @@ setup: ## Initial project setup - copy env file
 		echo ".env already exists"; \
 	fi
 
-build: ## Build all Docker images
+build: ## Build the production Docker image
 	docker compose build
 
 dev: setup ## Start development environment
@@ -39,12 +39,6 @@ clean: ## Stop all services and remove volumes
 logs: ## Tail logs from all services
 	docker compose logs -f
 
-logs-backend: ## Tail backend logs
-	docker compose logs -f backend
-
-logs-frontend: ## Tail frontend logs
-	docker compose logs -f frontend
-
 status: ## Show status of all services
 	docker compose ps
 
@@ -56,18 +50,14 @@ test-frontend: ## Run frontend tests
 
 test: test-backend test-frontend ## Run all tests
 
-backend-shell: ## Open shell in backend container
-	docker compose exec backend /bin/bash
-
-frontend-shell: ## Open shell in frontend container
-	docker compose exec frontend /bin/sh
+shell: ## Open shell in honeyos container
+	docker compose exec honeyos /bin/bash
 
 db-backup: ## Backup SQLite database
 	@mkdir -p backups
-	docker compose exec backend cp /data/honeyos.db /data/honeyos-backup-$$(date +%Y%m%d_%H%M%S).db
+	docker compose exec honeyos cp /data/honeyos.db /data/honeyos-backup-$$(date +%Y%m%d_%H%M%S).db
 	@echo "Database backed up"
 
-pi-build: ## Build ARM64 images for Raspberry Pi
-	docker buildx build --platform linux/arm64 -t honeyos-backend:pi ./backend
-	docker buildx build --platform linux/arm64 -t honeyos-frontend:pi ./frontend
-	@echo "Raspberry Pi images built"
+pi-build: ## Build ARM64 image for Raspberry Pi
+	docker buildx build --platform linux/arm64 -t honeyos:pi .
+	@echo "Raspberry Pi image built"

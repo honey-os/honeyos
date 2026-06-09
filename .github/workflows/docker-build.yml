@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build and Push Docker Image
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
           DATABASE_URL: sqlite://
         run: python -m pytest tests/ -v
 
-  build-backend:
+  build-image:
     needs: build-and-test
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
     strategy:
@@ -88,18 +88,18 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend
+            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos
 
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: ./backend
+          context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=backend-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,scope=backend-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }},mode=max
+          outputs: type=image,name=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=honeyos-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,scope=honeyos-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }},mode=max
 
       - name: Export digest
         run: |
@@ -110,13 +110,13 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: backend-digests-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  merge-backend:
-    needs: build-backend
+  merge-image:
+    needs: build-image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -133,7 +133,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: backend-digests-*
+          pattern: digests-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -157,7 +157,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend
+            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -169,7 +169,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.DOCKERHUB_USERNAME }}/honeyos-backend
+            ${{ env.DOCKERHUB_USERNAME }}/honeyos
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -181,7 +181,7 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend@sha256:%s ' *)
+            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos@sha256:%s ' *)
         env:
           DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-ghcr.outputs.json }}
 
@@ -190,214 +190,51 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend@sha256:%s ' *)
+            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos@sha256:%s ' *)
         env:
           DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-dockerhub.outputs.json }}
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-backend:latest
-
-  build-frontend:
-    needs: build-and-test
-    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
-          outputs: type=image,name=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=frontend-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,scope=frontend-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }},mode=max
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-digests-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge-frontend:
-    needs: build-frontend
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: frontend-digests-*
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata (GHCR)
-        id: meta-ghcr
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.version }}
-
-      - name: Extract metadata (Docker Hub)
-        id: meta-dockerhub
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ${{ env.DOCKERHUB_USERNAME }}/honeyos-frontend
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.version }}
-
-      - name: Create manifest list and push to GHCR
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend@sha256:%s ' *)
-        env:
-          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-ghcr.outputs.json }}
-
-      - name: Create manifest list and push to Docker Hub
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend@sha256:%s ' *)
-        env:
-          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-dockerhub.outputs.json }}
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos-frontend:latest
+          docker buildx imagetools inspect ${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/honeyos:latest
 
   update-dockerhub-readme:
-    needs: [merge-backend, merge-frontend]
+    needs: merge-image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Update Backend Docker Hub description
+      - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKERHUB_USERNAME }}/honeyos-backend
+          repository: ${{ env.DOCKERHUB_USERNAME }}/honeyos
           readme-filepath: ./README.md
-          short-description: "HoneyOS Backend — Network deception & intrusion detection API"
-
-      - name: Update Frontend Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKERHUB_USERNAME }}/honeyos-frontend
-          readme-filepath: ./README.md
-          short-description: "HoneyOS Frontend — Network deception & intrusion detection dashboard"
+          short-description: "HoneyOS — Network deception & intrusion detection system"
 
   summary:
     runs-on: ubuntu-latest
-    needs: [merge-backend, merge-frontend, update-dockerhub-readme]
+    needs: [merge-image, update-dockerhub-readme]
     if: always()
     steps:
       - name: Check build status
         run: |
-          if [ "${{ needs.merge-backend.result }}" != "success" ] || \
-             [ "${{ needs.merge-frontend.result }}" != "success" ]; then
-            echo "One or more builds failed"
+          if [ "${{ needs.merge-image.result }}" != "success" ]; then
+            echo "Build failed"
             exit 1
           else
-            echo "All builds succeeded"
+            echo "Build succeeded"
           fi
 
       - name: Build summary
         run: |
           echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend | ${{ needs.merge-backend.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend | ${{ needs.merge-frontend.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| honeyos | ${{ needs.merge-image.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
