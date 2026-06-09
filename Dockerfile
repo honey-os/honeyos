@@ -11,11 +11,15 @@ COPY frontend/ .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# ── Stage 2: Runtime (Python + Node) ────────────────────────────────
+# ── Stage 2: Runtime (Caddy + Python + Node) ────────────────────────
 FROM node:20-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv gcc libffi-dev \
+    curl debian-keyring debian-archive-keyring apt-transport-https openssl \
+    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
+    && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list \
+    && apt-get update && apt-get install -y --no-install-recommends caddy \
     && rm -rf /var/lib/apt/lists/*
 
 # Python venv + dependencies
@@ -32,8 +36,8 @@ COPY --from=frontend-build /app/.next/standalone /app/frontend/
 COPY --from=frontend-build /app/.next/static     /app/frontend/.next/static
 COPY --from=frontend-build /app/public            /app/frontend/public
 
-# Data directory for SQLite
-RUN mkdir -p /data
+# Data directory for SQLite + certs
+RUN mkdir -p /data /data/certs
 
 # Startup script
 COPY start.sh /app/start.sh
@@ -47,6 +51,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 7777 7778
 
 HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=10 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:7778/health')" || exit 1
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["/app/start.sh"]

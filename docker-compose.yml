@@ -6,8 +6,8 @@ services:
     container_name: honeyos
     restart: unless-stopped
     ports:
-      - "7777:7777"   # Frontend
-      - "7778:7778"   # Backend API
+      - "7777:7777"   # Frontend (HTTPS)
+      - "7778:7778"   # Backend API (HTTPS)
       # Honeypot ports - map standard ports to internal high ports
       # Attackers scanning the network see real service ports
       - "22:2222"     # SSH honeypot
@@ -28,3 +28,5 @@ services:
       - .env
     environment:
       - DATABASE_URL=sqlite:////data/honeyos.db
+      - TLS_CERT=${TLS_CERT:-internal}
+      - TLS_KEY=${TLS_KEY:-}
