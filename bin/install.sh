@@ -56,7 +56,6 @@ setup_dir() {
     mkdir -p "$HONEYOS_DIR"
     mkdir -p "$HONEYOS_DIR/data"
     mkdir -p "$HONEYOS_DIR/data/certs"
-    mkdir -p "$HONEYOS_DIR/caddy"
     cd "$HONEYOS_DIR"
 }
 
@@ -115,32 +114,13 @@ write_compose() {
 
     cat > docker-compose.yml <<EOF
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: honeyos-caddy
+  honeyos:
+    image: ${IMAGE_PREFIX}/honeyos:${TAG}
+    container_name: honeyos
     restart: unless-stopped
-    command: ["sh", "/etc/caddy/entrypoint.sh"]
     ports:
       - "7777:7777"
       - "7778:7778"
-    volumes:
-      - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
-      - ./data/certs:/data/certs
-      - caddy_data:/data/caddy
-    environment:
-      - TLS_CERT=\${TLS_CERT:-internal}
-      - TLS_KEY=\${TLS_KEY:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - honeyos-net
-
-  backend:
-    image: ${IMAGE_PREFIX}/honeyos-backend:${TAG}
-    container_name: honeyos-backend
-    restart: unless-stopped
-    ports:
       - "22:2222"
       - "80:8080"
       - "443:8443"
@@ -159,99 +139,9 @@ services:
       - .env
     environment:
       - DATABASE_URL=sqlite:////data/honeyos.db
-    networks:
-      - honeyos-net
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7778/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-
-  frontend:
-    image: ${IMAGE_PREFIX}/honeyos-frontend:${TAG}
-    container_name: honeyos-frontend
-    restart: unless-stopped
-    environment:
-      - API_URL=\${API_URL:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - honeyos-net
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7777/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-networks:
-  honeyos-net:
-    driver: bridge
-
-volumes:
-  caddy_data:
+      - TLS_CERT=\${TLS_CERT:-internal}
+      - TLS_KEY=\${TLS_KEY:-}
 EOF
-}
-
-write_entrypoint() {
-    info "Writing Caddy entrypoint"
-    cat > caddy/entrypoint.sh <<'SCRIPT'
-#!/bin/sh
-set -e
-
-TLS_CERT="${TLS_CERT:-off}"
-TLS_KEY="${TLS_KEY:-}"
-
-CERT_DIR="/data/certs"
-
-if [ "$TLS_CERT" = "off" ] || [ -z "$TLS_CERT" ]; then
-    cat > /tmp/Caddyfile <<'EOF'
-:7777 {
-	reverse_proxy frontend:7777
-}
-:7778 {
-	reverse_proxy backend:7778
-}
-EOF
-elif [ "$TLS_CERT" = "internal" ]; then
-    if [ ! -f "$CERT_DIR/honeyos-selfsigned.pem" ] || [ ! -f "$CERT_DIR/honeyos-selfsigned.key" ]; then
-        apk add --no-cache openssl >/dev/null 2>&1 || true
-        mkdir -p "$CERT_DIR"
-        openssl req -x509 -newkey rsa:2048 \
-            -keyout "$CERT_DIR/honeyos-selfsigned.key" \
-            -out "$CERT_DIR/honeyos-selfsigned.pem" \
-            -days 3650 -nodes \
-            -subj '/O=HoneyOS/CN=HoneyOS Dashboard' \
-            -addext 'subjectAltName=DNS:localhost,DNS:honeyos,DNS:honeyos.local,IP:127.0.0.1'
-    fi
-    cat > /tmp/Caddyfile <<'EOF'
-:7777 {
-	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
-	reverse_proxy frontend:7777
-}
-:7778 {
-	tls /data/certs/honeyos-selfsigned.pem /data/certs/honeyos-selfsigned.key
-	reverse_proxy backend:7778
-}
-EOF
-else
-    cat > /tmp/Caddyfile <<EOF
-:7777 {
-	tls ${TLS_CERT} ${TLS_KEY}
-	reverse_proxy frontend:7777
-}
-:7778 {
-	tls ${TLS_CERT} ${TLS_KEY}
-	reverse_proxy backend:7778
-}
-EOF
-fi
-
-exec caddy run --config /tmp/Caddyfile --adapter caddyfile
-SCRIPT
-    chmod +x caddy/entrypoint.sh
 }
 
 # -------------------------------------------------------------------
@@ -271,7 +161,7 @@ wait_healthy() {
     info "Waiting for services to become healthy..."
     local retries=30
     while [ $retries -gt 0 ]; do
-        if docker inspect --format='{{.State.Health.Status}}' honeyos-backend 2>/dev/null | grep -q healthy; then
+        if docker inspect --format='{{.State.Health.Status}}' honeyos 2>/dev/null | grep -q healthy; then
             break
         fi
         retries=$((retries - 1))
@@ -326,7 +216,6 @@ main() {
     setup_dir
     write_env
     write_compose
-    write_entrypoint
     check_ports
     pull_images
     start_stack

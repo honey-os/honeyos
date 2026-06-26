@@ -27,6 +27,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import (
     rsa_crt_iqmp,
 )
 
+from utils.helpers import classify_auth_severity
 from utils.tls import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
@@ -1207,7 +1208,7 @@ class RDPHoneypot:
                 "source_ip": addr[0],
                 "source_port": addr[1],
                 "destination_port": self.port,
-                "severity": "high",
+                "severity": classify_auth_severity(username, password),
                 "session_id": session_id,
                 "details": {
                     "username": username,

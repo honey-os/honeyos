@@ -196,7 +196,7 @@ class TestGetThreatLevel:
             assert "score" in result
             assert "recent_events" in result
             assert "unique_attackers" in result
-            assert "unique_protocols" in result
+            assert "recon_ips" in result
 
 
 class TestIncrementDailyStat:

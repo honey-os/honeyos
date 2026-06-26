@@ -188,15 +188,12 @@ export default function CredentialsPage() {
                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                       Count
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Protocols
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2a2a3a]/50">
                   {credentials.top_usernames.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-600">
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-gray-600">
                         No usernames captured
                       </td>
                     </tr>
@@ -204,16 +201,18 @@ export default function CredentialsPage() {
                     credentials.top_usernames.map((u, i) => (
                       <tr key={u.username} className="hover:bg-[#1c1c28] transition-colors">
                         <td className="px-4 py-2 text-sm text-gray-500">{i + 1}</td>
-                        <td className="px-4 py-2 text-sm font-mono text-amber-400">{u.username}</td>
+                        <td className="px-4 py-2">
+                          <div className="text-sm font-mono text-amber-400">{u.username}</div>
+                          {u.protocols.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {u.protocols.map((p) => (
+                                <ProtocolBadge key={p} protocol={p} />
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-sm font-mono text-gray-300 text-right">
                           {formatNumber(u.count)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {u.protocols.map((p) => (
-                              <ProtocolBadge key={p} protocol={p} />
-                            ))}
-                          </div>
                         </td>
                       </tr>
                     ))
@@ -297,15 +296,12 @@ export default function CredentialsPage() {
                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                       Count
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Protocols
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2a2a3a]/50">
                   {credentials.top_combos.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-600">
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-600">
                         No credential combinations captured
                       </td>
                     </tr>
@@ -316,17 +312,19 @@ export default function CredentialsPage() {
                         className="hover:bg-[#1c1c28] transition-colors"
                       >
                         <td className="px-4 py-2 text-sm text-gray-500">{i + 1}</td>
-                        <td className="px-4 py-2 text-sm font-mono text-amber-400">{c.username}</td>
+                        <td className="px-4 py-2">
+                          <div className="text-sm font-mono text-amber-400">{c.username}</div>
+                          {c.protocols.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {c.protocols.map((p) => (
+                                <ProtocolBadge key={p} protocol={p} />
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-sm font-mono text-amber-400">{c.password}</td>
                         <td className="px-4 py-2 text-sm font-mono text-gray-300 text-right">
                           {formatNumber(c.count)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {c.protocols.map((p) => (
-                              <ProtocolBadge key={p} protocol={p} />
-                            ))}
-                          </div>
                         </td>
                       </tr>
                     ))

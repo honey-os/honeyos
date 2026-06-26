@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Terminal,
-  ArrowLeft,
   Clock,
   Hash,
   Shield,
@@ -15,7 +14,6 @@ import { formatDate, formatDuration } from '@/utils/formatters';
 import { getSession, getFeatures, identifyMalware } from '@/lib/api';
 import type { Session } from '@/lib/api';
 import clsx from 'clsx';
-import Link from 'next/link';
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   active: {
@@ -94,13 +92,6 @@ export default function SessionDetailPage({
   if (error || !session) {
     return (
       <div className="space-y-6">
-        <Link
-          href="/sessions"
-          className="btn-secondary inline-flex items-center gap-2 text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to sessions
-        </Link>
         <div className="card p-12 text-center">
           <p className="text-sm text-red-400">{error || 'Session not found'}</p>
         </div>
@@ -112,24 +103,13 @@ export default function SessionDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/sessions"
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to sessions
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-100">
-              Session Detail
-            </h1>
-            <p className="text-sm text-gray-500 font-mono mt-1">
-              {session.id}
-            </p>
-          </div>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-100">
+          Session Detail
+        </h1>
+        <p className="text-sm text-gray-500 font-mono mt-1">
+          {session.id}
+        </p>
       </div>
 
       {/* Session info cards */}

@@ -323,9 +323,6 @@ def create_app(config_class=Config) -> Flask:
                     logger.debug("Failed to aggregate day %s", day, exc_info=True)
                 day += timedelta(days=1)
 
-        # Purge throttled events (already counted in daily stats)
-        deleted_throttled = Event.query.filter(Event.throttled == True).delete()  # noqa: E712
-
         deleted_events = Event.query.filter(Event.timestamp < cutoff).delete()
         deleted_sessions = SessionModel.query.filter(
             SessionModel.status != "active",
@@ -333,8 +330,6 @@ def create_app(config_class=Config) -> Flask:
         ).delete()
         db.session.commit()
 
-        if deleted_throttled:
-            logger.info("Retention: purged %d throttled events", deleted_throttled)
         if deleted_events or deleted_sessions:
             logger.info(
                 "Retention: pruned %d events and %d sessions older than %d days",

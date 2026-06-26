@@ -50,6 +50,31 @@ def parse_json_field(field) -> dict | list | None:
     return None
 
 
+def classify_auth_severity(username, password, *, protocol=None) -> str:
+    """Classify severity of an authentication event.
+
+    Returns ``"low"`` for null/empty/garbage credentials (probes, scanner
+    noise) and ``"medium"`` for genuine attempts with real credentials.
+    """
+    if not username and not password:
+        return "low"
+    for value in (username, password):
+        if value and _is_binary_garbage(value):
+            return "low"
+    return "medium"
+
+
+def _is_binary_garbage(text: str) -> bool:
+    """Return True if >30 % of *text* consists of replacement chars or non-printable bytes."""
+    if not text:
+        return False
+    garbage_count = sum(
+        1 for ch in text
+        if ch == '\ufffd' or (not ch.isprintable() and ch not in '\n\r\t')
+    )
+    return (garbage_count / len(text)) > 0.3
+
+
 def format_timestamp(dt: datetime | None) -> str | None:
     """
     Format a datetime as an ISO-8601 string.

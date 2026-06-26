@@ -1,32 +1,13 @@
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: honeyos-caddy
-    restart: unless-stopped
-    command: ["sh", "/etc/caddy/entrypoint.sh"]
-    ports:
-      - "7777:7777"
-      - "7778:7778"
-    volumes:
-      - ./caddy/entrypoint.sh:/etc/caddy/entrypoint.sh:ro
-      - ./data/certs:/data/certs
-      - caddy_data:/data/caddy
-    environment:
-      - TLS_CERT=${TLS_CERT:-internal}
-      - TLS_KEY=${TLS_KEY:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - honeyos-net
-
-  backend:
+  honeyos:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: honeyos-backend
+    container_name: honeyos
     restart: unless-stopped
     ports:
+      - "7777:7777"   # Frontend (HTTPS)
+      - "7778:7778"   # Backend API (HTTPS)
       # Honeypot ports - map standard ports to internal high ports
       # Attackers scanning the network see real service ports
       - "22:2222"     # SSH honeypot
@@ -47,38 +28,5 @@ services:
       - .env
     environment:
       - DATABASE_URL=sqlite:////data/honeyos.db
-    networks:
-      - honeyos-net
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7778/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: honeyos-frontend
-    restart: unless-stopped
-    environment:
-      - API_URL=${API_URL:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - honeyos-net
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7777/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-networks:
-  honeyos-net:
-    driver: bridge
-
-volumes:
-  caddy_data:
+      - TLS_CERT=${TLS_CERT:-internal}
+      - TLS_KEY=${TLS_KEY:-}
