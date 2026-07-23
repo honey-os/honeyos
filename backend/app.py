@@ -191,153 +191,21 @@ def create_app(config_class=Config) -> Flask:
     # --- Periodic maintenance ------------------------------------------------
     import threading
     from config import Config as _config
-
-    def _aggregate_day(target_date):
-        """Finalize daily stats for a given date.
-
-        Counters (total_events, connection_events, etc.) are maintained in
-        real-time by EventProcessor._increment_daily_stat().  This function
-        only fills in the fields that require a full-day GROUP BY scan:
-        unique_source_ips, top_source_ips, top_usernames, top_passwords.
-        """
-        import json as _json
-        from models import DailyStat, Event
-
-        day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc)
-        day_end = day_start + timedelta(days=1)
-
-        # Get all stat rows for this date (created in real-time)
-        existing_rows = DailyStat.query.filter_by(date=target_date).all()
-        existing_map = {row.protocol: row for row in existing_rows}
-
-        # Also discover protocols from events (in case real-time missed any)
-        protocols = [
-            row[0] for row in
-            db.session.query(db.distinct(Event.protocol))
-            .filter(Event.timestamp >= day_start, Event.timestamp < day_end)
-            .all()
-            if row[0]
-        ]
-
-        for protocol in protocols:
-            stat = existing_map.get(protocol)
-
-            # If no real-time row exists (e.g. old data from before this feature),
-            # create one with counts computed from events.
-            if not stat:
-                base = Event.query.filter(
-                    Event.timestamp >= day_start,
-                    Event.timestamp < day_end,
-                    Event.protocol == protocol,
-                )
-                total = base.count()
-                if total == 0:
-                    continue
-                stat = DailyStat(
-                    id=generate_id(),
-                    date=target_date,
-                    protocol=protocol,
-                    total_events=total,
-                    connection_events=base.filter(Event.event_type == "connection").count(),
-                    auth_events=base.filter(Event.event_type == "authentication").count(),
-                    high_severity_events=base.filter(Event.severity.in_(["high", "critical"])).count(),
-                    blocked_events=0,
-                )
-                db.session.add(stat)
-
-            # Skip if top-N data already computed (idempotent)
-            if stat.top_source_ips is not None:
-                continue
-
-            # Compute unique IPs
-            unique_ips = db.session.query(
-                db.func.count(db.distinct(Event.source_ip))
-            ).filter(
-                Event.timestamp >= day_start, Event.timestamp < day_end,
-                Event.protocol == protocol,
-            ).scalar() or 0
-            stat.unique_source_ips = unique_ips
-
-            # Top 10 source IPs
-            top_ips = (
-                db.session.query(Event.source_ip, db.func.count().label("cnt"))
-                .filter(Event.timestamp >= day_start, Event.timestamp < day_end, Event.protocol == protocol)
-                .group_by(Event.source_ip)
-                .order_by(db.text("cnt DESC"))
-                .limit(10)
-                .all()
-            )
-            stat.top_source_ips = _json.dumps([{"ip": ip, "count": c} for ip, c in top_ips])
-
-            # Top 10 usernames (auth events only)
-            username_expr = db.func.json_extract(Event.details, "$.username")
-            top_users = (
-                db.session.query(username_expr.label("u"), db.func.count().label("cnt"))
-                .filter(
-                    Event.timestamp >= day_start, Event.timestamp < day_end,
-                    Event.protocol == protocol, Event.event_type == "authentication",
-                    username_expr.isnot(None), username_expr != "",
-                )
-                .group_by(username_expr)
-                .order_by(db.text("cnt DESC"))
-                .limit(10)
-                .all()
-            )
-            stat.top_usernames = _json.dumps([{"username": u, "count": c} for u, c in top_users])
-
-            # Top 10 passwords
-            password_expr = db.func.json_extract(Event.details, "$.password")
-            top_passwords = (
-                db.session.query(password_expr.label("p"), db.func.count().label("cnt"))
-                .filter(
-                    Event.timestamp >= day_start, Event.timestamp < day_end,
-                    Event.protocol == protocol, Event.event_type == "authentication",
-                    password_expr.isnot(None), password_expr != "",
-                )
-                .group_by(password_expr)
-                .order_by(db.text("cnt DESC"))
-                .limit(10)
-                .all()
-            )
-            stat.top_passwords = _json.dumps([{"password": p, "count": c} for p, c in top_passwords])
-
-        db.session.commit()
-
-    def _enforce_retention():
-        """Aggregate then delete events and sessions older than RETENTION_DAYS."""
-        from models import Event, Session as SessionModel
-
-        cutoff = datetime.now(timezone.utc) - timedelta(days=_config.RETENTION_DAYS)
-
-        # Aggregate each day that's about to be purged (that hasn't been yet)
-        oldest_event = db.session.query(db.func.min(Event.timestamp)).scalar()
-        if oldest_event:
-            if oldest_event.tzinfo is None:
-                oldest_event = oldest_event.replace(tzinfo=timezone.utc)
-            day = oldest_event.date()
-            cutoff_date = cutoff.date()
-            while day < cutoff_date:
-                try:
-                    _aggregate_day(day)
-                except Exception:
-                    logger.debug("Failed to aggregate day %s", day, exc_info=True)
-                day += timedelta(days=1)
-
-        deleted_events = Event.query.filter(Event.timestamp < cutoff).delete()
-        deleted_sessions = SessionModel.query.filter(
-            SessionModel.status != "active",
-            SessionModel.start_time < cutoff,
-        ).delete()
-        db.session.commit()
-
-        if deleted_events or deleted_sessions:
-            logger.info(
-                "Retention: pruned %d events and %d sessions older than %d days",
-                deleted_events, deleted_sessions, _config.RETENTION_DAYS,
-            )
+    from services.retention import enforce_retention
 
     def _maintenance_loop():
-        """Background maintenance: session reaper (5 min) + retention (1 hour)."""
+        """Background maintenance: session reaper (5 min) + retention (hourly).
+
+        Retention also runs once when the thread starts.  It runs here in the
+        daemon thread rather than synchronously during create_app so a large
+        purge backlog cannot stall boot past gunicorn's worker timeout.
+        """
+        try:
+            with application.app_context():
+                enforce_retention(_config.RETENTION_DAYS)
+        except Exception:
+            logger.warning("Startup retention run failed", exc_info=True)
+
         cycle = 0
         while True:
             threading.Event().wait(300)  # 5 minutes
@@ -347,13 +215,9 @@ def create_app(config_class=Config) -> Flask:
                     session_recorder.reap_stale_sessions(max_age_seconds=300)
                     # Run retention every 12 cycles (1 hour)
                     if cycle % 12 == 0:
-                        _enforce_retention()
+                        enforce_retention(_config.RETENTION_DAYS)
             except Exception:
-                logger.debug("Maintenance cycle failed", exc_info=True)
-
-    # Run retention once on startup
-    with application.app_context():
-        _enforce_retention()
+                logger.warning("Maintenance cycle failed", exc_info=True)
 
     threading.Thread(target=_maintenance_loop, daemon=True, name="maintenance").start()
 
