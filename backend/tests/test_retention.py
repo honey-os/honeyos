@@ -106,6 +106,60 @@ class TestEnforceRetention:
     def test_empty_database(self):
         assert enforce_retention(retention_days=7) == (0, 0)
 
+    def test_finalized_days_skip_aggregation(self, monkeypatch):
+        import services.retention as retention_mod
+
+        now = _naive_utc_now()
+        old = now - timedelta(days=10)
+        _add_event(old)
+        # Fully finalized stat row for the old day
+        db.session.add(DailyStat(
+            id=generate_id(),
+            date=old.date(),
+            protocol="ssh",
+            total_events=1,
+            top_source_ips=json.dumps([{"ip": "10.0.0.1", "count": 1}]),
+        ))
+        db.session.commit()
+
+        aggregated_days = []
+        monkeypatch.setattr(
+            retention_mod, "aggregate_day",
+            lambda day: aggregated_days.append(day),
+        )
+
+        deleted_events, _ = enforce_retention(retention_days=7)
+
+        # The finalized day was not re-scanned (days with no stat rows at
+        # all, e.g. gap days, still get a cheap aggregate_day probe)
+        assert old.date() not in aggregated_days
+        assert deleted_events == 1
+
+    def test_unfinalized_days_still_aggregate(self, monkeypatch):
+        import services.retention as retention_mod
+
+        now = _naive_utc_now()
+        old = now - timedelta(days=10)
+        _add_event(old)
+        # Real-time row exists but top-N fields were never filled in
+        db.session.add(DailyStat(
+            id=generate_id(),
+            date=old.date(),
+            protocol="ssh",
+            total_events=1,
+        ))
+        db.session.commit()
+
+        aggregated_days = []
+        monkeypatch.setattr(
+            retention_mod, "aggregate_day",
+            lambda day: aggregated_days.append(day),
+        )
+
+        enforce_retention(retention_days=7)
+
+        assert old.date() in aggregated_days
+
 
 class TestAggregateDay:
     def test_idempotent(self):

@@ -174,18 +174,35 @@ def enforce_retention(retention_days: int,
 
     # Aggregate each day that's about to be purged (that hasn't been yet).
     # Aggregation commits per day, so progress is durable.
+    #
+    # Days whose stat rows are all finalized are skipped without touching the
+    # events table -- aggregate_day's protocol-discovery query reads every
+    # event of the day, which on a large backlog means hours of I/O just to
+    # re-confirm already-finished days.  (Trade-off: if the real-time
+    # processor missed a protocol on a day whose other rows are finalized,
+    # that protocol stays missing.)
     oldest_event = db.session.query(db.func.min(Event.timestamp)).scalar()
     if oldest_event:
         if oldest_event.tzinfo is None:
             oldest_event = oldest_event.replace(tzinfo=timezone.utc)
+        finalized_days = {
+            d for d, rows, finalized in
+            db.session.query(
+                DailyStat.date,
+                db.func.count(),
+                db.func.count(DailyStat.top_source_ips),
+            ).group_by(DailyStat.date).all()
+            if rows == finalized
+        }
         day = oldest_event.date()
         cutoff_date = cutoff.date()
         while day < cutoff_date:
-            try:
-                aggregate_day(day)
-            except Exception:
-                db.session.rollback()
-                logger.warning("Retention: failed to aggregate day %s", day, exc_info=True)
+            if day not in finalized_days:
+                try:
+                    aggregate_day(day)
+                except Exception:
+                    db.session.rollback()
+                    logger.warning("Retention: failed to aggregate day %s", day, exc_info=True)
             day += timedelta(days=1)
 
     cutoff_str = _fmt(cutoff)
