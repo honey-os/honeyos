@@ -214,9 +214,10 @@ def enforce_retention(retention_days: int,
         {"cutoff": cutoff_str}, batch_size,
     )
 
-    if deleted_events or deleted_sessions:
-        logger.info(
-            "Retention: pruned %d events and %d sessions older than %d days",
-            deleted_events, deleted_sessions, retention_days,
-        )
+    # Always log, even for a no-op run -- silence must mean "not running",
+    # never "ran but had nothing to do".
+    logger.info(
+        "Retention: pruned %d events and %d sessions older than %d days",
+        deleted_events, deleted_sessions, retention_days,
+    )
     return deleted_events, deleted_sessions

@@ -106,6 +106,14 @@ class TestEnforceRetention:
     def test_empty_database(self):
         assert enforce_retention(retention_days=7) == (0, 0)
 
+    def test_noop_run_still_logs(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="honeyos"):
+            enforce_retention(retention_days=7)
+
+        assert any("Retention: pruned 0 events" in r.message for r in caplog.records)
+
     def test_finalized_days_skip_aggregation(self, monkeypatch):
         import services.retention as retention_mod
 
