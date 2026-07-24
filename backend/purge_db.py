@@ -65,8 +65,11 @@ def ensure_daily_stats_table(conn):
 
 def aggregate_day(conn, target_date):
     """Aggregate one day's events into daily_stats.  Returns number of rows created."""
-    day_start = f"{target_date}T00:00:00"
-    day_end = f"{target_date + timedelta(days=1)}T00:00:00"
+    # SQLAlchemy stores DATETIME with a space separator ("2026-06-15 12:00:00"),
+    # so comparisons must use the same format -- "T"-separated strings would
+    # shift every window by a day in string comparison.
+    day_start = f"{target_date} 00:00:00"
+    day_end = f"{target_date + timedelta(days=1)} 00:00:00"
 
     # Check what's already aggregated for this date
     existing = {}
@@ -217,7 +220,7 @@ def main():
     print(f"Event date range:  {oldest.date()} to {newest.date()}")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
-    cutoff_str = cutoff.isoformat()
+    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S.%f")
     print(f"Retention cutoff:  {cutoff.date()} ({RETENTION_DAYS} days)")
     print()
 
