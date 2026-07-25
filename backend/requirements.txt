@@ -7,6 +7,6 @@ paramiko==3.5.1
 requests==2.32.3
 python-dotenv==1.1.0
 gunicorn==23.0.0
-eventlet==0.39.1
+eventlet==0.40.3
 pytest==8.3.5
 pytest-cov==6.1.1
