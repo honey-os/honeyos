@@ -5,15 +5,24 @@ updates:
     schedule:
       interval: weekly
     groups:
-      frontend-deps:
+      # Only minor/patch bumps are batched into one PR. Major bumps are left
+      # out of the group so Dependabot opens them as individual PRs — one
+      # breaking major (e.g. Next 14→16, Tailwind 3→4) can't poison the batch.
+      frontend-minor:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
     groups:
-      backend-deps:
+      backend-minor:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
