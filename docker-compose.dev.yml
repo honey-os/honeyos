@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     ports:
       - "7778:7778"
+      - "7779:7779"   # Canarytokens webhook listener
       # Dev uses high ports to avoid conflicts with host services
       - "2222:2222"   # SSH honeypot
       - "8080:8080"   # HTTP honeypot

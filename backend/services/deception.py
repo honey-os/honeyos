@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 
 SECRETS_CONFIG_KEY = "deception_secrets"
 
+# Optional canarytokens.org AWS credential pair, planted verbatim in the
+# bait .env when configured.  Unlike the locally-generated DB creds, these
+# fire (via the canarytokens webhook) even when tried from another machine.
+CANARY_AWS_KEY_ID_CONFIG = "canary_aws_access_key_id"
+CANARY_AWS_SECRET_CONFIG = "canary_aws_secret_access_key"
+
 # Paths that only an intruder rummaging for secrets would request.
 SENSITIVE_PATHS = frozenset({
     "/.env",
@@ -98,7 +104,37 @@ def get_secrets() -> dict:
 # Bait content
 # ---------------------------------------------------------------------------
 
-def _env_file(s: dict, mysql_port: int) -> str:
+def get_canary_aws_creds() -> dict | None:
+    """Return configured canarytokens.org AWS creds, or None.
+
+    Env vars (Config) take precedence; the system_config table is a fallback
+    so the creds can also be set from the dashboard.  Requires an app context
+    only if falling through to the DB.
+    """
+    key_id = (Config.CANARY_AWS_ACCESS_KEY_ID or "").strip()
+    secret_key = (Config.CANARY_AWS_SECRET_ACCESS_KEY or "").strip()
+    if not (key_id and secret_key):
+        try:
+            key_row = db.session.get(SystemConfig, CANARY_AWS_KEY_ID_CONFIG)
+            secret_row = db.session.get(SystemConfig, CANARY_AWS_SECRET_CONFIG)
+        except Exception:
+            return None
+        key_id = key_row.value.strip() if key_row and key_row.value else ""
+        secret_key = secret_row.value.strip() if secret_row and secret_row.value else ""
+    if key_id and secret_key:
+        return {"access_key_id": key_id, "secret_access_key": secret_key}
+    return None
+
+
+def _env_file(s: dict, mysql_port: int, canary_aws: dict | None = None) -> str:
+    aws_block = ""
+    if canary_aws:
+        aws_block = f"""
+AWS_ACCESS_KEY_ID={canary_aws['access_key_id']}
+AWS_SECRET_ACCESS_KEY={canary_aws['secret_access_key']}
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET={s['db_name']}-uploads
+"""
     return f"""APP_NAME=CustomerPortal
 APP_ENV=production
 APP_KEY={s['app_key']}
@@ -119,7 +155,7 @@ CACHE_DRIVER=file
 QUEUE_CONNECTION=sync
 SESSION_DRIVER=file
 SESSION_LIFETIME=120
-"""
+{aws_block}"""
 
 
 def _wp_config(s: dict, mysql_port: int) -> str:
@@ -249,10 +285,15 @@ def build_site(planted: dict | None = None) -> dict:
     ``planted`` defaults to this install's persisted secrets; pass a dict
     explicitly when no app context is available.
     """
-    s = planted if planted is not None else get_secrets()
+    if planted is not None:
+        s = planted
+        canary_aws = None
+    else:
+        s = get_secrets()
+        canary_aws = get_canary_aws_creds()
     mysql_port = Config.EXTERNAL_PORT.get("mysql", 3306)
 
-    env = _env_file(s, mysql_port)
+    env = _env_file(s, mysql_port, canary_aws)
     wp = _wp_config(s, mysql_port)
     backup_listing = _sub_listing(
         "backup",

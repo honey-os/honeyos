@@ -97,11 +97,12 @@ def _create_test_app(config_class=TestConfig) -> Flask:
     from api.auth import auth_bp
     from api.throttle import throttle_bp
     from api.perimeter import perimeter_bp
+    from api.webhooks import webhooks_bp
 
     for bp in (
         events_bp, sessions_bp, honeypots_bp, alerts_bp,
         network_scans_bp, dashboard_bp, config_bp, attackers_bp,
-        credentials_bp, auth_bp, throttle_bp, perimeter_bp,
+        credentials_bp, auth_bp, throttle_bp, perimeter_bp, webhooks_bp,
     ):
         application.register_blueprint(bp)
 

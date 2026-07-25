@@ -53,6 +53,23 @@ class Config:
     # --- Slack ---
     SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
 
+    # --- Inbound Webhook (canarytokens.org triggers) ---
+    # Runs as its own listener on WEBHOOK_PORT, separate from the admin API
+    # and every honeypot port.  Disable if you don't use canarytokens.
+    WEBHOOK_ENABLED = os.getenv("WEBHOOK_ENABLED", "true").lower() in ("true", "1", "yes")
+    WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "7779"))
+    # What canarytokens.org should POST to.  Set this when a proxy/Cloudflare
+    # sits in front (e.g. https://honeyos.io/canary); otherwise the dashboard
+    # derives host:WEBHOOK_PORT from the incoming request.
+    WEBHOOK_PUBLIC_URL = os.getenv("WEBHOOK_PUBLIC_URL", "")
+
+    # --- canarytokens.org planted AWS credentials ---
+    # Create an "AWS keys" token at canarytokens.org, point its webhook at
+    # this install, and put the key pair here; it gets planted in the bait
+    # .env so it fires when tried against AWS from anywhere.
+    CANARY_AWS_ACCESS_KEY_ID = os.getenv("CANARY_AWS_ACCESS_KEY_ID", "")
+    CANARY_AWS_SECRET_ACCESS_KEY = os.getenv("CANARY_AWS_SECRET_ACCESS_KEY", "")
+
     # --- Logging ---
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 

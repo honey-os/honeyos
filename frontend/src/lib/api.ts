@@ -147,6 +147,16 @@ export interface SettingsResponse {
   system: SettingsSystem;
 }
 
+export interface CanaryWebhookInfo {
+  enabled: boolean;
+  port?: number;
+  webhook_url: string | null;
+}
+
+export async function fetchCanaryWebhook(): Promise<CanaryWebhookInfo> {
+  return fetchApi<CanaryWebhookInfo>('/webhooks/canarytokens');
+}
+
 export interface ThrottleEntry {
   protocol: string;
   expires_in: number;

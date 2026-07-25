@@ -8,10 +8,13 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
+  Webhook,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
-import { authChangePassword } from '@/lib/api';
-import type { SettingsSection } from '@/lib/api';
+import { authChangePassword, fetchCanaryWebhook } from '@/lib/api';
+import type { SettingsSection, CanaryWebhookInfo } from '@/lib/api';
 import clsx from 'clsx';
 
 function formatUptime(seconds: number): string {
@@ -154,8 +157,101 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Canarytokens Webhook */}
+          <CanaryWebhookSection />
+
           {/* Change Password */}
           <ChangePasswordSection />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Canarytokens Webhook Section
+// ---------------------------------------------------------------------------
+
+function CanaryWebhookSection() {
+  const [info, setInfo] = useState<CanaryWebhookInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchCanaryWebhook()
+      .then((data) => {
+        if (active) setInfo(data);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Failed to load');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (!info?.webhook_url) return;
+    try {
+      await navigator.clipboard.writeText(info.webhook_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable (e.g. non-HTTPS context) — user can select manually.
+    }
+  };
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-sm font-semibold text-gray-200 mb-1 flex items-center gap-2">
+        <Webhook className="w-4 h-4 text-amber-500" />
+        Canarytokens Webhook
+      </h3>
+      <p className="text-xs text-gray-500 mb-4">
+        Paste this URL into a token&apos;s webhook field at{' '}
+        <span className="text-amber-500/80">canarytokens.org</span> so remote
+        triggers appear here as critical events.
+      </p>
+
+      {loading ? (
+        <div className="text-sm text-gray-500">Loading…</div>
+      ) : error ? (
+        <div className="flex items-center gap-2 text-sm text-red-400">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
+      ) : info && !info.enabled ? (
+        <p className="text-sm text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+          The webhook listener is disabled. Set{' '}
+          <code className="font-mono text-xs">WEBHOOK_ENABLED=true</code> in your{' '}
+          <code className="font-mono text-xs">.env</code> to enable it.
+        </p>
+      ) : info?.webhook_url ? (
+        <div className="flex items-center gap-2 max-w-2xl">
+          <code className="flex-1 min-w-0 truncate text-sm font-mono text-gray-300 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg px-3 py-2">
+            {info.webhook_url}
+          </code>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="btn-secondary shrink-0 text-sm inline-flex items-center gap-1.5"
+            title="Copy to clipboard"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 text-green-400" /> Copied
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" /> Copy
+              </>
+            )}
+          </button>
         </div>
       ) : null}
     </div>
