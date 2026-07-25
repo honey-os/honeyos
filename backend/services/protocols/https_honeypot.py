@@ -15,9 +15,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 logger = logging.getLogger(__name__)
 
 # Import page templates and logging helper from the HTTP honeypot
+from services import deception
 from services.protocols.http_honeypot import (
     _LOGIN_PAGE,
-    _DIRECTORY_LISTING,
     _NOT_FOUND,
     _LOGIN_RESPONSE,
 )
@@ -40,9 +40,11 @@ class HTTPSHoneypot:
         self.connection_throttler = connection_throttler
         self._server: HTTPServer | None = None
         self._stop_event = threading.Event()
+        self._bait: dict = {}
 
     def run(self) -> None:
         honeypot = self
+        self._bait = deception.build_site_for(self.app)
 
         class Handler(BaseHTTPRequestHandler):
             server_version = "Apache/2.4.52"
@@ -63,17 +65,12 @@ class HTTPSHoneypot:
                 if self._check_throttle():
                     return
                 honeypot._log_request(self, body=None)
-                if self.path in ("/", "/index.html"):
-                    self._send(200, _DIRECTORY_LISTING)
+                bait = honeypot._bait.get(self.path)
+                if bait is not None:
+                    self._send(200, bait[0], content_type=bait[1])
                 elif self.path in ("/login", "/admin", "/wp-login.php",
                                    "/administrator"):
                     self._send(200, _LOGIN_PAGE)
-                elif self.path in ("/robots.txt",):
-                    self._send(200, "User-agent: *\nDisallow: /admin\n",
-                               content_type="text/plain")
-                elif self.path in ("/.env", "/config.php"):
-                    fake = "APP_KEY=base64:FAKE\nDB_PASSWORD=secret123\n"
-                    self._send(200, fake, content_type="text/plain")
                 else:
                     self._send(404, _NOT_FOUND)
 
@@ -168,9 +165,9 @@ class HTTPSHoneypot:
             except Exception:
                 details["body_size"] = len(body)
 
-        if path in ("/.env", "/config.php", "/wp-config.php",
-                     "/backup", "/.git/config"):
+        if path in deception.SENSITIVE_PATHS:
             severity = "high"
+            details["bait_accessed"] = True
 
         if self.event_processor and self.app:
             with self.app.app_context():

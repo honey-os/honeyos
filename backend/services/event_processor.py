@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from config import Config
 from models import DailyStat, Event, Honeypot, Session, db
+from services import deception
 from services.geoip import GeoIPService
 from utils.helpers import generate_id, sanitize_input
 
@@ -48,6 +49,20 @@ class EventProcessor:
             if ip and protocol and self.connection_throttler.is_blocked(ip, protocol):
                 self._increment_daily_stat(protocol, blocked=True)
                 return None
+
+        # Honeytoken replay: planted credentials arriving on ANY protocol
+        # means this source read the HTTP bait files -- the highest-confidence
+        # signal the system can produce.
+        details = event_data.get("details")
+        if deception.check_event_for_honeytoken(details, event_data.get("raw_payload")):
+            details = details or {}
+            details["honeytoken"] = True
+            event_data["details"] = details
+            event_data["severity"] = "critical"
+            logger.warning(
+                "HONEYTOKEN: planted credentials used by %s via %s",
+                event_data.get("source_ip"), event_data.get("protocol"),
+            )
 
         event = Event(
             id=event_data.get("id") or generate_id(),

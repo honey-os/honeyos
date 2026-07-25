@@ -72,6 +72,7 @@ def create_app(config_class=Config) -> Flask:
     from api.auth import auth_bp, has_admin, is_authenticated, SESSION_COOKIE_NAME
     from api.throttle import throttle_bp
     from api.perimeter import perimeter_bp
+    from api.webhooks import webhooks_bp
 
     application.register_blueprint(events_bp)
     application.register_blueprint(sessions_bp)
@@ -85,6 +86,7 @@ def create_app(config_class=Config) -> Flask:
     application.register_blueprint(auth_bp)
     application.register_blueprint(throttle_bp)
     application.register_blueprint(perimeter_bp)
+    application.register_blueprint(webhooks_bp)
 
     # --- Auth middleware --------------------------------------------------
     AUTH_ALLOWLIST = {"/health", "/api/auth/status", "/api/auth/setup",
@@ -178,9 +180,22 @@ def create_app(config_class=Config) -> Flask:
     )
     application.honeypot_manager = manager
     application.connection_throttler = connection_throttler
+    application.event_processor = event_processor
 
     perimeter_service = PerimeterService(app=application)
     application.perimeter_service = perimeter_service
+
+    # Standalone canarytokens.org webhook listener (own port, no admin auth)
+    if Config.WEBHOOK_ENABLED:
+        from services.webhook_server import CanaryWebhookServer
+        webhook_server = CanaryWebhookServer(
+            port=Config.WEBHOOK_PORT,
+            app=application,
+            event_processor=event_processor,
+        )
+        webhook_server.start()
+        application.webhook_server = webhook_server
+        logger.info("Canary webhook enabled on port %d", Config.WEBHOOK_PORT)
 
     with application.app_context():
         # Clean up leaked sessions from previous runs / crashes

@@ -8,6 +8,7 @@ services:
     ports:
       - "7777:7777"   # Frontend (HTTPS)
       - "7778:7778"   # Backend API (HTTPS)
+      - "7779:7779"   # Canarytokens webhook listener
       # Honeypot ports - map standard ports to internal high ports
       # Attackers scanning the network see real service ports
       - "22:2222"     # SSH honeypot
