@@ -20,6 +20,7 @@ const protocolConfig: Record<string, { bg: string; text: string }> = {
   rdp: { bg: 'bg-indigo-500/15 border-indigo-500/30', text: 'text-indigo-400' },
   dns: { bg: 'bg-teal-500/15 border-teal-500/30', text: 'text-teal-400' },
   smtp: { bg: 'bg-pink-500/15 border-pink-500/30', text: 'text-pink-400' },
+  canary: { bg: 'bg-yellow-500/15 border-yellow-500/30', text: 'text-yellow-400' },
 };
 
 const defaultConfig = { bg: 'bg-gray-500/15 border-gray-500/30', text: 'text-gray-400' };
