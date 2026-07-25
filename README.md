@@ -155,6 +155,11 @@ All settings are configured via environment variables in `.env`. Copy `.env.exam
 | `SMTP_FROM_ADDRESS` | `honeyos@localhost` | From address for alert emails |
 | `SLACK_WEBHOOK_URL` | *(empty)* | Slack incoming webhook URL for alerts |
 | `WEBHOOK_URL` | *(empty)* | Generic webhook URL for alerts (receives JSON POST) |
+| `WEBHOOK_ENABLED` | `true` | Run the inbound canarytokens.org webhook listener |
+| `WEBHOOK_PORT` | `7779` | Port for the canarytokens webhook listener (separate from the API and all honeypots) |
+| `WEBHOOK_PUBLIC_URL` | *(empty)* | Public URL canarytokens.org should POST to. Set when a proxy fronts the host; otherwise derived from `host:WEBHOOK_PORT` |
+| `CANARY_AWS_ACCESS_KEY_ID` | *(empty)* | canarytokens.org AWS access key ID to plant in the bait `.env` |
+| `CANARY_AWS_SECRET_ACCESS_KEY` | *(empty)* | canarytokens.org AWS secret key to plant in the bait `.env` |
 | `SESSION_TIMEOUT_HOURS` | `168` | Hours before admin session expires (default 7 days) |
 | `FRONTEND_PORT` | `7777` | Port the web dashboard listens on |
 | `API_URL` | *(auto-detected)* | Backend API URL the browser uses. Runtime — no rebuild needed. Only set if the default `https://<hostname>:7778` doesn't work |
@@ -180,6 +185,8 @@ In production (Docker/Pi), honeypots bind to standard ports so they look real to
 | RDP | 3389 | 3390 | Windows Remote Desktop |
 
 In development, the high ports are exposed directly (2222, 8080, etc.) to avoid conflicts with host services. All ports are configurable through the dashboard or API.
+
+When enabled, the canarytokens webhook listener additionally binds port `7779` — separate from the API and every honeypot port. See [Canarytokens Integration](#canarytokens-integration-optional).
 
 ## API
 
@@ -305,6 +312,41 @@ docker compose up -d
 - **Host overview** — shows your IP's organization, ISP, OS, and hostnames as seen by Censys.
 - **Banner comparison** — checks whether the banners Censys captured match what your honeypots are configured to send. Mismatches may mean your honeypots are being fingerprinted.
 - **Honeypot flagging** — warns you if Censys has tagged your IP as a known honeypot.
+
+## Canarytokens Integration (Optional)
+
+HoneyOS can plant a [Canarytokens](https://canarytokens.org) AWS credential in the bait files its HTTP/HTTPS honeypots serve (the fake `.env`, `config.php`, and `.git/config`). When an attacker who scraped those files tries the AWS key against AWS — from anywhere in the world — Thinkst detects the use and notifies HoneyOS via a webhook, which records it as a **critical** event on your dashboard. Because the key belongs to Thinkst's trap account, you don't provision any AWS infrastructure yourself; you only plant the key.
+
+This complements HoneyOS's built-in honeytokens: the bait `.env` also contains locally-generated database credentials that point at this host's own MySQL honeypot, so credentials read from the bait and replayed against **any** honeypot protocol are flagged as `honeytoken` events. The Canarytokens AWS key extends that reach beyond your own box.
+
+### The webhook listener
+
+Triggers arrive on a standalone listener on `WEBHOOK_PORT` (default `7779`), deliberately separate from the admin API and every honeypot port so inbound notifications never touch admin authentication. It authenticates callers with a per-install random path secret. Disable it entirely with `WEBHOOK_ENABLED=false`.
+
+### Setup
+
+1. At [canarytokens.org](https://canarytokens.org), create an **AWS keys** token (the simple, free one — *not* the "AWS decoys" Terraform wizard). It hands you a fake access key ID and secret immediately.
+
+2. In the HoneyOS dashboard, open **Settings → Canarytokens Webhook** and copy the webhook URL (it embeds the per-install secret). Set that URL as the token's notification/webhook target on canarytokens.org.
+
+3. Add the generated key pair to your `.env`:
+
+```
+CANARY_AWS_ACCESS_KEY_ID=AKIA...
+CANARY_AWS_SECRET_ACCESS_KEY=...
+```
+
+4. Restart HoneyOS so the honeypots rebuild their bait files with the planted key:
+
+```bash
+docker compose up -d
+```
+
+**Reachability:** canarytokens.org must be able to POST to the webhook from the public internet. If a reverse proxy or CDN fronts your host, expose the listener through it and set `WEBHOOK_PUBLIC_URL` to the externally-reachable URL (e.g. `https://honeyos.example.com/canary`); otherwise the dashboard advertises `http://<host>:7779` and port `7779` must be open inbound.
+
+### What you'll see
+
+A trigger appears as a `canary` protocol event at **critical** severity, carrying the token's memo, source IP, and user agent. Filter to it on the **Events** page (the `CANARY` protocol option) — it renders with a distinct yellow badge. Since the planted key is random per install, a trigger is high-confidence proof that someone read your bait and tried the credentials.
 
 ## Troubleshooting
 
