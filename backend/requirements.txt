@@ -4,7 +4,7 @@ flask-sqlalchemy==3.1.1
 flask-socketio==5.5.1
 sqlalchemy==2.0.40
 paramiko==3.5.1
-requests==2.32.3
+requests==2.33.0
 python-dotenv==1.1.0
 gunicorn==23.0.0
 eventlet==0.39.1
