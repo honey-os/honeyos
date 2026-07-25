@@ -3,7 +3,7 @@ flask-cors==6.0.5
 flask-sqlalchemy==3.1.1
 flask-socketio==5.6.1
 sqlalchemy==2.0.51
-paramiko==3.5.1
+paramiko==5.0.0
 requests==2.34.2
 python-dotenv==1.2.2
 gunicorn==26.0.0
