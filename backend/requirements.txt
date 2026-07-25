@@ -6,7 +6,7 @@ sqlalchemy==2.0.51
 paramiko==3.5.1
 requests==2.34.2
 python-dotenv==1.2.2
-gunicorn==23.0.0
+gunicorn==26.0.0
 eventlet==0.41.1
 pytest==9.1.1
 pytest-cov==6.1.1
