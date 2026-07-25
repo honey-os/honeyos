@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
 
+from services import deception
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,25 +40,6 @@ _LOGIN_PAGE = """<!DOCTYPE html>
     <button type="submit">Sign In</button>
   </form>
 </div>
-</body>
-</html>
-"""
-
-_DIRECTORY_LISTING = """<!DOCTYPE html>
-<html>
-<head><title>Index of /</title></head>
-<body>
-<h1>Index of /</h1>
-<hr>
-<pre>
-<a href="docs/">docs/</a>                  2024-01-15 08:30    -
-<a href="images/">images/</a>                2024-01-14 12:00    -
-<a href="backup/">backup/</a>                2024-01-10 03:15    -
-<a href="config.php">config.php</a>             2024-01-12 09:45    2.1K
-<a href=".env">.env</a>                    2024-01-11 14:22    512
-</pre>
-<hr>
-<address>Apache/2.4.52 (Ubuntu) Server</address>
 </body>
 </html>
 """
@@ -92,9 +75,11 @@ class HTTPHoneypot:
         self.connection_throttler = connection_throttler
         self._server: HTTPServer | None = None
         self._stop_event = threading.Event()
+        self._bait: dict = {}
 
     def run(self) -> None:
         honeypot = self  # capture reference for the handler
+        self._bait = deception.build_site_for(self.app)
 
         class Handler(BaseHTTPRequestHandler):
             server_version = "Apache/2.4.52"
@@ -117,17 +102,12 @@ class HTTPHoneypot:
                     return
                 honeypot._log_request(self, body=None)
 
-                if self.path in ("/", "/index.html"):
-                    self._send(200, _DIRECTORY_LISTING)
+                bait = honeypot._bait.get(self.path)
+                if bait is not None:
+                    self._send(200, bait[0], content_type=bait[1])
                 elif self.path in ("/login", "/admin", "/wp-login.php",
                                    "/administrator"):
                     self._send(200, _LOGIN_PAGE)
-                elif self.path in ("/robots.txt",):
-                    self._send(200, "User-agent: *\nDisallow: /admin\n",
-                               content_type="text/plain")
-                elif self.path in ("/.env", "/config.php"):
-                    fake = "APP_KEY=base64:FAKE\nDB_PASSWORD=secret123\n"
-                    self._send(200, fake, content_type="text/plain")
                 else:
                     self._send(404, _NOT_FOUND)
 
@@ -216,9 +196,9 @@ class HTTPHoneypot:
             except Exception:
                 details["body_size"] = len(body)
 
-        if path in ("/.env", "/config.php", "/wp-config.php",
-                     "/backup", "/.git/config"):
+        if path in deception.SENSITIVE_PATHS:
             severity = "high"
+            details["bait_accessed"] = True
 
         if self.event_processor and self.app:
             with self.app.app_context():
