@@ -121,6 +121,7 @@ services:
     ports:
       - "7777:7777"
       - "7778:7778"
+      - "7779:7779"
       - "22:2222"
       - "80:8080"
       - "443:8443"
@@ -177,7 +178,7 @@ wait_healthy() {
 # Port conflict check
 # -------------------------------------------------------------------
 check_ports() {
-    local ports=(22 23 80 443 21 3306 5432 53 445 3389 7777)
+    local ports=(22 23 80 443 21 3306 5432 53 445 3389 7777 7779)
     local conflicts=()
     for port in "${ports[@]}"; do
         if ss -tulnp 2>/dev/null | grep -q ":${port} " || \
@@ -225,6 +226,7 @@ main() {
     ok "HoneyOS is running!"
     echo ""
     echo -e "  Dashboard:  ${GREEN}https://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):7777${NC}"
+    echo -e "  Webhook:    ${GREEN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):7779${NC}  (canarytokens)"
     echo -e "  Config:     ${CYAN}${HONEYOS_DIR}/.env${NC}"
     echo ""
     echo -e "  TLS:        Self-signed certificate (accept browser warning)"
