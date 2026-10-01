@@ -75,6 +75,18 @@ _COMMAND_RESPONSES = {
 # Commands that succeed silently (exit code 0, no output)
 _SILENT_OK_PREFIXES = ("cd", "rm", "cp", "mv", "mkdir", "touch")
 
+# Router-CLI escapes and subshells that Mirai-family loaders send right after
+# login (``enable``, ``system``, ``shell``, ``sh``) to break out of a vendor
+# console into a Linux shell.  Treat them as succeeding silently so the bot
+# believes it has reached a shell and continues to its payload stage.
+_SHELL_ESCAPE_COMMANDS = ("enable", "system", "shell", "sh", "linuxshell", "start")
+
+_PING_USAGE = (
+    "BusyBox v1.26.2 (2018-01-10 12:57:09 UTC) multi-call binary.\n"
+    "\n"
+    "Usage: ping [OPTIONS] HOST"
+)
+
 # Valid 52-byte ARM 32-bit little-endian ELF header.
 # Bots read this via cat/hexdump/dd to determine CPU architecture before
 # downloading the matching payload.
@@ -384,9 +396,11 @@ class TelnetHoneypot:
             return "", True
 
         # --- Strip busybox path prefixes ---
+        via_busybox = False
         for prefix in ("/bin/busybox ", "/usr/bin/busybox ", "busybox "):
             if cmd.startswith(prefix):
                 cmd = cmd[len(prefix):]
+                via_busybox = True
                 break
 
         # --- Pipes: execute first command only (best-effort) ---
@@ -413,6 +427,14 @@ class TelnetHoneypot:
         if base_name in _SILENT_OK_PREFIXES:
             return "", True
 
+        # --- Router-CLI escapes / subshells: silent success ---
+        if cmd in _SHELL_ESCAPE_COMMANDS or (base_name == "sh" and cmd == base):
+            return "", True
+
+        # --- ping: BusyBox usage when no host given ---
+        if base_name == "ping" and cmd == base:
+            return _PING_USAGE, False
+
         # --- Built-in: cat (file-not-found for unknown files) ---
         if base_name == "cat":
             return self._handle_cat(cmd)
@@ -438,6 +460,12 @@ class TelnetHoneypot:
                 return response, True
 
         # --- Unknown command / file execution ---
+        # "busybox <UNKNOWN>" is the Mirai canary (e.g. HISILICON, ECCHI):
+        # real BusyBox replies "<name>: applet not found" and bots check for
+        # exactly that string before continuing.
+        if via_busybox:
+            return f"{base}: applet not found", False
+
         # Preserve the typed path (e.g. "./i" not "i") and use the
         # correct error for path-based execution attempts.
         if "/" in base:
