@@ -91,6 +91,31 @@ class TestExecuteSingle:
         assert "cannot access" in output
         assert ok is False
 
+    def test_shell_escape_commands_succeed_silently(self):
+        hp = _make_telnet()
+        for cmd in ("enable", "system", "shell", "sh", "/bin/sh", "linuxshell"):
+            output, ok = hp._execute_single(cmd)
+            assert output == "", cmd
+            assert ok is True, cmd
+
+    def test_busybox_sh_succeeds(self):
+        hp = _make_telnet()
+        output, ok = hp._execute_single("/bin/busybox sh")
+        assert output == ""
+        assert ok is True
+
+    def test_ping_without_host_prints_usage(self):
+        hp = _make_telnet()
+        output, ok = hp._execute_single("ping")
+        assert "Usage: ping" in output
+        assert ok is False
+
+    def test_busybox_unknown_applet(self):
+        hp = _make_telnet()
+        output, ok = hp._execute_single("/bin/busybox HISILICON")
+        assert output == "HISILICON: applet not found"
+        assert ok is False
+
 
 class TestExecuteLine:
     def test_semicolon_chain(self):
@@ -127,6 +152,12 @@ class TestExecuteLine:
     def test_empty_line(self):
         hp = _make_telnet()
         assert hp._execute_line("") == ""
+
+    def test_ping_injection_reaches_shell(self):
+        hp = _make_telnet()
+        output = hp._execute_line("ping; sh")
+        assert "Usage: ping" in output
+        assert "sh: not found" not in output
 
 
 class TestHandleEcho:
