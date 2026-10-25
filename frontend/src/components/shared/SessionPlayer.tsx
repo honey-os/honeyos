@@ -132,7 +132,7 @@ export default function SessionPlayer({
               key={speed}
               onClick={() => setPlaybackSpeed(speed)}
               className={clsx(
-                'px-2 py-1 rounded text-xs font-mono transition-colors',
+                'px-2 py-1 rounded-sm text-xs font-mono transition-colors',
                 playbackSpeed === speed
                   ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   : 'text-gray-500 hover:text-gray-300'
@@ -192,7 +192,7 @@ export default function SessionPlayer({
           <h4 className="text-sm font-medium text-gray-400 mb-2">
             Raw Keystrokes
           </h4>
-          <div className="font-mono text-xs text-gray-500 break-all bg-[#0a0a0f] rounded p-3">
+          <div className="font-mono text-xs text-gray-500 break-all bg-[#0a0a0f] rounded-sm p-3">
             {keystrokes.join('')}
           </div>
         </div>

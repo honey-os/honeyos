@@ -199,7 +199,7 @@ export default function NetworkPage() {
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Public IP</span>
           </div>
           {perimeterStatusLoading ? (
-            <div className="h-8 bg-[#1c1c28] rounded animate-pulse" />
+            <div className="h-8 bg-[#1c1c28] rounded-sm animate-pulse" />
           ) : (
             <p className="text-xl font-mono text-amber-400">
               {perimeterStatus?.public_ip || 'Not detected'}
@@ -247,13 +247,13 @@ export default function NetworkPage() {
       {snapshot?.honeypot_flagged && (
         <div className="card p-5 border-red-500/30 bg-red-500/5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
             <div>
               <h3 className="text-sm font-semibold text-red-400">
                 Your honeypot has been fingerprinted
               </h3>
               <p className="text-sm text-gray-400 mt-1">
-                Censys has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded text-red-400 text-xs">honeypot</code>.
+                Censys has tagged your IP with <code className="px-1 py-0.5 bg-red-500/10 rounded-sm text-red-400 text-xs">honeypot</code>.
                 Attackers using Censys will know this is a honeypot. Consider adjusting your service banners.
               </p>
               <div className="flex flex-wrap gap-1.5 mt-3">
@@ -288,7 +288,7 @@ export default function NetworkPage() {
         <div className="p-5">
           {scanError && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/5 border border-red-500/20 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <p className="text-sm text-red-400">{scanError}</p>
             </div>
           )}
@@ -566,7 +566,7 @@ export default function NetworkPage() {
               <div className="space-y-1">
                 {vulns.map((v) => (
                   <div key={v} className="flex items-center gap-2">
-                    <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                    <XCircle className="w-3 h-3 text-red-400 shrink-0" />
                     <span className="text-sm font-mono text-gray-300">{v}</span>
                   </div>
                 ))}
@@ -762,11 +762,11 @@ function CensysStatusBanner({ status, source }: { status?: string; source: strin
   return (
     <div className={`p-3 rounded-lg border flex items-start gap-2 ${colorMap[info.color]}`}>
       {info.color === 'green' ? (
-        <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
       ) : info.color === 'red' ? (
-        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
       ) : (
-        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
       )}
       <p className="text-sm">{info.message}</p>
     </div>

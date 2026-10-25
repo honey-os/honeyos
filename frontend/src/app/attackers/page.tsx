@@ -249,7 +249,7 @@ export default function AttackersPage() {
                           {attacker.ip}
                           {attacker.throttled && attacker.throttled.length > 0 && (
                             <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30"
                               title={`Blocked on: ${attacker.throttled.map((t) => t.protocol.toUpperCase()).join(', ')}`}
                             >
                               <ShieldBan className="w-3 h-3" />

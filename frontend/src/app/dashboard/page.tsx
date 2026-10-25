@@ -95,7 +95,7 @@ export default function DashboardPage() {
   return (
     <div className="relative space-y-6">
       {initialLoading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm rounded-lg">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-xs rounded-lg">
           <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
             <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
             Loading dashboard...

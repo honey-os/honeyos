@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.js";
 
 :root {
   --bg-primary: #0a0a0f;
@@ -53,65 +52,68 @@
     background-color: rgba(245, 158, 11, 0.3);
     color: #fef3c7;
   }
-}
 
-@layer components {
-  .card {
-    @apply bg-[#16161f] border border-[#2a2a3a] rounded-lg;
-  }
-
-  .card-hover {
-    @apply card hover:border-amber-500/30 hover:bg-[#1c1c28] transition-all duration-200;
-  }
-
-  .btn-primary {
-    @apply bg-amber-500 hover:bg-amber-400 text-gray-950 font-medium px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/20;
-  }
-
-  .btn-secondary {
-    @apply bg-[#1c1c28] hover:bg-[#24243a] text-gray-200 border border-[#2a2a3a] hover:border-amber-500/30 px-4 py-2 rounded-lg transition-all duration-200;
-  }
-
-  .btn-danger {
-    @apply bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 px-4 py-2 rounded-lg transition-all duration-200;
-  }
-
-  .input-field {
-    @apply bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all duration-200;
-  }
-
-  .select-field {
-    @apply input-field appearance-none cursor-pointer;
-  }
-
-  .label-text {
-    @apply text-sm font-medium text-gray-400 mb-1 block;
-  }
-
-  .terminal {
-    @apply bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg font-mono text-sm p-4 overflow-auto;
-  }
-
-  .glow-amber {
-    box-shadow: 0 0 15px rgba(245, 158, 11, 0.15), 0 0 30px rgba(245, 158, 11, 0.05);
+  /* Tailwind 3's preflight set this; v4 dropped it. Restored so the 44
+     buttons in this app keep the pointer cursor they were written with. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
-@layer utilities {
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-600;
-  }
+@utility card {
+  @apply bg-[#16161f] border border-[#2a2a3a] rounded-lg;
+}
 
-  .bg-grid {
-    background-image:
-      linear-gradient(rgba(245, 158, 11, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-  }
+@utility card-hover {
+  @apply card hover:border-amber-500/30 hover:bg-[#1c1c28] transition-all duration-200;
+}
 
-  .animate-slide-in-right {
-    animation: slide-in-right 0.2s ease-out;
-  }
+@utility btn-primary {
+  @apply bg-amber-500 hover:bg-amber-400 text-gray-950 font-medium px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/20;
+}
+
+@utility btn-secondary {
+  @apply bg-[#1c1c28] hover:bg-[#24243a] text-gray-200 border border-[#2a2a3a] hover:border-amber-500/30 px-4 py-2 rounded-lg transition-all duration-200;
+}
+
+@utility btn-danger {
+  @apply bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 px-4 py-2 rounded-lg transition-all duration-200;
+}
+
+@utility input-field {
+  @apply bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-hidden focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all duration-200;
+}
+
+@utility select-field {
+  @apply input-field appearance-none cursor-pointer;
+}
+
+@utility label-text {
+  @apply text-sm font-medium text-gray-400 mb-1 block;
+}
+
+@utility terminal {
+  @apply bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg font-mono text-sm p-4 overflow-auto;
+}
+
+@utility glow-amber {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.15), 0 0 30px rgba(245, 158, 11, 0.05);
+}
+
+@utility text-gradient {
+  @apply bg-clip-text text-transparent bg-linear-to-r from-amber-400 to-amber-600;
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(rgba(245, 158, 11, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@utility animate-slide-in-right {
+  animation: slide-in-right 0.2s ease-out;
 }
 
 @keyframes slide-in-right {

@@ -253,7 +253,7 @@ export default function EventsPage() {
       {/* Table */}
       <div className="card overflow-hidden relative">
         {eventsLoading && events.length > 0 && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-sm">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0e0e14]/60 backdrop-blur-xs">
             <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
               <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
               Loading events...
