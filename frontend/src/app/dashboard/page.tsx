@@ -243,7 +243,7 @@ export default function DashboardPage() {
                   }}
                   labelStyle={{ color: '#e2e8f0' }}
                   itemStyle={{ color: '#e2e8f0' }}
-                  labelFormatter={(val: string) => formatDate(val, 'MMM d, HH:mm')}
+                  labelFormatter={(val) => formatDate(String(val), 'MMM d, HH:mm')}
                 />
                 <Area
                   type="monotone"
@@ -301,8 +301,8 @@ export default function DashboardPage() {
                   }}
                   labelStyle={{ color: '#e2e8f0' }}
                   itemStyle={{ color: '#e2e8f0' }}
-                  formatter={(value: number) => [formatNumber(value), 'Events']}
-                  labelFormatter={(label: string) => label.toUpperCase()}
+                  formatter={(value) => [formatNumber(Number(value)), 'Events']}
+                  labelFormatter={(label) => String(label).toUpperCase()}
                 />
                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                   {summary.protocol_breakdown.map((entry, idx) => (
@@ -311,7 +311,7 @@ export default function DashboardPage() {
                   <LabelList
                     dataKey="count"
                     position="right"
-                    formatter={(v: number) => formatNumber(v)}
+                    formatter={(v) => formatNumber(Number(v))}
                     style={{ fill: '#d1d5db', fontSize: 11, fontFamily: 'monospace' }}
                   />
                 </Bar>
