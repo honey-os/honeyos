@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-10-25, aligned the frontend dependency tree so it installs and builds again_
+_Last updated: 2026-10-25, took the outstanding frontend major bumps and cleared the postcss advisories_
 
 ## Current state
 The frontend dependency tree resolves and builds. Before this, `npm install` in
@@ -18,8 +18,13 @@ its companion package:
 - `vitest` 4.1.11, which pinned a transitive package to a version with a
   published advisory. Now 4.1.12, and `npm audit` reports clean.
 
-`npm test` passes (8 tests, 2 files) and `next build` completes with all routes
-generated.
+The three outstanding major bumps are now in: `@testing-library/jest-dom` 7,
+`lucide-react` 1.x and `recharts` 3. recharts 3 changed its Tooltip formatter
+signatures, so four call sites in `src/app/dashboard/page.tsx` were updated to
+take the wider types and coerce inside.
+
+`npm test` passes (8 tests, 2 files), `next build` completes with all routes
+generated, and `npm audit` reports no vulnerabilities.
 
 ## Recent decisions
 - Reverted Tailwind to 3.4.19 rather than migrating to 4. The 4.x bump was not
@@ -31,16 +36,23 @@ generated.
   Next 16 requires React 19 regardless.
 - Regenerated `package-lock.json` from scratch. The old one could not be
   updated in place; npm's resolver crashed on it.
+- Pinned `postcss-selector-parser` to ^7.1.7 through `overrides`. Tailwind 3
+  pulls it in at 6.1.x via postcss-nested, and 6.1.5 is the newest 6.1.x, so
+  there is no patched version inside the range postcss-nested asks for. The
+  generated CSS is byte-identical with and without the override, which is how
+  the forced major was checked.
 
 ## Known issues
 - The Tailwind 4 migration is still outstanding and is the reason the pinned
   version is a major behind the latest.
-- Three major dependency bumps are open and want review rather than a blind
-  merge: lucide-react 0.x to 1.x renames icon exports, recharts 2 to 3 reworked
-  the chart APIs, and @testing-library/jest-dom 6 to 7 drops matchers.
+- The Tailwind 4 migration is the only dependency work left. `globals.css` has
+  3 `@layer` blocks, 13 custom classes and 10 `@apply` uses, one of which
+  applies a custom class that v4 cannot resolve; those become `@utility`
+  definitions. v4 also changes base styles, so the result needs looking at.
 - `npm install` needs npm 11. npm 10.9.4 crashes resolving vitest's optional
   peer graph, which is an npm defect rather than anything in this tree.
 
 ## Open threads
-- Whether to do the Tailwind 4 migration or hold at 3.x.
-- The three major bumps above, one at a time.
+- Whether to do the Tailwind 4 migration or hold at 3.x. Holding keeps the
+  `postcss-selector-parser` override necessary; migrating removes the need for
+  it.
