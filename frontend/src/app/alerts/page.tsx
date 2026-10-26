@@ -296,7 +296,7 @@ export default function AlertsPage() {
                           const badges: React.ReactNode[] = [];
                           if (cond.protocol) {
                             badges.push(
-                              <span key="proto" className="px-2 py-0.5 rounded text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              <span key="proto" className="px-2 py-0.5 rounded-sm text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                 Protocol: {String(cond.protocol).toUpperCase()}
                               </span>
                             );
@@ -304,21 +304,21 @@ export default function AlertsPage() {
                           if (cond.severity) {
                             const sevs = Array.isArray(cond.severity) ? cond.severity : [cond.severity];
                             badges.push(
-                              <span key="sev" className="px-2 py-0.5 rounded text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                              <span key="sev" className="px-2 py-0.5 rounded-sm text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20">
                                 Severity: {sevs.join(', ')}
                               </span>
                             );
                           }
                           if (cond.event_type) {
                             badges.push(
-                              <span key="evt" className="px-2 py-0.5 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              <span key="evt" className="px-2 py-0.5 rounded-sm text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                 Event: {String(cond.event_type).replace(/_/g, ' ')}
                               </span>
                             );
                           }
                           if (cond.source_ip) {
                             badges.push(
-                              <span key="ip" className="px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-400 border border-green-500/20">
+                              <span key="ip" className="px-2 py-0.5 rounded-sm text-xs bg-green-500/10 text-green-400 border border-green-500/20">
                                 IP: {String(cond.source_ip)}
                               </span>
                             );

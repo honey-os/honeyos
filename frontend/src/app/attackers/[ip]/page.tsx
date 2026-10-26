@@ -129,7 +129,7 @@ export default function AttackerDetailPage({
           <p className="text-sm text-gray-500 font-mono mt-1 flex items-center gap-2">
             {attacker.ip}
             {attacker.throttled && attacker.throttled.length > 0 && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30">
                 <ShieldBan className="w-3 h-3" />
                 Blocked
               </span>

@@ -230,3 +230,7 @@ yarn-error.log*
 *.db-journal
 /data/
 backups/
+
+# Next generates these on build
+next-env.d.ts
+AGENTS.md

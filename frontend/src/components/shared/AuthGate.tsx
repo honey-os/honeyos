@@ -208,7 +208,7 @@ function LoginScreen({ onComplete, readonlyPassword }: { onComplete: () => void;
         {readonlyPassword && (
           <div className="mb-6 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-300 text-center">
             This instance is in read-only mode. The login password is{' '}
-            <code className="font-mono font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded">
+            <code className="font-mono font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded-sm">
               {readonlyPassword}
             </code>
           </div>

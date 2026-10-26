@@ -1,58 +1,46 @@
 # Status
-_Last updated: 2026-10-25, took the outstanding frontend major bumps and cleared the postcss advisories_
+_Last updated: 2026-10-25, migrated the frontend to Tailwind 4_
 
 ## Current state
-The frontend dependency tree resolves and builds. Before this, `npm install` in
-`frontend/` failed outright with `ERESOLVE`, and the build failed after that on
-a PostCSS plugin error, so a fresh clone could not be built at all.
+The frontend dependency tree resolves, builds and tests clean, and `npm audit`
+reports nothing. Earlier today none of that was true: `npm install` failed with
+`ERESOLVE` because four majors had landed without their companion packages, so
+a fresh clone could not be built at all. React is now 19 throughout,
+`eslint-config-next` matches Next 16, and the outstanding major bumps
+(`@testing-library/jest-dom` 7, `lucide-react` 1.x, `recharts` 3) are in.
 
-Four version pairs were out of step, each from a major bump that landed without
-its companion package:
-
-- `react` 18 under `react-dom` 19, and `@types/react` 18 under
-  `@types/react-dom` 19. React is now 19 throughout, which is what `react-dom`
-  19 and Next 16 both require.
-- `eslint-config-next` 14 under `eslint` 10 and Next 16. Now 16.x, whose
-  peer range accepts eslint 10.
-- `tailwindcss` 4 with a Tailwind 3 PostCSS setup. Reverted to 3.4.19.
-- `vitest` 4.1.11, which pinned a transitive package to a version with a
-  published advisory. Now 4.1.12, and `npm audit` reports clean.
-
-The three outstanding major bumps are now in: `@testing-library/jest-dom` 7,
-`lucide-react` 1.x and `recharts` 3. recharts 3 changed its Tooltip formatter
-signatures, so four call sites in `src/app/dashboard/page.tsx` were updated to
-take the wider types and coerce inside.
-
-`npm test` passes (8 tests, 2 files), `next build` completes with all routes
-generated, and `npm audit` reports no vulnerabilities.
+Tailwind is on 4.3.3. `globals.css` moved from `@tailwind` directives to
+`@import "tailwindcss"` with `@config` pointing at the existing
+`tailwind.config.js`, and the `@layer components` / `@layer utilities` classes
+became `@utility` definitions, which is what lets `card-hover` and
+`select-field` keep applying `card` and `input-field`.
 
 ## Recent decisions
-- Reverted Tailwind to 3.4.19 rather than migrating to 4. The 4.x bump was not
-  deliberate: dependabot is configured to keep majors out of grouped PRs, and
-  this one arrived paired with a postcss update. A real v4 migration means
-  porting `tailwind.config.js` to CSS-first config and would change rendered
-  output, which is a separate, deliberate piece of work.
-- Finished the React 19 upgrade instead of reverting `react-dom` to 18, because
+- Finished the React 19 upgrade rather than reverting `react-dom` to 18, since
   Next 16 requires React 19 regardless.
-- Regenerated `package-lock.json` from scratch. The old one could not be
-  updated in place; npm's resolver crashed on it.
-- Pinned `postcss-selector-parser` to ^7.1.7 through `overrides`. Tailwind 3
-  pulls it in at 6.1.x via postcss-nested, and 6.1.5 is the newest 6.1.x, so
-  there is no patched version inside the range postcss-nested asks for. The
-  generated CSS is byte-identical with and without the override, which is how
-  the forced major was checked.
+- Migrated to Tailwind 4 rather than holding at 3.x. Holding required an
+  `overrides` pin on `postcss-selector-parser`, because Tailwind 3 pulls it in
+  at 6.1.x through postcss-nested and the fix for its advisory only exists in
+  7.x. v4 drops that dependency chain, so the override and `autoprefixer` are
+  both gone.
+- Restored `cursor: pointer` on buttons in `@layer base`. Tailwind 3's preflight
+  set it, v4 does not, and this app has 44 buttons written expecting it. No
+  build would have caught that.
+- Regenerated `package-lock.json` rather than editing it; npm's resolver
+  crashed trying to update the old one in place.
 
 ## Known issues
-- The Tailwind 4 migration is still outstanding and is the reason the pinned
-  version is a major behind the latest.
-- The Tailwind 4 migration is the only dependency work left. `globals.css` has
-  3 `@layer` blocks, 13 custom classes and 10 `@apply` uses, one of which
-  applies a custom class that v4 cannot resolve; those become `@utility`
-  definitions. v4 also changes base styles, so the result needs looking at.
+- Tailwind 4 moved its palette to OKLCH, shifting `amber-500` from
+  rgb(245,158,11) to about rgb(254,154,0). Greys moved by at most 3. But
+  `#f59e0b` is still hardcoded three times in `src/app/dashboard/page.tsx` for
+  the chart gradient and stroke, so the chart line no longer quite matches the
+  146 `amber-*` classes around it.
+- Only the signed-out page was verified in a browser; the rest of the UI is
+  behind auth. Everything else was checked by comparing computed styles before
+  and after, and by grep for the renamed utilities.
 - `npm install` needs npm 11. npm 10.9.4 crashes resolving vitest's optional
   peer graph, which is an npm defect rather than anything in this tree.
 
 ## Open threads
-- Whether to do the Tailwind 4 migration or hold at 3.x. Holding keeps the
-  `postcss-selector-parser` override necessary; migrating removes the need for
-  it.
+- Whether to update the three hardcoded `#f59e0b` literals to match the new
+  amber, which needs someone looking at the dashboard.

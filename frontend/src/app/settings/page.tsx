@@ -97,7 +97,7 @@ export default function SettingsPage() {
           Settings
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Configuration is managed via the <code className="text-amber-500/80 bg-amber-500/5 px-1.5 py-0.5 rounded text-xs">.env</code> file. Values shown here are read-only.
+          Configuration is managed via the <code className="text-amber-500/80 bg-amber-500/5 px-1.5 py-0.5 rounded-sm text-xs">.env</code> file. Values shown here are read-only.
         </p>
       </div>
 

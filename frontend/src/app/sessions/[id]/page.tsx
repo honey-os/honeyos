@@ -360,7 +360,7 @@ export default function SessionDetailPage({
                             {m.tags.map((tag, ti) => (
                               <span
                                 key={ti}
-                                className="px-1.5 py-0.5 text-xs rounded bg-gray-700/50 text-gray-400"
+                                className="px-1.5 py-0.5 text-xs rounded-sm bg-gray-700/50 text-gray-400"
                               >
                                 {tag}
                               </span>

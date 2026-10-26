@@ -85,7 +85,7 @@ export default function AppShell({ children }: AppShellProps) {
           {sidebarOpen && (
             <button
               onClick={toggleSidebar}
-              className="p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors"
+              className="p-1 rounded-sm text-gray-500 hover:text-gray-300 hover:bg-[#1c1c28] transition-colors"
               title="Collapse sidebar"
             >
               <ChevronLeft className="w-4 h-4" />
