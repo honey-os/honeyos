@@ -56,7 +56,7 @@ fi
 # Backend (gunicorn) in background
 cd /app/backend
 /app/venv/bin/gunicorn --bind 127.0.0.1:8000 --worker-class gthread \
-    --workers 1 --threads 4 --timeout 120 --access-logfile - app:app &
+    --workers 1 --threads 16 --timeout 120 --access-logfile - app:app &
 
 # Frontend (Next.js standalone) in background
 cd /app/frontend

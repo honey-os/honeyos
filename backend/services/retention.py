@@ -13,7 +13,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from models import DailyStat, Event, db
 from utils.helpers import generate_id
@@ -145,21 +145,44 @@ def aggregate_day(target_date) -> None:
     db.session.commit()
 
 
+# Ids deleted per DELETE statement.  SQLite caps the number of bound
+# parameters in one statement, and a short statement holds the write lock
+# only briefly.
+DELETE_CHUNK_SIZE = 500
+
+
 def _batched_delete(table: str, where_sql: str, params: dict,
                     batch_size: int) -> int:
-    """Delete matching rows in batches of ``batch_size``, committing each
-    batch so progress survives interruption.  Returns rows deleted."""
-    stmt = text(
-        f"DELETE FROM {table} WHERE id IN "
-        f"(SELECT id FROM {table} WHERE {where_sql} LIMIT :_batch)"
+    """Delete matching rows in batches of ``batch_size``, committing as it
+    goes so progress survives interruption.  Returns rows deleted.
+
+    The rows are found with a plain SELECT and then deleted by primary key.
+    SQLite takes its single write lock when a DELETE statement starts and
+    keeps it while that statement searches, so a DELETE that has to scan a
+    large table blocks every other writer for the length of the scan, even
+    when it ends up matching nothing.  A SELECT is a read, which WAL mode lets
+    run alongside writers, and the deletes by id that follow are short.
+    """
+    select = text(f"SELECT id FROM {table} WHERE {where_sql} LIMIT :_batch")
+    delete = text(f"DELETE FROM {table} WHERE id IN :_ids").bindparams(
+        bindparam("_ids", expanding=True)
     )
     total = 0
     while True:
-        result = db.session.execute(stmt, {**params, "_batch": batch_size})
+        ids = [row[0] for row in
+               db.session.execute(select, {**params, "_batch": batch_size})]
+        # End the read transaction before writing, so the delete starts from
+        # a fresh snapshot instead of upgrading a stale one.
         db.session.commit()
-        deleted = result.rowcount or 0
-        total += deleted
-        if deleted < batch_size:
+        if not ids:
+            break
+        for i in range(0, len(ids), DELETE_CHUNK_SIZE):
+            result = db.session.execute(
+                delete, {"_ids": ids[i:i + DELETE_CHUNK_SIZE]}
+            )
+            db.session.commit()
+            total += result.rowcount or 0
+        if len(ids) < batch_size:
             break
     return total
 
