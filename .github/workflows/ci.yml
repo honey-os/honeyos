@@ -43,13 +43,12 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
         run: npm run build
 
-      # 3.13 is the Python the published image runs: its runtime stage is
-      # node:26-slim (Debian 13), which ships python3 3.13. Keep the three in
-      # step: this, backend/Dockerfile, and the Debian release under the image.
+      # The Python the published image runs. Keep the three in step: this,
+      # backend/Dockerfile, and the runtime stage of the root Dockerfile.
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: '3.15'
 
       - name: Install backend dependencies
         working-directory: ./backend
