@@ -31,9 +31,12 @@ The upgrade itself was checked locally on Node 26.13.1 from a clean `npm ci`: li
 the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
 
 ## Recent decisions
-- TypeScript is held at 6.0.3, the newest release that passes. 7.0.2 fails at
-  the lint step with `typescript-eslint does not support TS 7.0.`, exit 2.
-  Revisit when typescript-eslint supports TS 7.
+- TypeScript 7.0.2 does the type-check, side by side with the TypeScript 6
+  API. TypeScript 7 has no programmatic API yet, and a plain bump fails lint
+  with `typescript-eslint does not support TS 7.0.`, so `@typescript/native`
+  aliases `typescript@7.0.2` for `tsc`, and `typescript` aliases
+  `@typescript/typescript6`, which ESLint and `next build` load. Collapse the
+  two into one pin when typescript-eslint and Next.js support the 7 API.
 - ESLint 10.14.0 is in use although `eslint-plugin-import`, `-jsx-a11y` and
   `-react` still declare a peer range that ends at 9. It installs and lints
   clean; the declarations are out of date rather than a real limit.
