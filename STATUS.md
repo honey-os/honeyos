@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-13, retention no longer blocks writers; gunicorn threads raised to 16_
+_Last updated: 2026-11-13, backend moved to Python 3.15 by rebasing the image on python:3.15-slim_
 
 ## Current state
 The repo is on current versions throughout, not only in `package.json`:
@@ -8,10 +8,10 @@ The repo is on current versions throughout, not only in `package.json`:
   `engines`. It was on Node 20, which reached end of life in April 2026.
 - **Every frontend dependency is pinned exactly**, with no carets. Dependabot
   moves the pins, so each change of version is a pull request.
-- **Python 3.13** for the backend. The published image takes its Python from
-  the Debian release under `node:26-slim`, which is Debian 13 and ships 3.13,
-  so `backend/Dockerfile` and CI were set to match it. The backend's 464 tests
-  pass on 3.13 with every requirement at its latest release.
+- **Python 3.15** for the backend. No official Node image ships a current
+  Python, so the published image's runtime stage is `python:3.15-slim` with
+  the `node` binary copied in from `node:26-slim`. `backend/Dockerfile` and
+  CI use the same version. CI is the only place the backend has run on 3.15.
 - **CI runs on every pull request** (`.github/workflows/ci.yml`): lint,
   `tsc --noEmit`, frontend tests, a frontend build, backend tests, and a build
   of the Docker image without pushing it. The image workflow calls the same
@@ -41,8 +41,10 @@ the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
   `react-hooks/immutability`) are set to warn, not error. They flag seven
   existing effects, and rewriting effect logic inside a dependency upgrade,
   with no browser check, would have been the riskier choice.
-- Python 3.13 rather than the newest 3.15, so that CI and the backend
-  Dockerfile test the same Python the published image runs.
+- Python 3.15, reached by basing the runtime image on Python and copying
+  `node` in, rather than staying on the 3.13 that Debian 13 provides. The
+  runtime needs only the `node` binary, so nothing else from the Node image
+  is carried over.
 - `overrides` pins `minimatch` 10.x to 11.0.8 for the lint toolchain, which
   asks for `^10` while the fixed releases are 11.x. Remove it when eslint and
   typescript-eslint ask for 11 themselves. The old `js-yaml` override is gone:
@@ -68,6 +70,9 @@ the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
   the UI. No page was looked at in a browser after this upgrade; the built app
   was only checked for answering requests.
 - `Query.get()` is used in backend tests and is deprecated in SQLAlchemy 2.
+- Python 3.15 was verified by CI only: the test suite and an amd64 image
+  build. The honeypot listeners have not been watched under real traffic on
+  it, and the arm64 image is first built on a push to `deploy`.
 - The dashboard's first load after a restart is slow on a large database:
   the summary and timeline endpoints aggregate the whole time window and
   nothing is cached. A short-lived cache of the summary would fix it.

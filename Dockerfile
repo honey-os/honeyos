@@ -11,12 +11,22 @@ COPY frontend/ .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# ── Stage 2: Runtime (Caddy + Python + Node) ────────────────────────
-FROM node:26-slim
+# ── Stage 2: the node binary for the runtime ─────────────────────────────────────
+FROM node:26-slim AS node-runtime
+
+# ── Stage 3: Runtime (Caddy + Python + Node) ────────────────────────
+# The base is the Python image, not the Node one: no official node image
+# ships a current Python (they carry whatever Debian has), while the runtime
+# only needs the `node` binary to run the standalone Next.js server. Both
+# images are built on the same Debian release, so the binary copies across.
+FROM python:3.15-slim
+
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv gcc libffi-dev curl openssl \
+    gcc libffi-dev curl openssl libstdc++6 libatomic1 \
+    && node --version \
     && CADDY_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") \
     && curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=${CADDY_ARCH}" -o /usr/local/bin/caddy \
     && chmod +x /usr/local/bin/caddy \
