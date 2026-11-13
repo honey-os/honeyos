@@ -1,46 +1,68 @@
 # Status
-_Last updated: 2026-10-25, migrated the frontend to Tailwind 4_
+_Last updated: 2026-11-13, moved the whole repo to current versions: Node 26, exact pins, CI on pull requests_
 
 ## Current state
-The frontend dependency tree resolves, builds and tests clean, and `npm audit`
-reports nothing. Earlier today none of that was true: `npm install` failed with
-`ERESOLVE` because four majors had landed without their companion packages, so
-a fresh clone could not be built at all. React is now 19 throughout,
-`eslint-config-next` matches Next 16, and the outstanding major bumps
-(`@testing-library/jest-dom` 7, `lucide-react` 1.x, `recharts` 3) are in.
+The repo is on current versions throughout, not only in `package.json`:
 
-Tailwind is on 4.3.3. `globals.css` moved from `@tailwind` directives to
-`@import "tailwindcss"` with `@config` pointing at the existing
-`tailwind.config.js`, and the `@layer components` / `@layer utilities` classes
-became `@utility` definitions, which is what lets `card-hover` and
-`select-field` keep applying `card` and `input-field`.
+- **Node 26** (Active LTS) in every Dockerfile stage, `.nvmrc`, CI and
+  `engines`. It was on Node 20, which reached end of life in April 2026.
+- **Every frontend dependency is pinned exactly**, with no carets. Dependabot
+  moves the pins, so each change of version is a pull request.
+- **Python 3.13** for the backend. The published image takes its Python from
+  the Debian release under `node:26-slim`, which is Debian 13 and ships 3.13,
+  so `backend/Dockerfile` and CI were set to match it. The backend's 464 tests
+  pass on 3.13 with every requirement at its latest release.
+- **CI runs on every pull request** (`.github/workflows/ci.yml`): lint,
+  `tsc --noEmit`, frontend tests, a frontend build, backend tests, and a build
+  of the Docker image without pushing it. The image workflow calls the same
+  test job, so the checks are defined once.
+- **Linting works for the first time.** `next lint` was removed in Next 16 and
+  no ESLint config had ever existed. There is now `frontend/eslint.config.mjs`
+  and `npm run lint` runs `eslint`.
+
+Checked locally on Node 26.13.1 from a clean `npm ci`: lint (0 errors),
+`tsc --noEmit`, 8 frontend tests, `next build`, `npm audit` (0 findings), and
+the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
 
 ## Recent decisions
-- Finished the React 19 upgrade rather than reverting `react-dom` to 18, since
-  Next 16 requires React 19 regardless.
-- Migrated to Tailwind 4 rather than holding at 3.x. Holding required an
-  `overrides` pin on `postcss-selector-parser`, because Tailwind 3 pulls it in
-  at 6.1.x through postcss-nested and the fix for its advisory only exists in
-  7.x. v4 drops that dependency chain, so the override and `autoprefixer` are
-  both gone.
-- Restored `cursor: pointer` on buttons in `@layer base`. Tailwind 3's preflight
-  set it, v4 does not, and this app has 44 buttons written expecting it. No
-  build would have caught that.
-- Regenerated `package-lock.json` rather than editing it; npm's resolver
-  crashed trying to update the old one in place.
+- TypeScript is held at 6.0.3, the newest release that passes. 7.0.2 fails at
+  the lint step with `typescript-eslint does not support TS 7.0.`, exit 2.
+  Revisit when typescript-eslint supports TS 7.
+- ESLint 10.14.0 is in use although `eslint-plugin-import`, `-jsx-a11y` and
+  `-react` still declare a peer range that ends at 9. It installs and lints
+  clean; the declarations are out of date rather than a real limit.
+- Two React Compiler lint rules (`react-hooks/set-state-in-effect` and
+  `react-hooks/immutability`) are set to warn, not error. They flag seven
+  existing effects, and rewriting effect logic inside a dependency upgrade,
+  with no browser check, would have been the riskier choice.
+- Python 3.13 rather than the newest 3.15, so that CI and the backend
+  Dockerfile test the same Python the published image runs.
+- `overrides` pins `minimatch` 10.x to 11.0.8 for the lint toolchain, which
+  asks for `^10` while the fixed releases are 11.x. Remove it when eslint and
+  typescript-eslint ask for 11 themselves. The old `js-yaml` override is gone:
+  nothing in the tree depends on it any more.
+- Dependabot now also covers GitHub Actions and the Docker base images.
+- Earlier, still current: Tailwind 4 with `@config` pointing at the existing
+  `tailwind.config.js`, and `cursor: pointer` restored on buttons.
 
 ## Known issues
-- Tailwind 4 moved its palette to OKLCH, shifting `amber-500` from
-  rgb(245,158,11) to about rgb(254,154,0). Greys moved by at most 3. But
-  `#f59e0b` is still hardcoded three times in `src/app/dashboard/page.tsx` for
-  the chart gradient and stroke, so the chart line no longer quite matches the
-  146 `amber-*` classes around it.
-- Only the signed-out page was verified in a browser; the rest of the UI is
-  behind auth. Everything else was checked by comparing computed styles before
-  and after, and by grep for the renamed utilities.
-- `npm install` needs npm 11. npm 10.9.4 crashes resolving vitest's optional
-  peer graph, which is an npm defect rather than anything in this tree.
+- The Docker images were not built locally (no Docker daemon on the machine
+  that did this work). The `image-build` job on the pull request is what
+  proves the Node 26 and Debian 13 bases build.
+- Lint reports 15 warnings: the seven effects above, one missing effect
+  dependency in `src/app/events/page.tsx`, and seven unused imports or
+  variables.
+- Only two frontend test files exist, so "the tests pass" says little about
+  the UI. No page was looked at in a browser after this upgrade; the built app
+  was only checked for answering requests.
+- `Query.get()` is used in backend tests and is deprecated in SQLAlchemy 2.
+- Tailwind 4 moved its palette to OKLCH, shifting `amber-500`. `#f59e0b` is
+  still hardcoded three times in `src/app/dashboard/page.tsx` for the chart,
+  so the chart line no longer quite matches the `amber-*` classes around it.
 
 ## Open threads
-- Whether to update the three hardcoded `#f59e0b` literals to match the new
-  amber, which needs someone looking at the dashboard.
+- Whether to make `build-and-test` a required status check on `main`. CI
+  reports today but does not block a merge.
+- Rewriting the seven flagged effects, then turning the two rules back to
+  errors. Needs someone looking at the session player and the detail pages.
+- Whether to update the three hardcoded `#f59e0b` literals to the new amber.

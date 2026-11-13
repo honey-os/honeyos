@@ -229,8 +229,8 @@ npm run dev
 
 ## Tech Stack
 
-- **Backend**: Python 3.11, Flask, SQLAlchemy, SQLite, Paramiko
-- **Frontend**: Next.js 14, React 18, Tailwind CSS, Zustand, Recharts
+- **Backend**: Python 3.13, Flask, SQLAlchemy, SQLite, Paramiko
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4, Zustand, Recharts
 - **Infrastructure**: Docker Compose, GitHub Actions, multi-arch builds (amd64 + arm64)
 
 ## Use Cases
