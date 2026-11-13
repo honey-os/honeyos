@@ -103,6 +103,48 @@ class TestEnforceRetention:
         assert deleted_events == 7
         assert Event.query.count() == 0
 
+    def test_noop_run_takes_no_write_lock(self):
+        """Nothing to purge must mean no DELETE at all: a DELETE that scans
+        and matches nothing still holds SQLite's write lock for the scan."""
+        from sqlalchemy import event as sa_event
+
+        now = _naive_utc_now()
+        _add_event(now - timedelta(hours=1))
+        _add_session(now - timedelta(hours=1))
+        db.session.commit()
+
+        statements = []
+
+        def _record(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        sa_event.listen(db.engine, "before_cursor_execute", _record)
+        try:
+            assert enforce_retention(retention_days=7) == (0, 0)
+        finally:
+            sa_event.remove(db.engine, "before_cursor_execute", _record)
+
+        assert statements, "retention should at least have looked for old rows"
+        assert not [s for s in statements if s.lstrip().upper().startswith("DELETE")]
+
+    def test_batch_larger_than_delete_chunk(self, monkeypatch):
+        import services.retention as retention_mod
+
+        monkeypatch.setattr(retention_mod, "DELETE_CHUNK_SIZE", 3)
+        now = _naive_utc_now()
+        old = now - timedelta(days=10)
+        for i in range(10):
+            _add_event(old + timedelta(seconds=i))
+            _add_session(old + timedelta(seconds=i))
+        _add_session(old, status="active")
+        _add_event(now)
+        db.session.commit()
+
+        assert enforce_retention(retention_days=7, batch_size=50) == (10, 10)
+        assert Event.query.count() == 1
+        assert Session.query.count() == 1
+        assert Session.query.one().status == "active"
+
     def test_empty_database(self):
         assert enforce_retention(retention_days=7) == (0, 0)
 

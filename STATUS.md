@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-13, moved the whole repo to current versions: Node 26, exact pins, CI on pull requests_
+_Last updated: 2026-11-13, retention no longer blocks writers; gunicorn threads raised to 16_
 
 ## Current state
 The repo is on current versions throughout, not only in `package.json`:
@@ -20,7 +20,13 @@ The repo is on current versions throughout, not only in `package.json`:
   no ESLint config had ever existed. There is now `frontend/eslint.config.mjs`
   and `npm run lint` runs `eslint`.
 
-Checked locally on Node 26.13.1 from a clean `npm ci`: lint (0 errors),
+After the upgrade, two things seen right after a restart on a busy instance
+were addressed. Retention now finds old rows with a SELECT and deletes them
+by id, so honeypot writes no longer fail with `database is locked` while it
+runs, and gunicorn serves requests on 16 threads, up from 4, so a few slow
+dashboard queries cannot hold up everything else. Backend suite: 466 passed.
+
+The upgrade itself was checked locally on Node 26.13.1 from a clean `npm ci`: lint (0 errors),
 `tsc --noEmit`, 8 frontend tests, `next build`, `npm audit` (0 findings), and
 the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
 
@@ -42,6 +48,12 @@ the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
   typescript-eslint ask for 11 themselves. The old `js-yaml` override is gone:
   nothing in the tree depends on it any more.
 - Dependabot now also covers GitHub Actions and the Docker base images.
+- Retention reads first and deletes by primary key in chunks of 500, because
+  a SQLite DELETE holds the write lock for as long as it searches. No index
+  was added on `sessions.start_time`: the search is now a read, which does
+  not block writers, so the index would only save disk time.
+- gunicorn stays at one worker, because the honeypot listeners and the
+  maintenance loop start inside the app process. Only threads were raised.
 - Earlier, still current: Tailwind 4 with `@config` pointing at the existing
   `tailwind.config.js`, and `cursor: pointer` restored on buttons.
 
@@ -56,6 +68,12 @@ the built app answering on `/`, `/dashboard`, `/events` and `/settings`.
   the UI. No page was looked at in a browser after this upgrade; the built app
   was only checked for answering requests.
 - `Query.get()` is used in backend tests and is deprecated in SQLAlchemy 2.
+- The dashboard's first load after a restart is slow on a large database:
+  the summary and timeline endpoints aggregate the whole time window and
+  nothing is cached. A short-lived cache of the summary would fix it.
+- The retention fix was measured on a local database only, not on a busy
+  running instance.
+- `socket.io-client` is a frontend dependency that nothing in `src/` imports.
 - Tailwind 4 moved its palette to OKLCH, shifting `amber-500`. `#f59e0b` is
   still hardcoded three times in `src/app/dashboard/page.tsx` for the chart,
   so the chart line no longer quite matches the `amber-*` classes around it.
