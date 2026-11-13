@@ -1,13 +1,15 @@
 version: 2
+
+# Versions are pinned exactly and Dependabot moves the pins, so every move is
+# a pull request that CI has checked. Minor and patch bumps are grouped per
+# ecosystem; majors arrive one at a time because they are the ones to read.
 updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+      day: monday
     groups:
-      # Only minor/patch bumps are batched into one PR. Major bumps are left
-      # out of the group so Dependabot opens them as individual PRs — one
-      # breaking major (e.g. Next 14→16, Tailwind 3→4) can't poison the batch.
       frontend-minor:
         patterns:
           - "*"
@@ -19,6 +21,7 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+      day: monday
     groups:
       backend-minor:
         patterns:
@@ -26,3 +29,23 @@ updates:
         update-types:
           - minor
           - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+
+  # The node and python base images.
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /frontend
+      - /backend
+    schedule:
+      interval: weekly
+      day: monday

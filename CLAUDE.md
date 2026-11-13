@@ -4,8 +4,8 @@
 HoneyOS is a self-hosted network deception and intrusion detection system. It deploys honeypot services (SSH, HTTP, Telnet, FTP, MySQL) to catch attackers during lateral movement on local networks.
 
 ## Architecture
-- **Backend**: Python 3.11+ / Flask / SQLAlchemy / SQLite — runs at port 7778
-- **Frontend**: Next.js 14 / React 18 / Tailwind CSS / Zustand — runs at port 7777
+- **Backend**: Python 3.13 / Flask / SQLAlchemy / SQLite — runs at port 7778
+- **Frontend**: Next.js 16 / React 19 / Tailwind CSS 4 / Zustand — runs at port 7777
 - **Deployment**: Docker Compose (primary), Raspberry Pi image (secondary)
 
 ## Quick Start
@@ -68,7 +68,8 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - **Frontend**: No local `node_modules` — everything runs in Docker.
 - **Frontend type-check (containers running)**: `docker compose -f docker-compose.dev.yml exec frontend npx tsc --noEmit`
 - **Frontend type-check (containers stopped)**: `docker compose -f docker-compose.dev.yml run --rm --no-deps frontend npx tsc --noEmit`
-- **Frontend lint**: No `.eslintrc` config exists yet — `npm run lint` will prompt to create one. Type-check with `tsc` is the primary frontend validation.
+- **Frontend lint**: `npm run lint` runs ESLint with the config in `frontend/eslint.config.mjs`. CI runs it, `tsc --noEmit`, the tests and a build on every pull request (`.github/workflows/ci.yml`).
+- **Versions**: Node 26 (`.nvmrc`, every Dockerfile, CI) and exact pins in `frontend/package.json`. Dependabot moves the pins; do not add carets.
 - **Note**: The `.next/types/validator.ts` error from tsc is a known Next.js internal artifact — ignore it. Only errors in `src/` matter.
 
 ## Code Conventions
