@@ -69,6 +69,7 @@ make pi-build         # Build ARM64 images for Raspberry Pi
 - **Frontend type-check (containers running)**: `docker compose -f docker-compose.dev.yml exec frontend npx tsc --noEmit`
 - **Frontend type-check (containers stopped)**: `docker compose -f docker-compose.dev.yml run --rm --no-deps frontend npx tsc --noEmit`
 - **Frontend lint**: `npm run lint` runs ESLint with the config in `frontend/eslint.config.mjs`. CI runs it, `tsc --noEmit`, the tests and a build on every pull request (`.github/workflows/ci.yml`).
+- **TypeScript**: two packages on purpose. `npx tsc` is TypeScript 7 (the `@typescript/native` alias); `import 'typescript'` is the TypeScript 6 API (the `@typescript/typescript6` alias), which ESLint and `next build` need until TypeScript 7 ships an API. Do not replace the pair with a plain `typescript` 7 pin: lint stops loading.
 - **Versions**: Node 26 (`.nvmrc`, every Dockerfile, CI) and exact pins in `frontend/package.json`. Dependabot moves the pins; do not add carets.
 - **Note**: The `.next/types/validator.ts` error from tsc is a known Next.js internal artifact — ignore it. Only errors in `src/` matter.
 
