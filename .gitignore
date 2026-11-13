@@ -234,3 +234,6 @@ backups/
 # Next generates these on build
 next-env.d.ts
 AGENTS.md
+
+# TypeScript incremental build cache
+*.tsbuildinfo
